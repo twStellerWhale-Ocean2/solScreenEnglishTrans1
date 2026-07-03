@@ -1,0 +1,15 @@
+<Project>
+
+  <!--
+    版號單一 SSOT＝根目錄 VERSION（design.md：VERSION 為唯一 SSOT，其餘版號面皆自此投影）。
+    此處把成品 exe 的 AssemblyVersion／FileVersion／ProductVersion 一律投影自 VERSION，
+    避免成品自報版本與發佈版本不一致（train-2rel v0.1.0 釋出前測試回饋：
+    exe 內嵌 1.0.0 ≠ VERSION 0.1.0）。設定 <Version> 後，FileVersion／AssemblyVersion／
+    InformationalVersion 由 SDK 預設自 <Version> 投影；SourceLink 仍會於 ProductVersion 追加 +<sha>。
+  -->
+  <PropertyGroup>
+    <_VersionRaw>$([System.IO.File]::ReadAllText('$(MSBuildThisFileDirectory)VERSION'))</_VersionRaw>
+    <Version>$(_VersionRaw.Trim())</Version>
+  </PropertyGroup>
+
+</Project>
