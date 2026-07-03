@@ -5,11 +5,6 @@ formatVersion: "3.2"
 description: 遊戲畫面選區英文發音與中譯即時查詢工具設計文件（MVP）：Windows 系統匣常駐、Alt+L 熱鍵喚起變暗遮罩框選、OpenAI vision 單次查詢回傳原文／KK 音標／繁中翻譯、浮動視窗顯示與 TTS 朗讀。
 ---
 
-> **閱讀方式**：依「I 方案設計→II 系統設計→III 模組設計」逐層 zoom-in，每層為 A.主旨摘要／B.運作想定／C.組態設定／D.規格效益（成效驗收併入各層 D，需求層 I.D 回扣需求）。
-> - **本版為 MVP**：單次查詢流程（常駐＋熱鍵＋框選＋辨識翻譯＋顯示朗讀）做深做透；歷史紀錄、生詞本、多語言、設定介面留待後續增量。
-> - **方法論偏離聲明（待 USR 於 Draft PR 裁決）**：本方案 techApp＝[techApp桌面查詢工具]（非指管類），FORMAT §2 核／殼 OODA 模型與 MD3 web admin shell 不適用；本設計改以「三段管線（capture→query→present）＋供應商可抽換」為擴充機制，人機介面錨 Windows 11 Fluent Design（詳各層 C.(C)）。techStack 採候選契約 [techStackDotnetWin]（封閉家規四選一無桌面選項，新增待裁決）。
-> - **命名**：類型前綴 `orgsopcat#N-／orgSop#N-／teamXXX／teamSop#N.M-／prsnXXX／prsnSop#N.M.K-`；`[物件]` 與 `值` 區分；詞彙見 GLOSSARY。
-
 # I. 方案設計
 
 > 需求視角；使用者之初始需求。只談「使用者是誰、做什麼、要什麼」，不預設解法。
@@ -191,7 +186,7 @@ solScreenEnglishTrans1 畫面選區查詢工具，對內以單一系統實現（
 
 > 本節一段話定調：本層在做什麼、視角為何。
 
-方案以單一桌面常駐系統 [sysScreenTrans系統] 承接需求，核心為**三段管線**：**capture**（常駐熱鍵→遮罩框選→選區截圖）→ **query**（單次 vision 查詢→結構化三欄結果）→ **present**（浮動視窗顯示＋TTS 朗讀）。管線各段責任分離、以資料契約銜接；query 段之供應商（模型名稱、prompt）走組態可抽換，為本案之擴充機制。**方法論偏離**：本方案 techApp 為桌面查詢工具、非指管管理系統，FORMAT §2 核／殼 OODA 模型不適用（無管理閉環、無領域殼、無任務域），偏離已於文件頭宣告、待 USR 裁決。MVP 實例化範圍＝單次查詢一圈做深做透。
+方案以單一桌面常駐系統 [sysScreenTrans系統] 承接需求，核心為**三段管線**：**capture**（常駐熱鍵→遮罩框選→選區截圖）→ **query**（單次 vision 查詢→結構化三欄結果）→ **present**（浮動視窗顯示＋TTS 朗讀）。管線各段責任分離、以資料契約銜接；query 段之供應商（模型名稱、prompt）走組態可抽換，為本案之擴充機制。**方法論偏離（本案不套核／殼 OODA，待 USR 於 Draft PR 裁決）**：本方案 techApp＝[techApp桌面查詢工具]（非指管管理系統），FORMAT §2 核／殼 OODA 模型與域完整性（硬規則⑥）不適用——無管理閉環、無領域殼、無任務域、無 Measure；改以上述三段管線＋供應商可抽換為擴充機制。人機介面亦不錨 MD3 web admin shell、改錨 Windows 11 Fluent（詳 ＜I／III.C.(C)＞）；techStack 採候選契約 [techStackDotnetWin]（家規四選一無桌面選項，詳 ＜C.(A)＞）。MVP 實例化範圍＝單次查詢一圈做深做透。
 
 ## B. 運作想定
 
@@ -298,7 +293,7 @@ SYS -.->|"常駐於"| ENV
 
 > 本層定**各 teamSop 的功能如何分配到互動面**（IA）；整體視覺見 ＜I.C.(C)＞、各頁配置見 ＜III.C.(C)＞。
 
-**業界常規（IA，公開標準）**：桌面常駐工具無導覽樹（非管理網站，MD3 adaptive navigation 不適用——偏離已於文件頭宣告）；互動架構採 **hotkey-first 狀態流**（Windows tray app＋Snipping Tool 選取慣例）：常駐（無 UI）→ 熱鍵喚起（遮罩）→ 框選（橡皮筋）→ 查詢（進度）→ 結果（卡片）→ 關閉返回；維運入口集中於系統匣右鍵選單。**NN/g progressive disclosure** 精神落於「平時零 UI、按需逐層現身」。
+**業界常規（IA，公開標準）**：桌面常駐工具無導覽樹（非管理網站，MD3 adaptive navigation 不適用——偏離見 ＜II.A＞）；互動架構採 **hotkey-first 狀態流**（Windows tray app＋Snipping Tool 選取慣例）：常駐（無 UI）→ 熱鍵喚起（遮罩）→ 框選（橡皮筋）→ 查詢（進度）→ 結果（卡片）→ 關閉返回；維運入口集中於系統匣右鍵選單。**NN/g progressive disclosure** 精神落於「平時零 UI、按需逐層現身」。
 
 **導覽衍生（IA ⟵ SOP；硬規則④之桌面對應）**：`teamSop#1.1→選區遮罩頁`、`teamSop#1.2／#1.3→查詢結果頁`、`teamSop#2.2／#2.3→系統匣選單頁`；`teamSop#2.1`（安裝金鑰）走 OS 標準設定、不在本系統 UI 內。
 
@@ -421,7 +416,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 
 ### (B) 人員編組
 
-> 逐 team 列出一線人員（prsn）。單人方案：prsn玩家＝[Org使用者] 本人；**組長督核不適用**（無多人分權，偏離 FORMAT §5 `.2 組長督核` 慣例、已於文件頭宣告）。
+> 逐 team 列出一線人員（prsn）。單人方案：prsn玩家＝[Org使用者] 本人；**組長督核不適用**（無多人分權，偏離 FORMAT §5 `.2 組長督核` 慣例，詳 ＜II.A＞）。
 
 | team | prsn（執行） | 備註 |
 | --- | --- | --- |
