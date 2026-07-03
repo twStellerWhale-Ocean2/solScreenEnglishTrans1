@@ -72,6 +72,7 @@ public partial class MaskWindow : Window
 
         _dragging = false;
         ReleaseMouseCapture();
+        SelRect.Visibility = Visibility.Collapsed;
         var end = e.GetPosition(RootCanvas);
 
         // 選區左上、右下兩角 → physical pixels（PerMonitorV2 下 PointToScreen 回裝置像素）
@@ -82,11 +83,20 @@ public partial class MaskWindow : Window
         int pw = (int)Math.Round(bottomRight.X - topLeft.X);
         int ph = (int)Math.Round(bottomRight.Y - topLeft.Y);
 
-        // 遮罩先隱藏再截圖，避免截到遮罩自身
-        Visibility = Visibility.Hidden;
+        // 選區過小或異常尺寸 → 視為取消（防呆、防超大 Bitmap 造成 OOM）
+        if (pw < 3 || ph < 3 || pw > 30000 || ph > 30000)
+        {
+            Result = null;
+            Close();
+            return;
+        }
+
+        // 遮罩先隱藏、等一個 render cycle 讓它從畫面移除，再截圖（避免截到遮罩自身）；
+        // 用 Close() 結束 modal，不設 DialogResult（Hide 後設 DialogResult 會拋例外）。
+        Hide();
         Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
         Result = ScreenCapture.Capture(px, py, pw, ph);
-        DialogResult = Result is not null;
+        Close();
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
@@ -94,7 +104,7 @@ public partial class MaskWindow : Window
         if (e.Key == Key.Escape)
         {
             Result = null;
-            DialogResult = false;
+            Close();
         }
     }
 }

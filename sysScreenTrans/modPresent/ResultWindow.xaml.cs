@@ -1,27 +1,29 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Media;
 using ScreenTrans.Query;
+using Key = System.Windows.Input.Key;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using Button = System.Windows.Controls.Button;
+using CheckBox = System.Windows.Controls.CheckBox;
 using Cursors = System.Windows.Input.Cursors;
 using FontFamily = System.Windows.Media.FontFamily;
 using Color = System.Windows.Media.Color;
 using ColorConverter = System.Windows.Media.ColorConverter;
+using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
+using VerticalAlignment = System.Windows.VerticalAlignment;
+using Orientation = System.Windows.Controls.Orientation;
 
 namespace ScreenTrans.Present;
 
 /// <summary>
 /// 浮動結果視窗（[runWi自訂Usr查看聆聽結果]、design ＜III.C.(C)＞ 查詢結果頁）：
-/// 三區直排（原文／KK 音標／中譯）＋播放鈕；查詢中顯示進度、失敗顯示明確錯誤。
-/// ESC 或點視窗外即關。位置暫置中，選區旁定位留 GUI 實測調校。
+/// 淺粉底、大字；英文組（原文＋KK音標）與中文組（中譯）各有獨立播放鈕與「自動播放」勾選，
+/// 兩組間留空白行。勾選自動播放者，結果一出即朗讀對應語言。ESC 或點視窗外即關。
 /// </summary>
 public partial class ResultWindow : Window
 {
     private ISpeechService? _speech;
-    private string _originalForSpeech = "";
     private bool _isLoading;
 
     public ResultWindow()
@@ -36,8 +38,8 @@ public partial class ResultWindow : Window
         BodyPanel.Children.Add(new TextBlock
         {
             Text = "辨識翻譯中…",
-            Foreground = Brush("#DFE1E5"),
-            FontSize = 13,
+            Foreground = Brush("#8A5A6D"),
+            FontSize = 22,
         });
     }
 
@@ -45,7 +47,6 @@ public partial class ResultWindow : Window
     {
         _isLoading = false;
         _speech = speech;
-        _originalForSpeech = r.Original;
         BodyPanel.Children.Clear();
 
         if (r.IsEmpty)
@@ -53,32 +54,40 @@ public partial class ResultWindow : Window
             BodyPanel.Children.Add(new TextBlock
             {
                 Text = "未偵測到英文文字",
-                Foreground = Brush("#9AA0A6"),
-                FontSize = 13,
+                Foreground = Brush("#9A6A82"),
+                FontSize = 24,
             });
             return;
         }
 
+        // 英文組：原文 ＋ KK 音標 ＋ 英文播放/自動
         BodyPanel.Children.Add(Label("原文 ORIGINAL"));
-        BodyPanel.Children.Add(Value(r.Original, "#FFFFFF", 14, bold: true));
+        BodyPanel.Children.Add(Value(r.Original, "#3A2C33", 28, bold: true));
         BodyPanel.Children.Add(Label("KK 音標 PHONETIC"));
-        BodyPanel.Children.Add(Value(r.Phonetic, "#8AB4F8", 12, bold: false, font: "Georgia"));
-        BodyPanel.Children.Add(Label("中譯 TRANSLATION"));
-        BodyPanel.Children.Add(Value(r.Translation, "#E8EAED", 13, bold: false));
+        BodyPanel.Children.Add(Value(r.Phonetic, "#9A6A82", 24, bold: false, font: "Georgia"));
+        BodyPanel.Children.Add(PlayRow("▶ 英文發音",
+            () => _speech?.Speak(r.Original, "en-US", stopPrevious: true),
+            AutoPlaySettings.English, v => AutoPlaySettings.English = v));
 
-        var play = new Button
+        // 英文 / 中文 之間空白行
+        BodyPanel.Children.Add(new Border { Height = 16 });
+
+        // 中文組：中譯 ＋ 中文播放/自動
+        BodyPanel.Children.Add(Label("中譯 TRANSLATION"));
+        BodyPanel.Children.Add(Value(r.Translation, "#3A2C33", 26, bold: false));
+        BodyPanel.Children.Add(PlayRow("▶ 中文發音",
+            () => _speech?.Speak(r.Translation, "zh-TW", stopPrevious: true),
+            AutoPlaySettings.Chinese, v => AutoPlaySettings.Chinese = v));
+
+        // 自動播放（勾選後框選完即播）：兩者皆勾則英文先、中文接續
+        if (AutoPlaySettings.English)
         {
-            Content = "▶ 播放發音",
-            Margin = new Thickness(0, 9, 0, 0),
-            Padding = new Thickness(12, 4, 12, 4),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Background = Brush("#2B3F63"),
-            Foreground = Brush("#CFE0FF"),
-            BorderThickness = new Thickness(0),
-            Cursor = Cursors.Hand,
-        };
-        play.Click += (_, _) => _speech?.Speak(_originalForSpeech);
-        BodyPanel.Children.Add(play);
+            speech.Speak(r.Original, "en-US", stopPrevious: true);
+        }
+        if (AutoPlaySettings.Chinese)
+        {
+            speech.Speak(r.Translation, "zh-TW", stopPrevious: !AutoPlaySettings.English);
+        }
     }
 
     public void ShowError(string message)
@@ -88,26 +97,59 @@ public partial class ResultWindow : Window
         BodyPanel.Children.Add(new TextBlock
         {
             Text = "查詢失敗",
-            Foreground = Brush("#F28B82"),
-            FontSize = 13,
+            Foreground = Brush("#C0506D"),
+            FontSize = 24,
             FontWeight = FontWeights.SemiBold,
         });
         BodyPanel.Children.Add(new TextBlock
         {
             Text = message,
-            Foreground = Brush("#DFE1E5"),
-            FontSize = 12,
+            Foreground = Brush("#5A3A47"),
+            FontSize = 20,
             TextWrapping = TextWrapping.Wrap,
-            Margin = new Thickness(0, 4, 0, 0),
+            Margin = new Thickness(0, 6, 0, 0),
         });
+    }
+
+    private StackPanel PlayRow(string label, Action onPlay, bool autoInit, Action<bool> onAutoChanged)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
+
+        var btn = new Button
+        {
+            Content = label,
+            Padding = new Thickness(14, 6, 14, 6),
+            Background = Brush("#F4C2D0"),
+            Foreground = Brush("#6D3A4D"),
+            BorderThickness = new Thickness(0),
+            FontSize = 18,
+            Cursor = Cursors.Hand,
+        };
+        btn.Click += (_, _) => onPlay();
+        row.Children.Add(btn);
+
+        var chk = new CheckBox
+        {
+            Content = "自動播放",
+            IsChecked = autoInit,
+            Foreground = Brush("#8A5A6D"),
+            FontSize = 16,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(14, 0, 0, 0),
+        };
+        chk.Checked += (_, _) => onAutoChanged(true);
+        chk.Unchecked += (_, _) => onAutoChanged(false);
+        row.Children.Add(chk);
+
+        return row;
     }
 
     private static TextBlock Label(string t) => new()
     {
         Text = t,
-        Foreground = Brush("#8AB4F8"),
-        FontSize = 9,
-        Margin = new Thickness(0, 6, 0, 2),
+        Foreground = Brush("#B0688A"),
+        FontSize = 16,
+        Margin = new Thickness(0, 8, 0, 2),
     };
 
     private static TextBlock Value(string t, string color, double size, bool bold, string? font = null)
@@ -144,7 +186,6 @@ public partial class ResultWindow : Window
     protected override void OnDeactivated(EventArgs e)
     {
         base.OnDeactivated(e);
-        // 查詢中不因失焦關閉（等結果）；有結果/錯誤後點視窗外即關
         if (!_isLoading)
         {
             Close();

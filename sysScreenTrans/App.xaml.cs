@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.IO;
 using System.Windows;
+using System.Windows.Threading;
 using ScreenTrans.Capture;
 using ScreenTrans.Present;
 using ScreenTrans.Query;
@@ -19,11 +20,15 @@ public partial class App : System.Windows.Application
     private SpeechService? _speech;
     private AppConfig _config = new("gpt-4o-mini", 15, "");
     private bool _busy;
+    private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ScreenTrans-error.log");
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        // 全域未捕捉例外：寫 log ＋ 顯示，避免靜默閃退
+        DispatcherUnhandledException += OnUnhandled;
 
         _config = AppConfig.Load(Path.Combine(AppContext.BaseDirectory, "appsettings.json"));
         _speech = new SpeechService(_config.Voice);
@@ -56,6 +61,16 @@ public partial class App : System.Windows.Application
         }
     }
 
+    private void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs args)
+    {
+        try { File.WriteAllText(LogPath, DateTime.Now + "\n" + args.Exception); }
+        catch { /* log 寫入失敗不致命 */ }
+        System.Windows.MessageBox.Show(
+            "發生錯誤（已記錄至 " + LogPath + "）：\n\n" + args.Exception.Message,
+            "ScreenTrans 錯誤");
+        args.Handled = true; // 攔下，避免整支程式閃退
+    }
+
     /// <summary>Alt+L 喚起：遮罩選區截圖 → vision 查詢 → 結果視窗＋朗讀。</summary>
     private async void OnHotKey()
     {
@@ -67,15 +82,16 @@ public partial class App : System.Windows.Application
         try
         {
             var mask = new MaskWindow();
-            var ok = mask.ShowDialog();
-            if (ok != true || mask.Result is null)
+            mask.ShowDialog();
+            if (mask.Result is null)
             {
-                return; // 取消或空選
+                return; // 取消或空選（以 Result 判定，不靠 DialogResult）
             }
 
             var win = new ResultWindow();
             win.ShowLoading();
             win.Show();
+            win.Activate();
 
             try
             {
@@ -87,6 +103,10 @@ public partial class App : System.Windows.Application
             {
                 win.ShowError(ex.Message);
             }
+        }
+        catch (Exception ex)
+        {
+            System.Windows.MessageBox.Show("喚起流程錯誤：\n" + ex.Message, "ScreenTrans");
         }
         finally
         {
