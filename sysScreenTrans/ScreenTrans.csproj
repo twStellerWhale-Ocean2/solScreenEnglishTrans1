@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>ScreenTrans</AssemblyName>
+    <RootNamespace>ScreenTrans</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- 進程級 DPI 由 app.manifest（PerMonitorV2）設定：WPF 進入點需 manifest、且 Win32 截圖需 physical pixels（spec#2）。WFO0003 是 WinForms 對其自有 SetHighDpiMode 的偏好，此處不適用，抑制之。 -->
+    <NoWarn>WFO0003</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Update="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>
