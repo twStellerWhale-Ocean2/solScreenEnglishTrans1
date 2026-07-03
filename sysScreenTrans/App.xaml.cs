@@ -16,6 +16,7 @@ namespace ScreenTrans;
 public partial class App : System.Windows.Application
 {
     private WinForms.NotifyIcon? _tray;
+    private WinForms.ToolStripMenuItem? _keyStatusItem;
     private HotKeyService? _hotkey;
     private ISpeechService? _speech;
     private AppConfig _config = new("gpt-4o-mini", 15, "", "openai", "gpt-4o-mini-tts");
@@ -46,8 +47,11 @@ public partial class App : System.Windows.Application
         };
 
         var menu = new WinForms.ContextMenuStrip();
-        menu.Items.Add(keyReady ? "● 金鑰已備妥（OPENAI_API_KEY）" : "○ 金鑰未設定（OPENAI_API_KEY）", null, null).Enabled = false;
+        _keyStatusItem = new WinForms.ToolStripMenuItem(
+            keyReady ? "● 金鑰已備妥（OPENAI_API_KEY）" : "○ 金鑰未設定（OPENAI_API_KEY）") { Enabled = false };
+        menu.Items.Add(_keyStatusItem);
         menu.Items.Add(new WinForms.ToolStripSeparator());
+        menu.Items.Add("設定…", null, OnSettings);
         menu.Items.Add("關於 ScreenTrans", null, (_, _) =>
             System.Windows.MessageBox.Show(
                 "ScreenTrans\n按 Alt+L（左右皆可）框選畫面英文，取得原文／KK 音標／繁中翻譯並可朗讀。",
@@ -131,6 +135,28 @@ public partial class App : System.Windows.Application
         finally
         {
             _busy = false;
+        }
+    }
+
+    /// <summary>系統匣「設定…」：開設定視窗，儲存後套用（重建語音服務、更新金鑰狀態列）。</summary>
+    private void OnSettings(object? sender, EventArgs e)
+    {
+        var dlg = new SettingsWindow(_config);
+        if (dlg.ShowDialog() != true)
+        {
+            return;
+        }
+        _config = dlg.ResultConfig;
+        var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
+        (_speech as IDisposable)?.Dispose();
+        _speech = _config.TtsProvider.Equals("windows", StringComparison.OrdinalIgnoreCase)
+            ? new SpeechService(_config.Voice)
+            : new OpenAiSpeechService(apiKey, _config.TtsModel, _config.Voice, _config.TimeoutSec, fallback: new SpeechService(null));
+        if (_keyStatusItem is not null)
+        {
+            _keyStatusItem.Text = string.IsNullOrWhiteSpace(apiKey)
+                ? "○ 金鑰未設定（OPENAI_API_KEY）"
+                : "● 金鑰已備妥（OPENAI_API_KEY）";
         }
     }
 

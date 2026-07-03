@@ -460,7 +460,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 
 > 列本層關鍵參數／組態；列舉即可、不解釋。
 
-* **Env**：`OPENAI_API_KEY`（[modQuery模組]；僅此一機密）。
+* **Env**：`OPENAI_API_KEY`（[modQuery模組]；僅此一機密；可經系統匣「設定…」寫入使用者環境變數，仍不落地於程式／設定檔）。
 * **appsettings.json**：`paramModel=gpt-4o-mini`、`paramQueryTimeoutSec=15`、`paramTtsProvider=openai`（或 `windows`）、`paramTtsModel=gpt-4o-mini-tts`、`paramTtsVoice=`（空＝OpenAI 用 `nova`／SAPI 用系統預設）。
 * **硬編碼**：`paramHotkey=Alt+L`（MVP 固定）。
 
@@ -476,7 +476,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 | --- | --- | --- | --- | --- | --- |
 | 選區遮罩頁 | 遊戲查詢／teamSop#1.1 | capture | 全螢幕 45% 變暗遮罩＋十字游標＋accent 橡皮筋選框（差顯反白）＋頂部一行提示（`拖曳框選要查詢的文字，ESC 取消`） | #1.1.1 | 桌面 overlay（topmost） |
 | 查詢結果頁 | 遊戲查詢／teamSop#1.2·1.3 | query＋present | 淺粉底圓角大字卡片（可縮放、記住位置大小；預設約 560×380）：查詢中＝`辨識翻譯中…`；完成＝三區直排（原文／KK 音標／中譯），英文組與中文組各附獨立播放鈕與「自動播放」勾選；失敗＝錯誤訊息＋下一步指引 | #1.2.1·#1.3.1 | 桌面浮動視窗（topmost、可拖曳縮放） |
-| 系統匣選單頁 | 工具維保／teamSop#2.2·2.3 | 維運 | tray 圖示右鍵選單：狀態列（金鑰備妥／缺失）、關於、結束 | #2.2.1 | 系統匣 |
+| 系統匣選單頁 | 工具維保／teamSop#2.2·2.3 | 維運 | tray 圖示右鍵選單：狀態列（金鑰備妥／缺失）、設定（金鑰→使用者環境變數、語音來源／模型／嗓音、查詢模型）、關於、結束 | #2.2.1 | 系統匣 |
 
 > **設計原則**：每頁只服務一個專業目的（遮罩＝選取、卡片＝呈現朗讀、tray＝維運）；安裝金鑰與移除（#2.1.1／#2.3.1）走 OS 標準設定（檔案總管＋環境變數），非本系統頁面。`prsnSop→頁` 以 ＜B.(C)＞ 為準、本節為反查。
 

@@ -1,0 +1,42 @@
+<Window x:Class="ScreenTrans.Present.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="ScreenTrans 設定" Width="460" SizeToContent="Height"
+        WindowStartupLocation="CenterScreen" ResizeMode="NoResize"
+        Background="#FFF5F8" FontSize="14"
+        Icon="pack://application:,,,/assets/icon.png">
+  <StackPanel Margin="22,18,22,18">
+    <TextBlock Text="ScreenTrans 設定" FontSize="20" FontWeight="SemiBold" Foreground="#B0688A" Margin="0,0,0,14"/>
+
+    <TextBlock Text="OpenAI API 金鑰（OPENAI_API_KEY）" FontWeight="SemiBold" Foreground="#6D3A4D"/>
+    <TextBlock x:Name="KeyStatus" Margin="0,2,0,4" Foreground="#8A5A6D"/>
+    <PasswordBox x:Name="KeyBox" Padding="6"/>
+    <TextBlock Text="貼上以更新；留空則不變更。存入使用者環境變數，不寫進程式或設定檔。"
+               FontSize="12" Foreground="#9A6A82" TextWrapping="Wrap" Margin="0,3,0,14"/>
+
+    <TextBlock Text="語音來源" FontWeight="SemiBold" Foreground="#6D3A4D"/>
+    <ComboBox x:Name="ProviderBox" Margin="0,2,0,10">
+      <ComboBoxItem Content="OpenAI 音檔（自然）" Tag="openai"/>
+      <ComboBoxItem Content="Windows 內建（離線）" Tag="windows"/>
+    </ComboBox>
+
+    <TextBlock Text="OpenAI 語音模型" FontWeight="SemiBold" Foreground="#6D3A4D"/>
+    <ComboBox x:Name="ModelBox" Margin="0,2,0,10">
+      <ComboBoxItem Content="gpt-4o-mini-tts（品質佳）" Tag="gpt-4o-mini-tts"/>
+      <ComboBoxItem Content="tts-1（相容性高）" Tag="tts-1"/>
+    </ComboBox>
+
+    <TextBlock Text="嗓音（OpenAI）" FontWeight="SemiBold" Foreground="#6D3A4D"/>
+    <ComboBox x:Name="VoiceBox" Margin="0,2,0,10"/>
+
+    <TextBlock Text="查詢模型（vision）" FontWeight="SemiBold" Foreground="#6D3A4D"/>
+    <TextBox x:Name="QueryModelBox" Padding="6" Margin="0,2,0,16"/>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button x:Name="TestBtn" Content="測試發音" Padding="12,6" Margin="0,0,8,0"/>
+      <Button x:Name="SaveBtn" Content="儲存" Padding="18,6" Margin="0,0,8,0"
+              Background="#F4C2D0" Foreground="#6D3A4D" BorderThickness="0"/>
+      <Button x:Name="CancelBtn" Content="取消" Padding="12,6"/>
+    </StackPanel>
+  </StackPanel>
+</Window>

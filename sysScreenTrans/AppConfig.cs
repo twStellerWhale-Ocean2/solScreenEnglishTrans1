@@ -24,4 +24,18 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, strin
             return new AppConfig("gpt-4o-mini", 15, "", "openai", "gpt-4o-mini-tts");
         }
     }
+
+    /// <summary>寫回 appsettings.json（僅非機密參數；金鑰一律走環境變數、不落地）。</summary>
+    public void Save(string path)
+    {
+        var obj = new
+        {
+            paramModel = Model,
+            paramQueryTimeoutSec = TimeoutSec,
+            paramTtsProvider = TtsProvider,
+            paramTtsModel = TtsModel,
+            paramTtsVoice = Voice,
+        };
+        File.WriteAllText(path, JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
+    }
 }
