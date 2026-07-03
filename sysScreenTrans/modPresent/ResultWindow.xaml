@@ -2,18 +2,43 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
-        ShowInTaskbar="False" Topmost="True" Width="640" SizeToContent="Height"
+        ShowInTaskbar="False" Topmost="True"
+        Width="560" Height="380" MinWidth="320" MinHeight="200"
         ResizeMode="NoResize" WindowStartupLocation="CenterScreen">
   <Border Background="#FFF0F5" CornerRadius="14" BorderBrush="#F4C2D0" BorderThickness="1">
-    <StackPanel>
-      <Grid Height="44">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="44"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <!-- 標題列：拖曳可移動視窗（Background=Transparent 才可命中拖曳） -->
+      <Grid x:Name="HeaderBar" Grid.Row="0" Background="Transparent">
         <TextBlock Text="查詢結果" Foreground="#B0688A" FontSize="16"
                    VerticalAlignment="Center" Margin="18,0"/>
-        <TextBlock Text="✕ ESC" Foreground="#B0688A" FontSize="16"
+        <TextBlock Text="拖曳標題移動 · ESC 關閉" Foreground="#C79BAE" FontSize="12"
                    HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,18,0"/>
         <Border Height="1" Background="#F4C2D0" VerticalAlignment="Bottom"/>
       </Grid>
-      <StackPanel x:Name="BodyPanel" Margin="18,14,18,16"/>
-    </StackPanel>
+
+      <!-- 內容區：過長可捲動 -->
+      <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel x:Name="BodyPanel" Margin="18,14,18,22"/>
+      </ScrollViewer>
+
+      <!-- 右下角縮放握把 -->
+      <Thumb x:Name="ResizeGrip" Grid.Row="1"
+             HorizontalAlignment="Right" VerticalAlignment="Bottom"
+             Width="22" Height="22" Margin="0,0,3,3" Cursor="SizeNWSE"
+             ToolTip="拖曳縮放視窗">
+        <Thumb.Template>
+          <ControlTemplate TargetType="Thumb">
+            <Grid Background="Transparent">
+              <Path Data="M 22,6 L 22,22 L 6,22 Z" Fill="#E29CB2" Stretch="Fill" Margin="6"/>
+            </Grid>
+          </ControlTemplate>
+        </Thumb.Template>
+      </Thumb>
+    </Grid>
   </Border>
 </Window>

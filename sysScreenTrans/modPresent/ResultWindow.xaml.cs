@@ -13,6 +13,9 @@ using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
 using VerticalAlignment = System.Windows.VerticalAlignment;
 using Orientation = System.Windows.Controls.Orientation;
+using MouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
+using DragDeltaEventArgs = System.Windows.Controls.Primitives.DragDeltaEventArgs;
+using CancelEventArgs = System.ComponentModel.CancelEventArgs;
 
 namespace ScreenTrans.Present;
 
@@ -20,15 +23,81 @@ namespace ScreenTrans.Present;
 /// 浮動結果視窗（[runWi自訂Usr查看聆聽結果]、design ＜III.C.(C)＞ 查詢結果頁）：
 /// 淺粉底、大字；英文組（原文＋KK音標）與中文組（中譯）各有獨立播放鈕與「自動播放」勾選，
 /// 兩組間留空白行。勾選自動播放者，結果一出即朗讀對應語言。ESC 或點視窗外即關。
+/// 視窗可拖曳標題移動、右下握把縮放；關閉時記住位置與大小（UiStateStore），下次開啟還原。
 /// </summary>
 public partial class ResultWindow : Window
 {
     private ISpeechService? _speech;
     private bool _isLoading;
+    private readonly UiStateStore _ui;
 
     public ResultWindow()
     {
         InitializeComponent();
+        _ui = UiStateStore.Load();
+        ApplyBounds();
+        HeaderBar.MouseLeftButtonDown += OnHeaderDrag;
+        ResizeGrip.DragDelta += OnResizeDelta;
+    }
+
+    /// <summary>套用記住的大小；位置若仍落在螢幕內則還原，否則置中。</summary>
+    private void ApplyBounds()
+    {
+        Width = _ui.WinWidth;
+        Height = _ui.WinHeight;
+        if (_ui.WinLeft is double l && _ui.WinTop is double t && IsOnScreen(l, t, _ui.WinWidth))
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Left = l;
+            Top = t;
+        }
+        else
+        {
+            WindowStartupLocation = WindowStartupLocation.CenterScreen;
+        }
+    }
+
+    /// <summary>標題列可見且可點：頂邊在虛擬桌面內、左右各留至少 80px 在畫面上。</summary>
+    private static bool IsOnScreen(double left, double top, double width)
+    {
+        double vsl = SystemParameters.VirtualScreenLeft;
+        double vst = SystemParameters.VirtualScreenTop;
+        double vsr = vsl + SystemParameters.VirtualScreenWidth;
+        double vsb = vst + SystemParameters.VirtualScreenHeight;
+        return top >= vst - 2 && top <= vsb - 40 && (left + width) >= vsl + 80 && left <= vsr - 80;
+    }
+
+    private void OnHeaderDrag(object sender, MouseButtonEventArgs e)
+    {
+        try { DragMove(); }
+        catch { /* 非左鍵按住狀態的邊界情形，忽略 */ }
+    }
+
+    private void OnResizeDelta(object sender, DragDeltaEventArgs e)
+    {
+        Width = Math.Max(MinWidth, Width + e.HorizontalChange);
+        Height = Math.Max(MinHeight, Height + e.VerticalChange);
+    }
+
+    protected override void OnClosing(CancelEventArgs e)
+    {
+        var b = RestoreBounds;
+        if (b.Width > 0 && !double.IsNaN(b.Left))
+        {
+            _ui.WinLeft = b.Left;
+            _ui.WinTop = b.Top;
+            _ui.WinWidth = b.Width;
+            _ui.WinHeight = b.Height;
+        }
+        else
+        {
+            _ui.WinLeft = Left;
+            _ui.WinTop = Top;
+            _ui.WinWidth = ActualWidth;
+            _ui.WinHeight = ActualHeight;
+        }
+        _ui.Save();
+        base.OnClosing(e);
     }
 
     public void ShowLoading()
