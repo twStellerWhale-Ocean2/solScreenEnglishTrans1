@@ -408,7 +408,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 * **sys 下屬 module**：[modCapture模組]、[modQuery模組]、[modPresent模組]（皆隸屬單一 WPF exe；[techStackDotnetWin] 候選）。
   * **[modCapture模組] 選區對位契約**（spec#2）：遮罩視窗覆蓋全部螢幕（含多螢幕虛擬桌面）；框選座標以**實際像素**（physical pixels）換算（Per-Monitor DPI aware），截圖直接取螢幕實際像素區塊。**invariant**：選區影像與使用者所見框選範圍 0px 偏移；任一螢幕、任一 DPI 縮放皆同。
   * **[modCapture模組] 熱鍵契約**（spec#1）：以 `RegisterHotKey(MOD_ALT, VK_L)` 註冊（左右 Alt 皆觸發）；**禁低階鍵盤 hook**；程式結束時釋放。**invariant**：對全系統鍵盤輸入零延遲影響；熱鍵註冊失敗（被占用）時明確提示。
-  * **[modQuery模組] 查詢契約**（spec#3／#5）：單次 vision 呼叫附結構化輸出要求，回應以 JSON schema 驗證為 [datIntf自訂查詢結果格式]；金鑰僅自環境變數讀取、不寫任何檔案與日誌。**invariant**：三欄齊備或走異常降級（[runWi自訂Sys辨識翻譯選區]）；程式檔／設定檔／日誌掃描無金鑰。
+  * **[modQuery模組] 查詢契約**（spec#3／#5）：單次 vision 呼叫附結構化輸出要求，回應以 JSON schema 驗證為 [datIntf自訂查詢結果格式]（JSON 三欄位皆必要：`original` 英文原文／`phonetic` KK 音標／`translation` 繁中翻譯，型別皆 string；缺一即判不合格式、走降級；選區無可辨識英文時三欄皆回空字串、呈現層顯示「未偵測到英文文字」）；金鑰僅自環境變數讀取、不寫任何檔案與日誌。**invariant**：三欄齊備或走異常降級（[runWi自訂Sys辨識翻譯選區]）；程式檔／設定檔／日誌掃描無金鑰。
   * **[modPresent模組] 呈現契約**（spec#4）：結果視窗 topmost、出現於選區旁不遮擋原選區；TTS 非同步播放、重複觸發先停再播；`ESC`／點外即關。**invariant**：UI 執行緒不阻塞；關閉後無殘影視窗。
   * **單一實例 invariant**：重複啟動偵測既有實例並提示，不重複註冊熱鍵。
 * **模組間介面（in-process）**：[modCapture模組]→[modQuery模組]＝`ICaptureResult`（選區影像＋來源螢幕資訊）；[modQuery模組]→[modPresent模組]＝[datIntf自訂查詢結果格式]（成功）或錯誤描述（降級）。C# interface 簽章歸 code。
