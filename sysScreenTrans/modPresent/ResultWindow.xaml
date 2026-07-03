@@ -12,6 +12,11 @@
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
 
+      <!-- 浮水印底圖（兩位女孩，極淡、不擋點擊） -->
+      <Image Grid.Row="0" Grid.RowSpan="2" Source="pack://application:,,,/assets/icon.png"
+             Opacity="0.10" Stretch="Uniform" IsHitTestVisible="False"
+             HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20,28,20,20"/>
+
       <!-- 標題列：拖曳可移動視窗（Background=Transparent 才可命中拖曳） -->
       <Grid x:Name="HeaderBar" Grid.Row="0" Background="Transparent" ToolTip="拖曳可移動視窗">
         <TextBlock Text="查詢結果" Foreground="#B0688A" FontSize="16"

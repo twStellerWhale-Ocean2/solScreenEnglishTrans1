@@ -32,8 +32,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 系統匣／視窗圖示（打包為 WPF 資源，執行期以 pack URI 載入） -->
+    <!-- 系統匣／視窗圖示與浮水印（打包為 WPF 資源，執行期以 pack URI 載入） -->
     <Resource Include="assets\app.ico" />
+    <Resource Include="assets\icon.png" />
   </ItemGroup>
 
 </Project>
