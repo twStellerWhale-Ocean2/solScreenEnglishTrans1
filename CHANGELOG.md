@@ -2,6 +2,21 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [0.4.1] - 2026-07-04
+
+Issue #8 增量：`paramQueryTimeoutSec` 非正值防呆——套用安全下限。
+
+### 修正
+- `AppConfig.Load` 讀 `paramQueryTimeoutSec` 時，對 `0` 或負值於組態讀取邊界套用安全
+  下限 `15`（原先會使 `QueryService` 以 `CancelAfter(0)` 即刻取消、每次查詢立即逾時、
+  永遠查不到結果）；合法正值不受影響。
+- 補 `AppConfigTests` 非正值（`0`／`-1`／`-30`）→ 套用下限與正值原樣保留之案例。
+
+### 備註
+- 本增量無 UI 變更，GATE §5 依「無畫面→獨立報告」處理。
+- 原議題引用之 `OpenAiSpeechService` 對照已於 #9 移除 OpenAI TTS 時刪除，改以現存的
+  `QueryService` `maxRetries` clamp 作一致性依據。
+
 ## [0.4.0] - 2026-07-04
 
 Issue #7 增量：OpenAI 查詢暫時性錯誤加重試退避。

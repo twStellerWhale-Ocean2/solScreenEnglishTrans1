@@ -68,6 +68,38 @@ public class AppConfigTests
         finally { File.Delete(path); }
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-30)]
+    public void Load_NonPositiveTimeout_AppliesSafeFloor(int badTimeout)
+    {
+        // paramQueryTimeoutSec 非正值會使 CancelAfter(0/負) 即刻取消、每次查詢立即逾時（Issue #8）
+        // → 讀取邊界套用安全下限 15，令查詢仍以合理逾時運作。
+        var path = TempPath();
+        File.WriteAllText(path,
+            "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":" + badTimeout + ",\"paramTtsVoice\":\"\"}");
+        try
+        {
+            var cfg = AppConfig.Load(path);
+            Assert.Equal(15, cfg.TimeoutSec);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Load_PositiveTimeout_KeptAsIs()
+    {
+        // 合法正值不受防呆影響。
+        var path = TempPath();
+        File.WriteAllText(path, "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":45,\"paramTtsVoice\":\"\"}");
+        try
+        {
+            Assert.Equal(45, AppConfig.Load(path).TimeoutSec);
+        }
+        finally { File.Delete(path); }
+    }
+
     [Fact]
     public void Load_MissingFile_ReturnsDefaults()
     {
