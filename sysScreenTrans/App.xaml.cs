@@ -77,6 +77,9 @@ public partial class App : System.Windows.Application
         _dock.RefreshStatus(keyReady, HotkeyDisplay());
         _dock.SettingsRequested += () => OnSettings(this, EventArgs.Empty);
         _dock.ExitRequested += ExitApp;
+        // 主控頁被帶到前景時（工作列按鈕／Alt+Tab／系統匣還原皆會 Activate）關閉 topmost 結果視窗，
+        // 否則結果卡片會蓋住非 topmost 的主控頁，違反 spec#1「工作列可穩定尋得主控入口」。
+        _dock.Activated += (_, _) => CloseResultBeforeMaintenanceUi();
         _dock.WindowState = WindowState.Minimized;
         _dock.Show();
 
@@ -169,10 +172,18 @@ public partial class App : System.Windows.Application
             {
                 var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
                 var result = await query.QueryAsync(mask.Result.PngBytes);
+                if (!ReferenceEquals(_result, win))
+                {
+                    return; // 載入中該視窗已被維運 UI 關閉或被新查詢取代：捨棄遲來結果，免對已關視窗填內容/幽靈朗讀
+                }
                 win.ShowResult(result, _speech!);
             }
             catch (QueryException ex)
             {
+                if (!ReferenceEquals(_result, win))
+                {
+                    return; // 同上：視窗已不在，錯誤亦不再顯示於該視窗
+                }
                 win.ShowError(ex.Message);
             }
         }
