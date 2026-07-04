@@ -5,10 +5,14 @@ namespace ScreenTrans;
 
 /// <summary>appsettings.json 非機密偏好（[etyCfg自訂sysScreenTrans組態] D 類）。缺檔或欄位用預設。</summary>
 /// <param name="MaxRetries">查詢暫時性錯誤最大重試次數（負值視為 0＝不重試）。</param>
-public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2)
+/// <param name="Hotkey">喚起快捷鍵綁定（序列化字串，如 <c>Alt+L</c>／<c>Ctrl+Shift+F</c>／<c>Mouse:Middle</c>）。</param>
+public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L")
 {
     /// <summary>查詢逾時秒數安全下限／預設（缺欄、解析失敗或非正值皆退回此值）。</summary>
     private const int DefaultTimeoutSec = 15;
+
+    /// <summary>喚起快捷鍵預設綁定（沿用原硬編碼 Alt+L）。</summary>
+    public const string DefaultHotkey = "Alt+L";
 
     public static AppConfig Load(string path)
     {
@@ -21,7 +25,8 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
                 r.TryGetProperty("paramModel", out var m) ? m.GetString() ?? "gpt-4o-mini" : "gpt-4o-mini",
                 timeoutSec > 0 ? timeoutSec : DefaultTimeoutSec, // 非正值即刻取消會使查詢永遠逾時，套用安全下限
                 r.TryGetProperty("paramTtsVoice", out var v) ? v.GetString() ?? "" : "",
-                r.TryGetProperty("paramQueryMaxRetries", out var n) ? n.GetInt32() : 2);
+                r.TryGetProperty("paramQueryMaxRetries", out var n) ? n.GetInt32() : 2,
+                r.TryGetProperty("paramHotkey", out var h) ? h.GetString() ?? DefaultHotkey : DefaultHotkey);
         }
         catch
         {
@@ -38,6 +43,7 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
             paramQueryTimeoutSec = TimeoutSec,
             paramQueryMaxRetries = MaxRetries,
             paramTtsVoice = Voice,
+            paramHotkey = Hotkey,
         };
         File.WriteAllText(path, JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
     }

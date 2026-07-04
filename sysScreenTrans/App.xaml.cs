@@ -54,7 +54,7 @@ public partial class App : System.Windows.Application
         {
             Icon = LoadAppIcon(WinForms.SystemInformation.SmallIconSize),
             Visible = true,
-            Text = "ScreenTrans — 遊戲畫面英文查詢（Alt+L）",
+            Text = TrayText(),
         };
 
         var menu = new WinForms.ContextMenuStrip();
@@ -65,20 +65,34 @@ public partial class App : System.Windows.Application
         menu.Items.Add("設定…", null, OnSettings);
         menu.Items.Add("關於 ScreenTrans", null, (_, _) =>
             System.Windows.MessageBox.Show(
-                "ScreenTrans\n按 Alt+L（左右皆可）框選畫面英文，取得原文／KK 音標／繁中翻譯並可朗讀。",
+                $"ScreenTrans\n按「{HotkeyDisplay()}」框選畫面英文，取得原文／KK 音標／繁中翻譯並可朗讀。\n（喚起快捷鍵可於「設定」自訂）",
                 "關於 ScreenTrans"));
         menu.Items.Add("結束", null, (_, _) => Shutdown());
         _tray.ContextMenuStrip = menu;
 
         _hotkey = new HotKeyService();
         _hotkey.HotKeyPressed += OnHotKey;
-        if (!_hotkey.Register())
+        RegisterHotkeyOrWarn();
+    }
+
+    /// <summary>以當前組態綁定註冊喚起快捷鍵；失敗（被占用／hook 安裝失敗）明確提示、程式仍常駐。</summary>
+    private void RegisterHotkeyOrWarn()
+    {
+        if (_hotkey is null)
+        {
+            return;
+        }
+        if (!_hotkey.Register(HotKeyBinding.Parse(_config.Hotkey)))
         {
             System.Windows.MessageBox.Show(
-                "熱鍵 Alt+L 註冊失敗（可能已被其他程式占用）。ScreenTrans 仍常駐，但無法以熱鍵喚起。",
+                $"喚起快捷鍵「{HotkeyDisplay()}」註冊失敗（可能已被其他程式占用）。ScreenTrans 仍常駐，可於「設定」改用其他快捷鍵。",
                 "ScreenTrans");
         }
     }
+
+    private string HotkeyDisplay() => HotKeyBinding.Parse(_config.Hotkey).DisplayName;
+
+    private string TrayText() => $"ScreenTrans — 遊戲畫面英文查詢（{HotkeyDisplay()}）";
 
     /// <summary>從打包的 assets/app.ico 資源載入指定尺寸圖示；失敗退回系統預設。</summary>
     private static Icon LoadAppIcon(System.Drawing.Size size)
@@ -161,6 +175,11 @@ public partial class App : System.Windows.Application
         var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
         (_speech as IDisposable)?.Dispose();
         _speech = new SpeechService(_config.Voice);
+        RegisterHotkeyOrWarn(); // 快捷鍵可能已變更，重新註冊
+        if (_tray is not null)
+        {
+            _tray.Text = TrayText();
+        }
         if (_keyStatusItem is not null)
         {
             _keyStatusItem.Text = string.IsNullOrWhiteSpace(apiKey)

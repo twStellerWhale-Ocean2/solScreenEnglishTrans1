@@ -22,6 +22,16 @@
     <TextBlock Text="查詢模型（vision）" FontWeight="SemiBold" Foreground="#6D3A4D"/>
     <TextBox x:Name="QueryModelBox" Padding="6" Margin="0,2,0,16"/>
 
+    <TextBlock Text="喚起快捷鍵" FontWeight="SemiBold" Foreground="#6D3A4D"/>
+    <StackPanel Orientation="Horizontal" Margin="0,2,0,4" VerticalAlignment="Center">
+      <TextBlock x:Name="HotkeyStatus" MinWidth="150" VerticalAlignment="Center"
+                 Foreground="#6D3A4D" FontWeight="SemiBold"/>
+      <Button x:Name="ChangeHotkeyBtn" Content="變更" Padding="12,4" Margin="10,0,0,0"/>
+    </StackPanel>
+    <TextBlock x:Name="HotkeyHint"
+               Text="按「變更」後直接按下想用的鍵盤組合或滑鼠鍵（中鍵／側鍵／左右同按）；Esc 取消。"
+               FontSize="12" Foreground="#9A6A82" TextWrapping="Wrap" Margin="0,0,0,16"/>
+
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
       <Button x:Name="TestBtn" Content="測試發音" Padding="12,6" Margin="0,0,8,0"/>
       <Button x:Name="SaveBtn" Content="儲存" Padding="18,6" Margin="0,0,8,0"

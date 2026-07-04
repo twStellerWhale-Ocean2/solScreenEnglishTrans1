@@ -2,6 +2,29 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [0.5.0] - 2026-07-04
+
+Issue #10 增量：可自訂喚起快捷鍵（鍵盤/滑鼠組合），設定採監聽輸入、Esc 離開。
+
+### 新增
+- 喚起快捷鍵可自訂：鍵盤組合（修飾鍵＋主鍵）走 `RegisterHotKey`；滑鼠中鍵／側鍵
+  （`XButton1`／`XButton2`）／左右鍵同按走低階滑鼠 hook `WH_MOUSE_LL`。
+- 系統匣「設定」新增「喚起快捷鍵」：顯示當前綁定＋「變更」進入監聽模式，直接按下鍵盤
+  組合或滑鼠鍵擷取、`Esc` 取消；存 `paramHotkey`（appsettings）重啟沿用。
+- `HotKeyBinding`（可序列化綁定 model，含序列化/解析/組合比對單元測試）；系統匣提示、
+  「關於」文案改為動態顯示當前快捷鍵。
+
+### 修正
+- `SettingsWindow.Gather()` 原以 3-arg `AppConfig` 建構子重建組態、遺漏 `MaxRetries`
+  （存設定會重置為預設 2）；一併修正為帶全欄（含新 `paramHotkey`）。
+
+### 備註
+- 依 USR 拍板採鍵鼠全支援，回修 design modCapture 熱鍵契約：放寬「禁低階 hook」為
+  「滑鼠 `WH_MOUSE_LL` 允許、callback 輕量放行且確保釋放；鍵盤仍走 `RegisterHotKey`」；
+  spec#1 併入「喚起快捷鍵可自訂」（未新增 spec#6）。
+- 低階滑鼠 hook 之實機全域延遲與重啟沿用留發車環對成品驗；本層以元件測試＋設定視窗
+  渲染截圖佐證，GATE §5 產 A5 `docs/test-summary-issue10.pdf`。
+
 ## [0.4.1] - 2026-07-04
 
 Issue #8 增量：`paramQueryTimeoutSec` 非正值防呆——套用安全下限。

@@ -101,6 +101,44 @@ public class AppConfigTests
     }
 
     [Fact]
+    public void SaveLoad_Roundtrips_Hotkey()
+    {
+        // 喚起快捷鍵綁定往返（Issue #10）
+        var path = TempPath();
+        try
+        {
+            new AppConfig("gpt-4o-mini", 15, "", 2, "Ctrl+Shift+F").Save(path);
+            Assert.Equal("Ctrl+Shift+F", AppConfig.Load(path).Hotkey);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Load_MissingHotkey_DefaultsToAltL()
+    {
+        // 舊 appsettings 無 paramHotkey → 預設 Alt+L（向後相容）
+        var path = TempPath();
+        File.WriteAllText(path, "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\"}");
+        try
+        {
+            Assert.Equal("Alt+L", AppConfig.Load(path).Hotkey);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Save_Writes_HotkeyKey()
+    {
+        var path = TempPath();
+        try
+        {
+            new AppConfig("gpt-4o-mini", 15, "", 2, "Mouse:Middle").Save(path);
+            Assert.Contains("paramHotkey", File.ReadAllText(path));
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void Load_MissingFile_ReturnsDefaults()
     {
         var cfg = AppConfig.Load(TempPath()); // 不建檔
