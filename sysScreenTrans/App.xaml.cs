@@ -160,7 +160,7 @@ public partial class App : System.Windows.Application
         {
             // 結果視窗失焦不再自動關閉：新查詢一開始即關閉前一結果視窗——須在遮罩截圖「之前」，
             // 否則前一結果視窗仍為 topmost，選區若與其重疊會把舊卡片截進畫面（同時亦維持至多一個）。
-            _result?.Close();
+            CloseResult();
 
             var mask = new MaskWindow();
             mask.ShowDialog();
@@ -215,7 +215,28 @@ public partial class App : System.Windows.Application
     /// 這些維運視窗無 owner／非 topmost，若不先關結果卡片會被蓋在其下而看不到、用不到
     /// （並還原本 issue 前「開維運 UI 即關結果」之時序）。設定路徑另需在 dispose 舊語音服務前關閉。
     /// </summary>
-    private void CloseResultBeforeMaintenanceUi() => _result?.Close();
+    private void CloseResultBeforeMaintenanceUi() => CloseResult();
+
+    /// <summary>
+    /// 關閉結果視窗之單一守衛（Issue #32）：先解 <c>_result</c> 參考再關閉，僅在未進入關閉序列時
+    /// 才 <c>Close()</c>；極端交錯（多路徑同時關閉、共用滑鼠鍵觸發焦點轉移再關閉）以 catch 兜底，
+    /// 避免「Cannot call Close while a Window is closing」重入崩潰。所有關閉結果視窗之處一律走此。
+    /// </summary>
+    private void CloseResult()
+    {
+        var r = _result;
+        if (r is null)
+        {
+            return;
+        }
+        _result = null; // 先解參考，避免任何重入路徑再次關閉同一視窗
+        if (r.IsClosing)
+        {
+            return;
+        }
+        try { r.Close(); }
+        catch (InvalidOperationException) { /* 已在關閉序列中，忽略 */ }
+    }
 
     /// <summary>系統匣「開啟主控頁」／雙擊圖示：先關結果視窗（免遮蔽）再還原主控頁。</summary>
     private void OpenDock()

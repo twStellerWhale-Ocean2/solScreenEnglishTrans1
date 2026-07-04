@@ -2,6 +2,24 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [0.10.1] - 2026-07-05
+
+Issue #32 修正：與前景程式共用滑鼠快捷鍵時，喚起／關閉結果視窗崩潰。
+
+### 修正
+- **結果視窗關閉的重入崩潰**：多處（喚起、開維運 UI、主控頁 `Activated`）直接 `_result?.Close()`，
+  在關閉序列進行中（`OnClosing` 已起、`Closed` 尚未設 `_result=null`）重複 `Close()` 會拋
+  `InvalidOperationException：Cannot call Close while a Window is closing`。前景程式（如 COP 儀表板）
+  共用同一滑鼠鍵時焦點/關閉交錯更易觸發。改為集中於單一守衛 `App.CloseResult`（先解參考、僅在
+  未 `IsClosing` 時關閉、極端交錯以 catch 兜底）。
+- **滑鼠 hook 觸發收斂**：低階滑鼠 hook 連續命中以 `FireGate` 收斂（handler 未跑完前不重複派工），
+  避免共用鍵情境下的觸發風暴。
+
+### 備註
+- design.md（modCapture 喚起契約／modPresent 呈現契約 invariant、intTest#19）同步。
+- 新增單元測試 2 項（FireGate 收斂），全套 117 綠；視窗重入行為屬 WPF 生命週期，留手動／e2e 驗；
+  GATE §5 產 `docs/test-summary-issue32.pdf`。
+
 ## [0.10.0] - 2026-07-04
 
 Issue #14 增量：可設定應用情境提示以提升翻譯準確度（spec#8）。
