@@ -15,6 +15,7 @@ namespace ScreenTrans;
 /// </summary>
 public partial class App : System.Windows.Application
 {
+    private SingleInstanceGuard? _instanceGuard;
     private WinForms.NotifyIcon? _tray;
     private WinForms.ToolStripMenuItem? _keyStatusItem;
     private HotKeyService? _hotkey;
@@ -27,6 +28,18 @@ public partial class App : System.Windows.Application
     {
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        // 單一實例守衛：重複啟動偵測既有實例、明確提示並結束新實例，不重複註冊熱鍵
+        // （design ＜setWi自訂Usr啟動結束常駐＞驗收 row02、＜II.C＞單一實例 invariant）。
+        _instanceGuard = SingleInstanceGuard.Acquire();
+        if (!_instanceGuard.IsFirstInstance)
+        {
+            System.Windows.MessageBox.Show(
+                "ScreenTrans 已在執行中（請見系統匣圖示）。",
+                "ScreenTrans");
+            Shutdown();
+            return;
+        }
 
         // 全域未捕捉例外：寫 log ＋ 顯示，避免靜默閃退
         DispatcherUnhandledException += OnUnhandled;
@@ -165,6 +178,7 @@ public partial class App : System.Windows.Application
             _tray.Visible = false;
             _tray.Dispose();
         }
+        _instanceGuard?.Dispose();
         base.OnExit(e);
     }
 }
