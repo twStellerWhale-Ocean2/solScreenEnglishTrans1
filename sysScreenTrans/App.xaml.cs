@@ -192,6 +192,11 @@ public partial class App : System.Windows.Application
     /// <summary>系統匣「設定…」：開設定視窗，儲存後套用（重建語音服務、更新金鑰狀態列）。</summary>
     private void OnSettings(object? sender, EventArgs e)
     {
+        // 結果視窗現在會跨焦點存活：開設定「之前」先關閉前一結果視窗——否則其 topmost 卡片
+        // 會蓋住無 owner/非 topmost 的設定視窗，且存檔後 dispose 舊語音服務時該視窗仍會續持
+        // 已釋放服務（點播放/單字即呼叫已釋放合成器）。開設定前關閉一次同時化解兩者。
+        _result?.Close();
+
         var dlg = new SettingsWindow(_config);
         if (dlg.ShowDialog() != true)
         {
@@ -199,9 +204,6 @@ public partial class App : System.Windows.Application
         }
         _config = dlg.ResultConfig;
         var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
-        // 結果視窗現在會跨焦點存活：關閉前一結果視窗，免得它續用即將被 dispose 的舊語音服務
-        // （存完設定後於該視窗點播放/單字會呼叫已釋放的合成器）。
-        _result?.Close();
         (_speech as IDisposable)?.Dispose();
         _speech = new SpeechService(_config.Voice);
         RegisterHotkeyOrWarn(); // 快捷鍵可能已變更，重新註冊
