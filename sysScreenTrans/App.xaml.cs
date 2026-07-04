@@ -63,16 +63,13 @@ public partial class App : System.Windows.Application
         _keyStatusItem = new WinForms.ToolStripMenuItem(AppStatusText.KeyStatus(keyReady)) { Enabled = false };
         menu.Items.Add(_keyStatusItem);
         menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add("開啟主控頁", null, (_, _) => _dock?.RestoreFromTray());
+        menu.Items.Add("開啟主控頁", null, (_, _) => OpenDock());
         menu.Items.Add("設定…", null, OnSettings);
-        menu.Items.Add("關於 ScreenTrans", null, (_, _) =>
-            System.Windows.MessageBox.Show(
-                $"ScreenTrans\n按「{HotkeyDisplay()}」框選畫面英文，取得原文／KK 音標／繁中翻譯並可朗讀。\n（喚起快捷鍵可於「設定」自訂）",
-                "關於 ScreenTrans"));
+        menu.Items.Add("關於 ScreenTrans", null, (_, _) => ShowAbout());
         menu.Items.Add("結束", null, (_, _) => ExitApp());
         _tray.ContextMenuStrip = menu;
         // 雙擊系統匣圖示＝開啟主控頁
-        _tray.DoubleClick += (_, _) => _dock?.RestoreFromTray();
+        _tray.DoubleClick += (_, _) => OpenDock();
 
         // 常駐主控頁（工作列按鈕型可見入口，spec#1）：啟動即建立、預設最小化不擋遊戲；
         // 關閉視窗＝收合非結束（DockWindow 攔截），與系統匣共用同一組維運動作。
@@ -189,13 +186,36 @@ public partial class App : System.Windows.Application
         }
     }
 
+    /// <summary>
+    /// 開啟任一維運 UI（主控頁／設定／關於）前先關閉前一結果視窗。
+    /// 結果視窗 <c>Topmost</c>，且移除失焦自動關閉後不再於維運視窗開啟時自動消失；
+    /// 這些維運視窗無 owner／非 topmost，若不先關結果卡片會被蓋在其下而看不到、用不到
+    /// （並還原本 issue 前「開維運 UI 即關結果」之時序）。設定路徑另需在 dispose 舊語音服務前關閉。
+    /// </summary>
+    private void CloseResultBeforeMaintenanceUi() => _result?.Close();
+
+    /// <summary>系統匣「開啟主控頁」／雙擊圖示：先關結果視窗（免遮蔽）再還原主控頁。</summary>
+    private void OpenDock()
+    {
+        CloseResultBeforeMaintenanceUi();
+        _dock?.RestoreFromTray();
+    }
+
+    /// <summary>系統匣「關於」：先關結果視窗（免遮蔽）再顯示說明。</summary>
+    private void ShowAbout()
+    {
+        CloseResultBeforeMaintenanceUi();
+        System.Windows.MessageBox.Show(
+            $"ScreenTrans\n按「{HotkeyDisplay()}」框選畫面英文，取得原文／KK 音標／繁中翻譯並可朗讀。\n（喚起快捷鍵可於「設定」自訂）",
+            "關於 ScreenTrans");
+    }
+
     /// <summary>系統匣「設定…」：開設定視窗，儲存後套用（重建語音服務、更新金鑰狀態列）。</summary>
     private void OnSettings(object? sender, EventArgs e)
     {
-        // 結果視窗現在會跨焦點存活：開設定「之前」先關閉前一結果視窗——否則其 topmost 卡片
-        // 會蓋住無 owner/非 topmost 的設定視窗，且存檔後 dispose 舊語音服務時該視窗仍會續持
-        // 已釋放服務（點播放/單字即呼叫已釋放合成器）。開設定前關閉一次同時化解兩者。
-        _result?.Close();
+        // 開設定「之前」先關前一結果視窗：免其 topmost 卡片蓋住設定視窗，
+        // 亦免存檔後 dispose 舊語音服務時該視窗續持已釋放服務（點播放/單字呼叫已釋放合成器）。
+        CloseResultBeforeMaintenanceUi();
 
         var dlg = new SettingsWindow(_config);
         if (dlg.ShowDialog() != true)
