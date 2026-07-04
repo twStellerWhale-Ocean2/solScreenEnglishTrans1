@@ -2,6 +2,28 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [0.10.0] - 2026-07-04
+
+Issue #14 增量：可設定應用情境提示以提升翻譯準確度（spec#8）。
+
+### 新增
+- **應用情境提示**（`paramContextHint`）：使用者可於「設定」以自然語言描述目前應用主題／情境
+  （如「中世紀奇幻 RPG，用遊戲用語翻譯」）。查詢時 `QueryService.BuildPrompt` 將情境以
+  **「參考、非指令」**語氣併入既有 text prompt、輔助翻譯語意；structured output 三欄
+  （original／phonetic／translation）schema 不變；**留空＝維持現行預設提示行為**（回歸保護）。
+- 設定視窗新增「應用情境提示」多行輸入框；`AppConfig.Context`（appsettings，預設空、可存可清）。
+
+### 修正
+- `SettingsWindow.Gather()` 於 #13 新增 `paramHistoryMax` 後漏帶該欄，導致存設定會把查詢歷史
+  保留上限重置為預設 200；本版一併補齊（存設定不再重置 `HistoryMax`）。
+
+### 備註
+- design.md（3.2 研改：spec#8、`paramContextHint`、modQuery 查詢契約補情境注入 invariant、
+  系統匣設定情境欄位、intTest#18）與 README 同步。
+- 新增單元測試 7 項（BuildPrompt 空/非空/trim、AppConfig Context 往返/預設），全套 115 綠。
+  情境注入之 prompt 組裝為純函式、已測；設定 UI 行為留手動／e2e 驗；GATE §5 產
+  `docs/test-summary-issue14.pdf`。
+
 ## [0.9.0] - 2026-07-04
 
 Issue #28 增量：查詢結果可收藏為我的筆記並依資料夾分類檢視（spec#7）。承接 #13。

@@ -219,6 +219,31 @@ public class AppConfigTests
     }
 
     [Fact]
+    public void Load_MissingContextHint_DefaultsToEmpty()
+    {
+        var path = TempPath();
+        File.WriteAllText(path, "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\"}");
+        try
+        {
+            Assert.Equal("", AppConfig.Load(path).Context);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void SaveLoad_Roundtrips_ContextHint()
+    {
+        var path = TempPath();
+        try
+        {
+            new AppConfig("gpt-4o-mini", 15, "", 2, "Alt+L", 200, "中世紀奇幻 RPG").Save(path);
+            Assert.Contains("paramContextHint", File.ReadAllText(path));
+            Assert.Equal("中世紀奇幻 RPG", AppConfig.Load(path).Context);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void Load_LegacyConfigWithTtsProviderModel_IgnoresExtraKeys()
     {
         // 舊 appsettings 仍含 paramTtsProvider／paramTtsModel → 應被忽略、不報錯（向後相容）

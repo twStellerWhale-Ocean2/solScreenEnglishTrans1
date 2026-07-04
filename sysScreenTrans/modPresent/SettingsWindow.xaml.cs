@@ -35,6 +35,7 @@ public partial class SettingsWindow : Window
         }
         SelectByTag(VoiceBox, current.Voice ?? DefaultVoiceTag);
         QueryModelBox.Text = current.Model;
+        ContextBox.Text = current.Context;
 
         _hotkey = HotKeyBinding.Parse(current.Hotkey);
         UpdateHotkeyStatus();
@@ -150,7 +151,9 @@ public partial class SettingsWindow : Window
         ResultConfig.TimeoutSec,
         TagOf(VoiceBox),
         ResultConfig.MaxRetries, // 修正：原先漏帶，存設定會把 MaxRetries 重置為預設 2
-        _hotkey.Serialize());
+        _hotkey.Serialize(),
+        ResultConfig.HistoryMax,  // 修正：#13 新增後 Gather 漏帶，存設定會把保留上限重置為 200
+        ContextBox.Text.Trim());  // 應用情境提示（spec#8）
 
     /// <summary>金鑰欄非空才更新；寫使用者環境變數（持久）＋本行程環境變數（即時生效）。</summary>
     private void ApplyKeyIfProvided()

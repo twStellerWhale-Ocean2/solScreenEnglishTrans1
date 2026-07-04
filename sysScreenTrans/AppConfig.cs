@@ -7,7 +7,8 @@ namespace ScreenTrans;
 /// <param name="MaxRetries">查詢暫時性錯誤最大重試次數（負值視為 0＝不重試）。</param>
 /// <param name="Hotkey">喚起快捷鍵綁定（序列化字串，如 <c>Alt+L</c>／<c>Ctrl+Shift+F</c>／<c>Mouse:Middle</c>）。</param>
 /// <param name="HistoryMax">查詢歷史保留筆數上限（非正值套用預設 200）。</param>
-public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200)
+/// <param name="Context">應用情境提示（自然語言，選填；非空時查詢注入為參考情境，spec#8）。</param>
+public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200, string Context = "")
 {
     /// <summary>查詢逾時秒數安全下限／預設（缺欄、解析失敗或非正值皆退回此值）。</summary>
     private const int DefaultTimeoutSec = 15;
@@ -32,7 +33,8 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
                 r.TryGetProperty("paramTtsVoice", out var v) ? v.GetString() ?? "" : "",
                 r.TryGetProperty("paramQueryMaxRetries", out var n) ? n.GetInt32() : 2,
                 r.TryGetProperty("paramHotkey", out var h) ? h.GetString() ?? DefaultHotkey : DefaultHotkey,
-                historyMax > 0 ? historyMax : DefaultHistoryMax); // 非正上限套用預設，免歷史被清空或無界成長
+                historyMax > 0 ? historyMax : DefaultHistoryMax, // 非正上限套用預設，免歷史被清空或無界成長
+                r.TryGetProperty("paramContextHint", out var cx) ? cx.GetString() ?? "" : ""); // 應用情境提示（選填）
         }
         catch
         {
@@ -51,6 +53,7 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
             paramTtsVoice = Voice,
             paramHotkey = Hotkey,
             paramHistoryMax = HistoryMax,
+            paramContextHint = Context,
         };
         File.WriteAllText(path, JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
     }

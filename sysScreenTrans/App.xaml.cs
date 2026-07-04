@@ -176,7 +176,7 @@ public partial class App : System.Windows.Application
 
             try
             {
-                var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
+                var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries, _config.Context);
                 var result = await query.QueryAsync(mask.Result.PngBytes);
                 if (!result.IsEmpty)
                 {
