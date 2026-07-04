@@ -35,6 +35,9 @@ public partial class ResultWindow : Window
     private readonly UiStateStore _ui;
     private QueryResult? _current; // 目前顯示中的結果（供「加入我的筆記」收藏）
 
+    /// <summary>是否已進入關閉序列（供呼叫端避免對關閉中視窗重複 Close，Issue #32）。</summary>
+    public bool IsClosing => _closing;
+
     /// <summary>按「展示歷史紀錄」時觸發（呼叫端開查詢歷史視窗，spec#6）。</summary>
     public event Action? HistoryRequested;
 

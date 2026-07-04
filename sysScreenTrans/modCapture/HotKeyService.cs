@@ -66,6 +66,7 @@ public sealed class HotKeyService : IDisposable
     private Dispatcher? _dispatcher;
     private HotKeyBinding _binding = HotKeyBinding.Default;
     private bool _leftDown, _rightDown;
+    private readonly FireGate _fireGate = new(); // 收斂滑鼠 hook 之連續命中，避免重入風暴（Issue #32）
 
     /// <summary>喚起快捷鍵觸發時引發（於 UI 執行緒）。</summary>
     public event Action? HotKeyPressed;
@@ -130,10 +131,11 @@ public sealed class HotKeyService : IDisposable
 
     private IntPtr MouseProc(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && MatchesBinding(wParam.ToInt32(), lParam))
+        if (nCode >= 0 && MatchesBinding(wParam.ToInt32(), lParam) && _fireGate.TryArm())
         {
-            // hook callback 須輕量：不在此執行喚起主動線，改排入 UI 佇列非同步觸發
-            _dispatcher?.BeginInvoke(() => HotKeyPressed?.Invoke());
+            // hook callback 須輕量：不在此執行喚起主動線，改排入 UI 佇列非同步觸發。
+            // 以 FireGate 收斂：handler 未跑完前不重複派工，避免共用滑鼠鍵情境下的觸發風暴（Issue #32）。
+            _dispatcher?.BeginInvoke(() => { _fireGate.Release(); HotKeyPressed?.Invoke(); });
         }
         return CallNextHookEx(_mouseHook, nCode, wParam, lParam); // 一律放行、不吞事件
     }
