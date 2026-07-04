@@ -24,6 +24,8 @@ public partial class App : System.Windows.Application
     private AppConfig _config = new("gpt-4o-mini", 15, "");
     private bool _busy;
     private ResultWindow? _result; // 目前開啟中的結果視窗；下一次查詢取代前一個（失焦不再自動關閉）
+    private readonly HistoryStore _historyStore = new(); // 查詢歷史本機儲存（spec#6）
+    private HistoryWindow? _history; // 查詢歷史視窗（獨立、單一實例、非結果視窗）
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ScreenTrans-error.log");
 
     protected override void OnStartup(StartupEventArgs e)
@@ -64,6 +66,7 @@ public partial class App : System.Windows.Application
         menu.Items.Add(_keyStatusItem);
         menu.Items.Add(new WinForms.ToolStripSeparator());
         menu.Items.Add("開啟主控頁", null, (_, _) => OpenDock());
+        menu.Items.Add("查詢歷史…", null, (_, _) => OpenHistory());
         menu.Items.Add("設定…", null, OnSettings);
         menu.Items.Add("關於 ScreenTrans", null, (_, _) => ShowAbout());
         menu.Items.Add("結束", null, (_, _) => ExitApp());
@@ -77,6 +80,7 @@ public partial class App : System.Windows.Application
         _dock.RefreshStatus(keyReady, HotkeyDisplay());
         _dock.SettingsRequested += () => OnSettings(this, EventArgs.Empty);
         _dock.ExitRequested += ExitApp;
+        _dock.HistoryRequested += OpenHistory;
         // 主控頁被帶到前景時（工作列按鈕／Alt+Tab／系統匣還原皆會 Activate）關閉 topmost 結果視窗，
         // 否則結果卡片會蓋住非 topmost 的主控頁，違反 spec#1「工作列可穩定尋得主控入口」。
         _dock.Activated += (_, _) => CloseResultBeforeMaintenanceUi();
@@ -164,6 +168,7 @@ public partial class App : System.Windows.Application
             var win = new ResultWindow();
             _result = win;
             win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
+            win.HistoryRequested += OpenHistory;
             win.ShowLoading();
             win.Show();
             win.Activate();
@@ -172,6 +177,12 @@ public partial class App : System.Windows.Application
             {
                 var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
                 var result = await query.QueryAsync(mask.Result.PngBytes);
+                if (!result.IsEmpty)
+                {
+                    // 查詢成功即留存（新在前、截汰最舊）；即使該視窗已被取代仍記錄本次查詢
+                    _historyStore.Append(result, _config.HistoryMax, DateTimeOffset.Now);
+                    _history?.Reload(); // 歷史視窗開著則即時反映新紀錄
+                }
                 if (!ReferenceEquals(_result, win))
                 {
                     return; // 載入中該視窗已被維運 UI 關閉或被新查詢取代：捨棄遲來結果，免對已關視窗填內容/幽靈朗讀
@@ -210,6 +221,44 @@ public partial class App : System.Windows.Application
     {
         CloseResultBeforeMaintenanceUi();
         _dock?.RestoreFromTray();
+    }
+
+    /// <summary>
+    /// 開啟查詢歷史視窗（spec#6；結果視窗按鈕／常駐主控頁／系統匣皆可觸發）。
+    /// 歷史為獨立視窗、單一實例；先關 topmost 結果卡片免遮蔽，再開啟或還原歷史視窗。
+    /// </summary>
+    private void OpenHistory()
+    {
+        CloseResultBeforeMaintenanceUi();
+        if (_history is null)
+        {
+            _history = new HistoryWindow(_historyStore, () => _speech);
+            _history.ViewRequested += ShowHistoryDetail;
+            _history.Closed += (_, _) => _history = null;
+            _history.Show();
+        }
+        else
+        {
+            _history.Reload();
+            if (_history.WindowState == WindowState.Minimized)
+            {
+                _history.WindowState = WindowState.Normal;
+            }
+            _history.Show();
+            _history.Activate();
+        }
+    }
+
+    /// <summary>歷史「檢視」：以結果卡片顯示該筆三欄詳情（重用 ResultWindow 之整句/逐字發音組件）。</summary>
+    private void ShowHistoryDetail(HistoryEntry entry)
+    {
+        var win = new ResultWindow();
+        _result = win;
+        win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
+        win.HistoryRequested += OpenHistory;
+        win.Show();
+        win.Activate();
+        win.ShowResult(entry.ToResult(), _speech!);
     }
 
     /// <summary>系統匣「關於」：先關結果視窗（免遮蔽）再顯示說明。</summary>

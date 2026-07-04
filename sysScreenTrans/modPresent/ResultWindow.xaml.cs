@@ -34,6 +34,9 @@ public partial class ResultWindow : Window
     private bool _closing;
     private readonly UiStateStore _ui;
 
+    /// <summary>按「展示歷史紀錄」時觸發（呼叫端開查詢歷史視窗，spec#6）。</summary>
+    public event Action? HistoryRequested;
+
     public ResultWindow()
     {
         InitializeComponent();
@@ -42,6 +45,7 @@ public partial class ResultWindow : Window
         HeaderBar.MouseLeftButtonDown += OnHeaderDrag;
         ResizeGrip.DragDelta += OnResizeDelta;
         CloseBtn.Click += (_, _) => CloseOnce();
+        HistoryBtn.Click += (_, _) => HistoryRequested?.Invoke();
     }
 
     /// <summary>套用記住的大小；位置若仍落在螢幕內則還原，否則置中。</summary>

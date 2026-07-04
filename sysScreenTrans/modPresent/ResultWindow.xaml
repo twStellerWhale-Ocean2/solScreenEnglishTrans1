@@ -43,6 +43,25 @@
         </Thumb.Template>
       </Thumb>
 
+      <!-- 展示歷史紀錄入口（spec#6）：開啟獨立查詢歷史視窗（不關閉本結果卡片由呼叫端決定） -->
+      <Button x:Name="HistoryBtn" Grid.Row="0"
+              HorizontalAlignment="Right" VerticalAlignment="Top"
+              Height="28" Margin="0,8,48,0" Cursor="Hand" ToolTip="展示查詢歷史紀錄">
+        <Button.Template>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="8" Background="#FBE4EC" Padding="9,3">
+              <TextBlock Text="🕘 歷史" FontSize="13" Foreground="#B0688A"
+                         HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#F4C2D0"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Button.Template>
+      </Button>
+
       <!-- 右上角關閉鈕：置於 HeaderBar 之上、獨立命中，點擊不觸發拖曳 -->
       <Button x:Name="CloseBtn" Grid.Row="0"
               HorizontalAlignment="Right" VerticalAlignment="Top"

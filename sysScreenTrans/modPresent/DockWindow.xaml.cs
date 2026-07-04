@@ -19,11 +19,15 @@ public partial class DockWindow : Window
     /// <summary>按「結束」時觸發（呼叫端結束整個常駐程式）。</summary>
     public event Action? ExitRequested;
 
+    /// <summary>按「查詢歷史」時觸發（呼叫端開查詢歷史視窗，spec#6）。</summary>
+    public event Action? HistoryRequested;
+
     public DockWindow()
     {
         InitializeComponent();
         SettingsBtn.Click += (_, _) => SettingsRequested?.Invoke();
         ExitBtn.Click += (_, _) => ExitRequested?.Invoke();
+        HistoryBtn.Click += (_, _) => HistoryRequested?.Invoke();
     }
 
     /// <summary>更新金鑰狀態與快捷鍵顯示（啟動與設定變更後呼叫）。</summary>
