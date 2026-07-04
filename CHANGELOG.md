@@ -2,6 +2,29 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [0.12.0] - 2026-07-05
+
+Issue #36 增量：應用情境改為可管理的命名清單，支援貼圖／上傳畫面由 vision 自動解釋，查詢擇一使用（spec#9）。
+
+### 新增
+- **情境分頁**（統一主視窗第 5 分頁 💬）：**命名情境 CRUD** 清單（名稱＋縮圖＋使用中標記）；每則可輸入
+  描述文字，或**貼上剪貼簿圖片／上傳畫面檔**，按「🔎 以圖片自動解釋」由 OpenAI vision 產生情境描述、
+  再手動補充；「設為使用中」擇一。
+- `modQuery/ContextStore`（`contexts.json` 命名情境＋圖片存 `contexts\`；CRUD／單一使用中／`ActiveText`
+  注入來源；純函式抽可測、失敗降級、金鑰不入情境）。
+- `QueryService.DescribeImageAsync`（單次 vision 回純文字情境描述；僅於為情境加入圖片時呼叫，查詢仍只
+  注入文字、成本/延遲不變）。
+
+### 變更
+- 查詢注入來源由 #14 單一 `paramContextHint` 改為**使用中情境之描述文字**；無使用中＝維持預設翻譯（回歸保護）。
+- 舊 `paramContextHint` **相容遷移**：首次啟動若有值且情境清單為空 → 建一則「預設情境」設為使用中。
+
+### 備註
+- design.md：spec#9、orgSop#5→teamSop#5.1/#5.2→prsnSop#5.1.1/#5.2.1→情境分頁、契約（ContextStore／圖片解釋／
+  ContextPage）、e2eTest#05／docProgTest#05／intTest#22-23；新增 `page-情境分頁.png`。README 同步。
+- 測試 +16（ContextStore CRUD/使用中/遷移/往返/容錯、ExtractContent），全套 138 綠；build／repoLint／docLint 0；
+  發佈 exe 啟動 smoke 通過。圖片貼上/上傳/自動解釋等 UI 互動留手動/e2e 驗；GATE §5 產 docs/test-summary-issue36.pdf(A5)。
+
 ## [0.11.0] - 2026-07-05
 
 Issue #34 增量：整合維運/檢視為單一 Office 式主視窗、筆記改多層可拖曳樹狀、結果視窗調整收藏入口。
