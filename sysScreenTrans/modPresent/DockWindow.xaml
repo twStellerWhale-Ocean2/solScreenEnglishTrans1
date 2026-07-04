@@ -25,10 +25,13 @@
 
     <!-- 維運按鈕 -->
     <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,14">
-      <Button x:Name="SettingsBtn" Content="設定…" Width="92" Height="34"
+      <Button x:Name="HistoryBtn" Content="查詢歷史" Width="96" Height="34"
+              Background="#5A7FBF" Foreground="White" BorderThickness="0"
+              FontSize="13" FontWeight="SemiBold" Cursor="Hand"/>
+      <Button x:Name="SettingsBtn" Content="設定…" Width="84" Height="34" Margin="8,0,0,0"
               Background="#3F6FB0" Foreground="White" BorderThickness="0"
               FontSize="13" FontWeight="SemiBold" Cursor="Hand"/>
-      <Button x:Name="ExitBtn" Content="結束" Width="80" Height="34" Margin="10,0,0,0"
+      <Button x:Name="ExitBtn" Content="結束" Width="72" Height="34" Margin="8,0,0,0"
               Background="#E7EBF1" Foreground="#3A4757" BorderThickness="0"
               FontSize="13" FontWeight="SemiBold" Cursor="Hand"/>
     </StackPanel>

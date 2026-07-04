@@ -163,6 +163,62 @@ public class AppConfigTests
     }
 
     [Fact]
+    public void Load_MissingHistoryMax_DefaultsTo200()
+    {
+        // 舊 appsettings 無 paramHistoryMax → 用預設 200（向後相容，Issue #13）
+        var path = TempPath();
+        File.WriteAllText(path, "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\"}");
+        try
+        {
+            Assert.Equal(200, AppConfig.Load(path).HistoryMax);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(-50)]
+    public void Load_NonPositiveHistoryMax_AppliesDefault(int badMax)
+    {
+        // 非正上限會清空或無界成長歷史 → 讀取邊界套用預設 200（Issue #13）
+        var path = TempPath();
+        File.WriteAllText(path,
+            "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\",\"paramHistoryMax\":" + badMax + "}");
+        try
+        {
+            Assert.Equal(200, AppConfig.Load(path).HistoryMax);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Load_PositiveHistoryMax_KeptAsIs()
+    {
+        var path = TempPath();
+        File.WriteAllText(path,
+            "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\",\"paramHistoryMax\":50}");
+        try
+        {
+            Assert.Equal(50, AppConfig.Load(path).HistoryMax);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Save_Writes_HistoryMaxKey_AndRoundtrips()
+    {
+        var path = TempPath();
+        try
+        {
+            new AppConfig("gpt-4o-mini", 15, "", 2, "Alt+L", 30).Save(path);
+            Assert.Contains("paramHistoryMax", File.ReadAllText(path));
+            Assert.Equal(30, AppConfig.Load(path).HistoryMax);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void Load_LegacyConfigWithTtsProviderModel_IgnoresExtraKeys()
     {
         // 舊 appsettings 仍含 paramTtsProvider／paramTtsModel → 應被忽略、不報錯（向後相容）
