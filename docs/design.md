@@ -2,7 +2,7 @@
 name: solScreenEnglishTrans1
 date: 2026/7/4
 formatVersion: "3.2"
-description: 遊戲畫面選區英文發音與中譯即時查詢工具設計文件（MVP）：Windows 系統匣常駐、Alt+L 熱鍵喚起變暗遮罩框選、OpenAI vision 單次查詢回傳原文／KK 音標／繁中翻譯、浮動視窗顯示與 TTS 朗讀。
+description: 遊戲畫面選區英文發音與中譯即時查詢工具設計文件（MVP）：Windows 系統匣常駐、可自訂快捷鍵（預設 Alt+L、支援鍵盤/滑鼠組合）喚起變暗遮罩框選、OpenAI vision 單次查詢回傳原文／KK 音標／繁中翻譯、浮動視窗顯示與 TTS 朗讀。
 ---
 
 # I. 方案設計
@@ -114,7 +114,7 @@ solScreenEnglishTrans1 畫面選區查詢工具，對內以單一系統實現（
 > 列本層關鍵參數／組態（需求偏好→etyCfg→Env／appsettings）；列舉即可、不解釋。
 
 * **金鑰**：`OPENAI_API_KEY` 一律環境變數，程式與 repo 不落地（spec#5）。
-* **熱鍵**：`Alt+L`（左右 Alt 皆可），MVP 固定。
+* **喚起快捷鍵**：預設 `Alt+L`（左右 Alt 皆可），**可自訂**（鍵盤組合或滑鼠鍵，存 appsettings）。
 * **查詢模型**：預設 `gpt-4o-mini`，可調（appsettings）。
 * **使用前提**：遊戲無邊框視窗化。
 
@@ -157,7 +157,7 @@ solScreenEnglishTrans1 畫面選區查詢工具，對內以單一系統實現（
 
 > need（spec#N，客戶目的／營運議題／成效期待，不混工程手段；粒度一致互不包含）＋端對端驗收課目（e2eTest，以 orgSop 為驗收單元、依 productReadme）。（spec 逐字繼承 Issue #1 種子）
 
-* **spec#1-可背景常駐與熱鍵喚起**：程式以系統匣常駐背景，遊戲中按 `Alt+L`（左右 Alt 皆可）即喚起查詢流程，不中斷遊戲操作；再次可用 `ESC` 隨時取消。
+* **spec#1-可背景常駐與熱鍵喚起**：程式以系統匣常駐背景，遊戲中按喚起快捷鍵（預設 `Alt+L`、左右 Alt 皆可）即喚起查詢流程，不中斷遊戲操作；再次可用 `ESC` 隨時取消。喚起快捷鍵**可由使用者自訂**——涵蓋鍵盤組合（修飾鍵＋主鍵）與滑鼠鍵（中鍵、側鍵、左右鍵同按），於設定中以監聽方式擷取、`Esc` 取消，存回組態重啟沿用。
 * **spec#2-可框選畫面查詢區塊**：喚起後全螢幕變暗，滑鼠拖曳框選欲查詢之畫面區塊，放開即完成選取；多螢幕與 DPI 縮放環境下選區對位正確。
 * **spec#3-可辨識並翻譯選區英文**：對選區影像內之英文進行辨識，回傳英文原文、KK 音標、繁體中文翻譯三項內容。
 * **spec#4-可查看並聆聽查詢結果**：查詢結果以浮動視窗顯示（原文／音標／中譯），提供播放按鈕以 Windows 內建語音朗讀英文原文與中文翻譯、並可選擇朗讀語音（離線可用、免額度），`ESC` 關閉視窗。
@@ -172,7 +172,7 @@ solScreenEnglishTrans1 畫面選區查詢工具，對內以單一系統實現（
 
 > 每條 spec 一項追蹤指標（評估方式／觀察項目），**回扣本需求**。
 
-* **spec#1**：常駐閒置記憶體（<100MB）、熱鍵喚起延遲（<300ms）與成功率、遊戲操作是否被中斷。
+* **spec#1**：常駐閒置記憶體（<100MB）、熱鍵喚起延遲（<300ms）與成功率、遊戲操作是否被中斷；自訂快捷鍵（含滑鼠低階 hook 情境）下對全系統輸入之延遲影響（滑鼠移動/點擊順暢、無可感延遲）與各類組合擷取正確率。
 * **spec#2**：多螢幕與 DPI 縮放下選區對位誤差（0px 目標）、`ESC` 取消成功率。
 * **spec#3**：辨識翻譯正確性抽測（遊戲字型樣本）、單次查詢延遲（1～3 秒目標）。
 * **spec#4**：結果三欄位齊備率、Windows 語音播放成功率（離線、無金鑰／無網路亦可）、語音選擇生效與重複播放行為正確性。
@@ -287,7 +287,7 @@ SYS -.->|"常駐於"| ENV
 
 > 列本層關鍵參數／組態；列舉即可、不解釋。
 
-* [etyCfg自訂sysScreenTrans組態]：`OPENAI_API_KEY`（Env、機密）、`paramHotkey=Alt+L`（硬編碼）、`paramModel=gpt-4o-mini`／`paramQueryTimeoutSec=15`／`paramQueryMaxRetries=2`／`paramTtsVoice=系統預設英文語音`（appsettings；`paramQueryMaxRetries` 為查詢暫時性錯誤之最大重試次數；語音朗讀改用 Windows 內建語音、不再有 TTS 供應商參數）。
+* [etyCfg自訂sysScreenTrans組態]：`OPENAI_API_KEY`（Env、機密）、`paramHotkey`（appsettings 結構化喚起快捷鍵綁定，預設 `Alt+L`；可為鍵盤組合或滑鼠鍵，取代原硬編碼）、`paramModel=gpt-4o-mini`／`paramQueryTimeoutSec=15`／`paramQueryMaxRetries=2`／`paramTtsVoice=系統預設英文語音`（appsettings；`paramQueryMaxRetries` 為查詢暫時性錯誤之最大重試次數；語音朗讀改用 Windows 內建語音、不再有 TTS 供應商參數）。
 
 ### (C) 人機介面
 
@@ -399,6 +399,7 @@ APPS["[appsettings.json]"]
 ENVV -->|"paramOpenaiApiKey=`OPENAI_API_KEY`"| QRY
 APPS -->|"paramModel／paramQueryTimeoutSec／paramQueryMaxRetries"| QRY
 APPS -->|"paramTtsVoice"| PRE
+APPS -->|"paramHotkey"| CAP
 ADM -.->|"setWi自訂Usr安裝設定金鑰"| ENVV
 ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 ```
@@ -407,7 +408,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 
 * **sys 下屬 module**：[modCapture模組]、[modQuery模組]、[modPresent模組]（皆隸屬單一 WPF exe；[techStackDotnetWin] 候選）。
   * **[modCapture模組] 選區對位契約**（spec#2）：遮罩視窗覆蓋全部螢幕（含多螢幕虛擬桌面）；框選座標以**實際像素**（physical pixels）換算（Per-Monitor DPI aware），截圖直接取螢幕實際像素區塊。**invariant**：選區影像與使用者所見框選範圍 0px 偏移；任一螢幕、任一 DPI 縮放皆同。
-  * **[modCapture模組] 熱鍵契約**（spec#1）：以 `RegisterHotKey(MOD_ALT, VK_L)` 註冊（左右 Alt 皆觸發）；**禁低階鍵盤 hook**；程式結束時釋放。**invariant**：對全系統鍵盤輸入零延遲影響；熱鍵註冊失敗（被占用）時明確提示。
+  * **[modCapture模組] 喚起快捷鍵契約**（spec#1）：喚起快捷鍵可自訂，依綁定型別選後端——**鍵盤組合**（修飾鍵＋主鍵）以 `RegisterHotKey` 註冊（**鍵盤仍禁低階鍵盤 hook**，維持零延遲）；**滑鼠鍵**（中鍵、側鍵 `XButton1`／`XButton2`、左右鍵同按）以低階滑鼠 hook `WH_MOUSE_LL` 偵測——**放寬原「禁低階 hook」限制、僅限滑鼠**。低階滑鼠 hook callback **僅比對當前綁定、其餘事件即刻 `CallNextHookEx` 放行**，不阻塞、不改寫輸入；程式結束時 `UnhookWindowsHookEx`／`UnregisterHotKey` 釋放。設定期以獨立**監聽模式**（同時擷取鍵盤與滑鼠事件、`Esc` 取消）擷取綁定，與執行期註冊為兩條獨立路徑。兩後端對外統一以 `HotKeyPressed` 事件呈現，喚起接線不變。**invariant**：鍵盤路徑對全系統輸入零延遲影響；滑鼠低階 hook 對滑鼠移動/點擊無可感延遲（callback 輕量放行）且確保釋放不外洩；綁定被占用或無法註冊時明確提示。
   * **[modQuery模組] 查詢契約**（spec#3／#5）：單次 vision 呼叫附結構化輸出要求，回應以 JSON schema 驗證為 [datIntf自訂查詢結果格式]（JSON 三欄位皆必要：`original` 英文原文／`phonetic` KK 音標／`translation` 繁中翻譯，型別皆 string；缺一即判不合格式、走降級；選區無可辨識英文時三欄皆回空字串、呈現層顯示「未偵測到英文文字」）；金鑰僅自環境變數讀取、不寫任何檔案與日誌。**暫時性錯誤重試（retry/backoff）**：對**暫時性**失敗（連線中斷、逾時、HTTP 429、HTTP 5xx）以有限次數指數退避自動重試（`paramQueryMaxRetries` 次、預設 2，退避約 1s／2s）；**永久性**失敗（401 金鑰無效、400／其他 4xx 請求錯誤、回應格式解析失敗）**不重試**、立即走降級；使用者主動取消（`CancellationToken`）不視為暫時性錯誤。**invariant**：三欄齊備或走異常降級（[runWi自訂Sys辨識翻譯選區]）；暫時性錯誤於次數上限內自動恢復、永久性錯誤不因重試拖長等待；查詢逾時秒數恆為正（不當組態於 [etyCfg自訂sysScreenTrans組態] 讀取邊界淨化，見 ＜C.(B)＞），逾時機制不因非正值即刻取消而失效；程式檔／設定檔／日誌掃描無金鑰。
   * **[modPresent模組] 呈現契約**（spec#4）：結果視窗 topmost；首次置中、之後記住使用者擺放的位置與大小（跨啟動、存 `%APPDATA%\ScreenTrans\ui-state.json`）；可拖曳標題移動、右下握把縮放；TTS（Windows 內建語音 SAPI，語音可於設定選擇）非同步播放、中英可各自播放與自動播放、重複觸發先停再播；`ESC`／點外即關。**invariant**：UI 執行緒不阻塞；關閉後無殘影視窗。
   * **單一實例 invariant**：重複啟動偵測既有實例並提示，不重複註冊熱鍵。
@@ -440,7 +441,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 
 > 本層部署所需之具體元件。
 
-* **Windows 原生 API**：`RegisterHotKey`（全域熱鍵）、GDI＋螢幕擷取（實際像素）、系統匣（NotifyIcon）、Per-Monitor DPI awareness。
+* **Windows 原生 API**：`RegisterHotKey`／`UnregisterHotKey`（鍵盤全域熱鍵）、`SetWindowsHookEx(WH_MOUSE_LL)`／`UnhookWindowsHookEx`／`CallNextHookEx`（滑鼠鍵綁定，僅比對後放行）、GDI＋螢幕擷取（實際像素）、系統匣（NotifyIcon）、Per-Monitor DPI awareness。
 * **語音合成**：`System.Speech.Synthesis`（SAPI，離線免金鑰）；語音以 `GetInstalledVoices()` 列舉供選擇。
 * **外部端點**：OpenAI vision API（HTTPS）。
 
@@ -452,7 +453,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 
 > 各 module 之 techItem 具體選型／版本（承 ＜II.C.(A)＞ techStack、落地 ＜I.C.(A)＞ techApp 強制項）。
 
-* [modCapture模組]：.NET 8 WPF＋Win32 P/Invoke（`RegisterHotKey`／`GetDpiForMonitor`）＋`System.Drawing.Graphics.CopyFromScreen`（截圖）＋`Hardcodet.NotifyIcon.Wpf`（或 WinForms `NotifyIcon`，系統匣）。
+* [modCapture模組]：.NET 8 WPF＋Win32 P/Invoke（`RegisterHotKey`／`UnregisterHotKey`／`GetDpiForMonitor`；滑鼠鍵綁定另用 `SetWindowsHookEx(WH_MOUSE_LL)`／`UnhookWindowsHookEx`／`CallNextHookEx`）＋`System.Drawing.Graphics.CopyFromScreen`（截圖）＋`Hardcodet.NotifyIcon.Wpf`（或 WinForms `NotifyIcon`，系統匣）。喚起快捷鍵綁定以可序列化 model（修飾鍵集合＋鍵盤主鍵 或 滑鼠鍵）存 `paramHotkey`，[HotKeyService] 依綁定型別選 `RegisterHotKey`／`WH_MOUSE_LL` 後端、統一 `HotKeyPressed` 事件。
 * [modQuery模組]：`HttpClient`（內建）＋`System.Text.Json`（解析與 schema 驗證）；OpenAI chat completions vision（structured output），模型預設 `gpt-4o-mini`；暫時性錯誤以自寫指數退避重試迴圈（不引入第三方套件），送出單次請求與退避延遲皆接縫化以供單元測試注入。
 * [modPresent模組]：WPF 視窗＋**語音合成**＝[techItem語音合成]：`System.Speech.Synthesis`（SAPI，離線、免金鑰、零外部依賴）朗讀，中英佇列循序播放；語音以 `SpeechSynthesizer.GetInstalledVoices()` 列舉、由設定選定並存 `paramTtsVoice`（`SelectVoice`）；語音缺失時明確提示、不當機。
 
@@ -462,7 +463,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 
 * **Env**：`OPENAI_API_KEY`（[modQuery模組]；僅此一機密；可經系統匣「設定…」寫入使用者環境變數，仍不落地於程式／設定檔）。
 * **appsettings.json**：`paramModel=gpt-4o-mini`、`paramQueryTimeoutSec=15`（查詢逾時秒數；**非正值（≤0）於組態讀取邊界套用安全下限 15**，令逾時機制不致因不當組態即刻取消而失效）、`paramQueryMaxRetries=2`（查詢暫時性錯誤最大重試次數；0＝不重試）、`paramTtsVoice=`（空＝系統預設英文語音；值為 `GetInstalledVoices()` 列舉之語音名稱）。
-* **硬編碼**：`paramHotkey=Alt+L`（MVP 固定）。
+* **appsettings.json（喚起快捷鍵）**：`paramHotkey`＝可序列化綁定（預設 `Alt+L`）——鍵盤組合以修飾鍵集合＋主鍵表達、滑鼠鍵以中鍵／`XButton1`／`XButton2`／左右同按表達；於系統匣「設定」監聽擷取、`Esc` 取消，存回後重啟沿用。
 
 ### (C) 人機介面
 
@@ -476,7 +477,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 | --- | --- | --- | --- | --- | --- |
 | 選區遮罩頁 | 遊戲查詢／teamSop#1.1 | capture | 全螢幕 45% 變暗遮罩＋十字游標＋accent 橡皮筋選框（差顯反白）＋頂部一行提示（`拖曳框選要查詢的文字，ESC 取消`） | #1.1.1 | 桌面 overlay（topmost） |
 | 查詢結果頁 | 遊戲查詢／teamSop#1.2·1.3 | query＋present | 淺粉底圓角大字卡片（可縮放、記住位置大小；預設約 560×380）：查詢中＝`辨識翻譯中…`；完成＝三區直排（原文／KK 音標／中譯），英文組與中文組各附獨立播放鈕與「自動播放」勾選；失敗＝錯誤訊息＋下一步指引 | #1.2.1·#1.3.1 | 桌面浮動視窗（topmost、可拖曳縮放） |
-| 系統匣選單頁 | 工具維保／teamSop#2.2·2.3 | 維運 | tray 圖示右鍵選單：狀態列（金鑰備妥／缺失）、設定（金鑰→使用者環境變數、朗讀語音選單〔Windows 已安裝語音〕、查詢模型）、關於、結束 | #2.2.1 | 系統匣 |
+| 系統匣選單頁 | 工具維保／teamSop#2.2·2.3 | 維運 | tray 圖示右鍵選單：狀態列（金鑰備妥／缺失）、設定（金鑰→使用者環境變數、朗讀語音選單〔Windows 已安裝語音〕、查詢模型、**喚起快捷鍵**〔顯示當前綁定＋「變更」進入監聽模式擷取鍵鼠組合、`Esc` 取消〕）、關於、結束 | #2.2.1 | 系統匣 |
 
 > **設計原則**：每頁只服務一個專業目的（遮罩＝選取、卡片＝呈現朗讀、tray＝維運）；安裝金鑰與移除（#2.1.1／#2.3.1）走 OS 標準設定（檔案總管＋環境變數），非本系統頁面。`prsnSop→頁` 以 ＜B.(C)＞ 為準、本節為反查。
 
@@ -516,6 +517,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 | 07 | runWi自訂Usr查看聆聽結果（顯示） | 05 | 結果視窗顯示三區內容 → 與查詢結果一致；可拖曳移動與縮放、關閉後再開還原上次位置大小 |
 | 08 | runWi自訂Usr查看聆聽結果（朗讀） | 07 | 點播放 → Windows 語音播放呼叫發生（測試攔截驗證，無網路／無金鑰亦可）；於設定選擇語音 → 後續播放採該語音（缺語音時提示不當機）；重複點 → 先停再播；`ESC` → 視窗關閉 |
 | 09 | setWi自訂Usr移除工具 | 02 | 刪除 exe＋環境變數 → 無殘留檔案、程序、開機項 |
+| 10 | runWi自訂Usr熱鍵喚起框選（自訂快捷鍵） | 02 | 設定→變更快捷鍵→監聽模式：按鍵盤組合（如 `Ctrl+Shift+F`）→ 顯示並存綁定，重啟後以該組合喚起遮罩；改綁滑鼠鍵（中鍵／側鍵／左右同按）→ 以該滑鼠鍵喚起、且滑鼠一般移動點擊無可感延遲；監聽中按 `Esc` → 取消不變更；存設定後 `paramQueryMaxRetries`／既有值不被重置 |
 
 ### (B) 效益指標
 
