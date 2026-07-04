@@ -4,7 +4,7 @@ using CancelEventArgs = System.ComponentModel.CancelEventArgs;
 namespace ScreenTrans.Present;
 
 /// <summary>統一主視窗之分頁。</summary>
-public enum MainTab { Notes, History, Options, About }
+public enum MainTab { Notes, History, Context, Options, About }
 
 /// <summary>
 /// 統一 Office 式主視窗（Issue #34）：頂部功能列分頁（圖示＋文字）＋下方對應功能頁，取代原
@@ -17,19 +17,22 @@ public partial class MainWindow : Window
 
     private readonly NotesPage _notes;
     private readonly HistoryPage _history;
+    private readonly ContextPage _context;
     private readonly OptionsPage _options;
     private readonly AboutPage _about;
 
-    public MainWindow(NotesPage notes, HistoryPage history, OptionsPage options, AboutPage about)
+    public MainWindow(NotesPage notes, HistoryPage history, ContextPage context, OptionsPage options, AboutPage about)
     {
         InitializeComponent();
         _notes = notes;
         _history = history;
+        _context = context;
         _options = options;
         _about = about;
 
         TabNotes.Checked += (_, _) => { _notes.Reload(); Host.Content = _notes; };
         TabHistory.Checked += (_, _) => { _history.Reload(); Host.Content = _history; };
+        TabContext.Checked += (_, _) => { _context.Reload(); Host.Content = _context; };
         TabOptions.Checked += (_, _) => Host.Content = _options;
         TabAbout.Checked += (_, _) => Host.Content = _about;
 
@@ -43,6 +46,7 @@ public partial class MainWindow : Window
         {
             case MainTab.Notes: TabNotes.IsChecked = true; break;
             case MainTab.History: TabHistory.IsChecked = true; break;
+            case MainTab.Context: TabContext.IsChecked = true; break;
             case MainTab.Options: TabOptions.IsChecked = true; break;
             case MainTab.About: TabAbout.IsChecked = true; break;
         }

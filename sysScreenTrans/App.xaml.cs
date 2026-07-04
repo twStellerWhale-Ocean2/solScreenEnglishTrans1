@@ -22,6 +22,7 @@ public partial class App : System.Windows.Application
     private MainWindow? _main;
     private NotesPage? _notesPage;
     private HistoryPage? _historyPage;
+    private ContextPage? _contextPage;
     private OptionsPage? _optionsPage;
     private HotKeyService? _hotkey;
     private ISpeechService? _speech;
@@ -30,6 +31,7 @@ public partial class App : System.Windows.Application
     private ResultWindow? _result; // 目前開啟中的結果視窗；下一次查詢取代前一個
     private readonly HistoryStore _historyStore = new();
     private readonly NotesStore _notesStore = new();
+    private readonly ContextStore _contextStore = new();
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ScreenTrans-error.log");
 
     protected override void OnStartup(StartupEventArgs e)
@@ -64,6 +66,7 @@ public partial class App : System.Windows.Application
         menu.Items.Add("開啟主視窗", null, (_, _) => OpenMain(MainTab.Notes));
         menu.Items.Add("查詢歷史", null, (_, _) => OpenMain(MainTab.History));
         menu.Items.Add("我的筆記", null, (_, _) => OpenMain(MainTab.Notes));
+        menu.Items.Add("情境", null, (_, _) => OpenMain(MainTab.Context));
         menu.Items.Add("選項", null, (_, _) => OpenMain(MainTab.Options));
         menu.Items.Add("關於", null, (_, _) => OpenMain(MainTab.About));
         menu.Items.Add(new WinForms.ToolStripSeparator());
@@ -79,8 +82,11 @@ public partial class App : System.Windows.Application
         _historyPage.AddToNotesRequested += entry => AddToNotes(entry.ToResult());
         _optionsPage = new OptionsPage(_config);
         _optionsPage.SettingsChanged += ApplySettings;
+        _contextStore.LoadMigrated(_config.Context); // #14 單一情境提示相容遷移為一則命名情境
+        _contextPage = new ContextPage(_contextStore,
+            bytes => new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries).DescribeImageAsync(bytes));
 
-        _main = new MainWindow(_notesPage, _historyPage, _optionsPage, new AboutPage());
+        _main = new MainWindow(_notesPage, _historyPage, _contextPage, _optionsPage, new AboutPage());
         _main.RefreshStatus(keyReady, HotkeyDisplay());
         // 主視窗被帶到前景時關 topmost 結果卡片（否則會蓋住主視窗）
         _main.Activated += (_, _) => CloseResult();
@@ -167,7 +173,7 @@ public partial class App : System.Windows.Application
 
             try
             {
-                var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries, _config.Context);
+                var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries, _contextStore.ActiveText());
                 var result = await query.QueryAsync(mask.Result.PngBytes);
                 if (!result.IsEmpty)
                 {
