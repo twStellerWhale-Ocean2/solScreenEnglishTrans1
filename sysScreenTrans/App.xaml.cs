@@ -19,7 +19,7 @@ public partial class App : System.Windows.Application
     private WinForms.ToolStripMenuItem? _keyStatusItem;
     private HotKeyService? _hotkey;
     private ISpeechService? _speech;
-    private AppConfig _config = new("gpt-4o-mini", 15, "", "openai", "gpt-4o-mini-tts");
+    private AppConfig _config = new("gpt-4o-mini", 15, "");
     private bool _busy;
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ScreenTrans-error.log");
 
@@ -34,10 +34,8 @@ public partial class App : System.Windows.Application
         _config = AppConfig.Load(Path.Combine(AppContext.BaseDirectory, "appsettings.json"));
         var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
         var keyReady = !string.IsNullOrWhiteSpace(apiKey);
-        // TTS：預設走 OpenAI 音檔（自然，中英同端點），失敗退回 Windows SAPI；paramTtsProvider=windows 則直接用 SAPI
-        _speech = _config.TtsProvider.Equals("windows", StringComparison.OrdinalIgnoreCase)
-            ? new SpeechService(_config.Voice)
-            : new OpenAiSpeechService(apiKey, _config.TtsModel, _config.Voice, _config.TimeoutSec, fallback: new SpeechService(null));
+        // TTS：Windows 內建語音（SAPI，離線免金鑰）；語音由設定選定（[techItem語音合成]）
+        _speech = new SpeechService(_config.Voice);
 
         _tray = new WinForms.NotifyIcon
         {
@@ -149,9 +147,7 @@ public partial class App : System.Windows.Application
         _config = dlg.ResultConfig;
         var apiKey = Environment.GetEnvironmentVariable("OPENAI_API_KEY") ?? "";
         (_speech as IDisposable)?.Dispose();
-        _speech = _config.TtsProvider.Equals("windows", StringComparison.OrdinalIgnoreCase)
-            ? new SpeechService(_config.Voice)
-            : new OpenAiSpeechService(apiKey, _config.TtsModel, _config.Voice, _config.TimeoutSec, fallback: new SpeechService(null));
+        _speech = new SpeechService(_config.Voice);
         if (_keyStatusItem is not null)
         {
             _keyStatusItem.Text = string.IsNullOrWhiteSpace(apiKey)

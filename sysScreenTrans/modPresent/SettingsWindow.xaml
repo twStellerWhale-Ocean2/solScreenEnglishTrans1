@@ -14,20 +14,10 @@
     <TextBlock Text="貼上以更新；留空則不變更。存入使用者環境變數，不寫進程式或設定檔。"
                FontSize="12" Foreground="#9A6A82" TextWrapping="Wrap" Margin="0,3,0,14"/>
 
-    <TextBlock Text="語音來源" FontWeight="SemiBold" Foreground="#6D3A4D"/>
-    <ComboBox x:Name="ProviderBox" Margin="0,2,0,10">
-      <ComboBoxItem Content="OpenAI 音檔（自然）" Tag="openai"/>
-      <ComboBoxItem Content="Windows 內建（離線）" Tag="windows"/>
-    </ComboBox>
-
-    <TextBlock Text="OpenAI 語音模型" FontWeight="SemiBold" Foreground="#6D3A4D"/>
-    <ComboBox x:Name="ModelBox" Margin="0,2,0,10">
-      <ComboBoxItem Content="gpt-4o-mini-tts（品質佳）" Tag="gpt-4o-mini-tts"/>
-      <ComboBoxItem Content="tts-1（相容性高）" Tag="tts-1"/>
-    </ComboBox>
-
-    <TextBlock Text="嗓音（OpenAI）" FontWeight="SemiBold" Foreground="#6D3A4D"/>
-    <ComboBox x:Name="VoiceBox" Margin="0,2,0,10"/>
+    <TextBlock Text="朗讀語音（Windows 內建）" FontWeight="SemiBold" Foreground="#6D3A4D"/>
+    <ComboBox x:Name="VoiceBox" Margin="0,2,0,4"/>
+    <TextBlock Text="使用系統已安裝的 Windows 語音，離線可用、免額度。清單為空時，請至「設定 → 時間與語言 → 語音」安裝語音包。"
+               FontSize="12" Foreground="#9A6A82" TextWrapping="Wrap" Margin="0,0,0,10"/>
 
     <TextBlock Text="查詢模型（vision）" FontWeight="SemiBold" Foreground="#6D3A4D"/>
     <TextBox x:Name="QueryModelBox" Padding="6" Margin="0,2,0,16"/>

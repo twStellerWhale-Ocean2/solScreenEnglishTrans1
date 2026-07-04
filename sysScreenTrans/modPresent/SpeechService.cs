@@ -53,4 +53,21 @@ public sealed class SpeechService : ISpeechService, IDisposable
     }
 
     public void Dispose() => _synth.Dispose();
+
+    /// <summary>列舉系統已安裝且啟用的語音名稱（供設定選單；不實際發聲）。</summary>
+    public static IReadOnlyList<string> InstalledVoiceNames()
+    {
+        try
+        {
+            using var s = new SpeechSynthesizer();
+            return s.GetInstalledVoices()
+                .Where(v => v.Enabled)
+                .Select(v => v.VoiceInfo.Name)
+                .ToList();
+        }
+        catch
+        {
+            return System.Array.Empty<string>();
+        }
+    }
 }

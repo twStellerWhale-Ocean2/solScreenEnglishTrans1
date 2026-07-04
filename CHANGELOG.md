@@ -2,6 +2,22 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [0.2.0] - 2026-07-04
+
+Issue #9 增量：發音改用 Windows 內建語音，移除 OpenAI TTS。
+
+### 變更
+- 朗讀改用 Windows 內建語音（SAPI，離線、免額度、免金鑰），對齊 [techItem語音合成] 契約。
+- 系統匣「設定…」語音區改為「朗讀語音」單一下拉，列舉系統已安裝 Windows 語音
+  （`GetInstalledVoices`）供選擇；空清單時提示安裝語音包。
+
+### 移除
+- OpenAI 語音合成路徑（`OpenAiSpeechService`）與其組態 `paramTtsProvider`／`paramTtsModel`。
+
+### 備註
+- OpenAI 金鑰／額度自此僅用於畫面辨識翻譯查詢，發音不再耗用。
+- 沿用互動式手動驗證（本 repo 尚無自動化測試骨架，同 v0.1.0）。
+
 ## [0.1.0] - 2026-07-03
 
 首個增量（Issue #1 MVP）：遊戲畫面選區英文發音與中譯即時查詢工具。
