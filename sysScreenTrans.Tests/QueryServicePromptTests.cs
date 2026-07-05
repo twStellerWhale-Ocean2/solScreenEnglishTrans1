@@ -72,4 +72,32 @@ public class QueryServicePromptTests
         Assert.Contains("配色規則", p);
         Assert.Contains("boss 台詞用粉紫", p);
     }
+
+    // ---- #54：雙擊自動判斷模式提示 ----
+
+    [Fact]
+    public void BuildPrompt_PointMode_UsesMarkerPrompt_StillThreeColumns()
+    {
+        var p = QueryService.BuildPrompt("", "", pointMode: true);
+        Assert.Contains("標記", p);            // 以標記處為準
+        Assert.Contains("最接近", p);
+        Assert.Contains("original", p);        // 仍要求三欄
+        Assert.Contains("phonetic", p);
+        Assert.Contains("translation", p);
+    }
+
+    [Fact]
+    public void BuildPrompt_PointMode_DiffersFromBase()
+    {
+        Assert.NotEqual(QueryService.BuildPrompt(""), QueryService.BuildPrompt("", "", pointMode: true));
+    }
+
+    [Fact]
+    public void BuildPrompt_PointMode_WithContextAndColor_AppendsBoth()
+    {
+        var p = QueryService.BuildPrompt("科幻", "旁白用粉黃", pointMode: true);
+        Assert.Contains("標記", p);
+        Assert.Contains("參考情境", p);
+        Assert.Contains("配色規則", p);
+    }
 }

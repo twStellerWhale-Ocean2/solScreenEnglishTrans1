@@ -10,7 +10,7 @@
     <Border x:Name="HintBorder" Background="#D2141A20" BorderBrush="#3C4043"
             BorderThickness="1" CornerRadius="12" Padding="12,5">
       <TextBlock Foreground="#E8EAED" FontSize="12">
-        拖曳框選要查詢的文字，<Run Foreground="#8AB4F8">ESC</Run> 取消
+        拖曳框選要查詢的文字，或<Run Foreground="#8AB4F8">雙擊</Run>直接翻譯游標處那句，<Run Foreground="#8AB4F8">ESC</Run> 取消
       </TextBlock>
     </Border>
   </Canvas>

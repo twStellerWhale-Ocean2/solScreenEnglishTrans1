@@ -186,7 +186,7 @@ public partial class App : System.Windows.Application
             {
                 var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries,
                     _contextStore.ActiveText(), NoteDefaults.ColorRules); // #55 智能配色規則注入
-                var result = await query.QueryAsync(mask.Result.PngBytes);
+                var result = await query.QueryAsync(mask.Result.PngBytes, mask.Result.IsPointMode); // #54 雙擊自動判斷
                 if (!result.IsEmpty)
                 {
                     _historyStore.Append(result, _config.HistoryMax, DateTimeOffset.Now);

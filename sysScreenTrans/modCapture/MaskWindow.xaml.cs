@@ -38,6 +38,12 @@ public partial class MaskWindow : Window
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
+        // 雙擊＝自動判斷模式（Issue #54）：截整螢幕、標記游標處，交查詢層判斷該處那句
+        if (e.ClickCount == 2)
+        {
+            DoPointCapture(e.GetPosition(RootCanvas));
+            return;
+        }
         _start = e.GetPosition(RootCanvas);
         _dragging = true;
         Canvas.SetLeft(SelRect, _start.X);
@@ -83,11 +89,11 @@ public partial class MaskWindow : Window
         int pw = (int)Math.Round(bottomRight.X - topLeft.X);
         int ph = (int)Math.Round(bottomRight.Y - topLeft.Y);
 
-        // 選區過小或異常尺寸 → 視為取消（防呆、防超大 Bitmap 造成 OOM）
+        // 選區過小或異常尺寸 → 非有效框選（可能是雙擊之單擊或誤點）：復位、遮罩留著（唯 ESC 取消，Issue #54）；
+        // 防超大 Bitmap 造成 OOM 亦以復位處理。
         if (pw < 3 || ph < 3 || pw > 30000 || ph > 30000)
         {
-            Result = null;
-            Close();
+            HintBorder.Visibility = Visibility.Visible;
             return;
         }
 
@@ -96,6 +102,32 @@ public partial class MaskWindow : Window
         Hide();
         Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
         Result = ScreenCapture.Capture(px, py, pw, ph);
+        Close();
+    }
+
+    /// <summary>
+    /// 雙擊自動判斷模式（Issue #54）：截取整個虛擬桌面（physical px）並於游標處畫紅色標記，
+    /// 交查詢層依標記辨識該處那句英文。遮罩先隱藏再截圖（避免截到遮罩自身）。
+    /// </summary>
+    private void DoPointCapture(Point p)
+    {
+        _dragging = false;
+        ReleaseMouseCapture();
+        SelRect.Visibility = Visibility.Collapsed;
+
+        var tl = RootCanvas.PointToScreen(new Point(0, 0));
+        var br = RootCanvas.PointToScreen(new Point(Width, Height));
+        int px = (int)Math.Round(tl.X);
+        int py = (int)Math.Round(tl.Y);
+        int pw = (int)Math.Round(br.X - tl.X);
+        int ph = (int)Math.Round(br.Y - tl.Y);
+        var cur = RootCanvas.PointToScreen(p);
+        int mx = (int)Math.Round(cur.X) - px;
+        int my = (int)Math.Round(cur.Y) - py;
+
+        Hide();
+        Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
+        Result = ScreenCapture.CaptureWithMarker(px, py, pw, ph, mx, my);
         Close();
     }
 
