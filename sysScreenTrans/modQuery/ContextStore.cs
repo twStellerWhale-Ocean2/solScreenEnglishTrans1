@@ -108,7 +108,7 @@ public sealed class ContextStore
     // ---- 純函式（可單元測試，不觸檔案） ----
 
     /// <summary>新增情境之預設名稱（佔位符；#53 視為「名稱尚未填」、可被圖片自動辨識之作品名覆寫）。</summary>
-    public const string DefaultName = "新情境";
+    public const string DefaultName = "New Context";
 
     /// <summary>
     /// 圖片自動解釋時是否可自動填入辨識到的作品名（#53）：目前名稱為空白或仍為預設佔位符 <see cref="DefaultName"/>
@@ -179,10 +179,10 @@ public sealed class ContextStore
         {
             if (item.ColorRules.TryGetValue(name, out var desc) && !string.IsNullOrWhiteSpace(desc))
             {
-                parts.Add($"{name}＝「{desc.Trim()}」");
+                parts.Add($"{name} = \"{desc.Trim()}\"");
             }
         }
-        return string.Join("；", parts);
+        return string.Join("; ", parts);
     }
 
     /// <summary>移除一則；回傳被移除項（供呼叫端刪其圖片）。</summary>
@@ -201,7 +201,7 @@ public sealed class ContextStore
     {
         if (d.Items.Count == 0 && !string.IsNullOrWhiteSpace(legacyHint))
         {
-            d.Items.Add(new ContextItem { Name = "預設情境", Text = legacyHint.Trim(), IsActive = true });
+            d.Items.Add(new ContextItem { Name = "Default", Text = legacyHint.Trim(), IsActive = true });
             return true;
         }
         return false;

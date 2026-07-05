@@ -116,7 +116,7 @@ public partial class ContextPage : UserControl
                 Padding = new Thickness(5, 3, 5, 3),
                 VerticalAlignment = VerticalAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                ToolTip = $"描述哪類台詞用「{name}」；留空＝不用此色",
+                ToolTip = $"Describe which lines use “{name}”; leave blank to skip this color",
             };
             Grid.SetColumn(box, 2);
             grid.Children.Add(box);
@@ -151,14 +151,14 @@ public partial class ContextPage : UserControl
         try
         {
             var src = LoadImage(img);
-            if (src is null) { MessageBox.Show("無法讀取圖片。", "拖放圖片"); return; }
+            if (src is null) { MessageBox.Show("Couldn’t read the image.", "Drop Image"); return; }
             _pending = ToPng(src);
             ShowPreview(FromBytes(_pending));
-            StatusLine.Text = "已拖入圖片；可「以圖片自動解釋」或直接「儲存」。";
+            StatusLine.Text = "Image dropped. You can “Auto-explain from Image” or just “Save”.";
         }
         catch (Exception ex)
         {
-            MessageBox.Show("讀取失敗：" + ex.Message, "拖放圖片");
+            MessageBox.Show("Read failed: " + ex.Message, "Drop Image");
         }
     }
 
@@ -204,7 +204,7 @@ public partial class ContextPage : UserControl
         col.Children.Add(new TextBlock { Text = it.Name, FontSize = 13, Foreground = Brush("#3A2C33") });
         if (it.IsActive)
         {
-            col.Children.Add(new TextBlock { Text = "● 使用中", FontSize = 11, Foreground = Brush("#2E7D46") });
+            col.Children.Add(new TextBlock { Text = "● Active", FontSize = 11, Foreground = Brush("#2E7D46") });
         }
         sp.Children.Add(col);
         return sp;
@@ -238,7 +238,7 @@ public partial class ContextPage : UserControl
         }
         NameBox.Text = _selected.Name;
         DescBox.Text = _selected.Text;
-        StatusLine.Text = _selected.IsActive ? "此情境使用中。" : "";
+        StatusLine.Text = _selected.IsActive ? "This context is active." : "";
         ShowPreview(!string.IsNullOrEmpty(_selected.Image) ? LoadImage(_store.ImagePathFor(_selected.Image!)) : null);
         // 載入各色描述（Issue #69）
         foreach (var (name, box) in _colorBoxes)
@@ -289,7 +289,7 @@ public partial class ContextPage : UserControl
         _store.Save(_data);
         BuildList();
         SelectById(_selected.Id);
-        StatusLine.Text = "已儲存。";
+        StatusLine.Text = "Saved.";
     }
 
     private void OnSetActive(object? sender, RoutedEventArgs e)
@@ -299,13 +299,13 @@ public partial class ContextPage : UserControl
         _store.Save(_data);
         BuildList();
         SelectById(_selected.Id);
-        StatusLine.Text = "已設為使用中；查詢將注入此情境。";
+        StatusLine.Text = "Set active; queries will use this context.";
     }
 
     private void OnDelete(object? sender, RoutedEventArgs e)
     {
         if (_selected is null) { return; }
-        if (MessageBox.Show($"刪除情境「{_selected.Name}」？", "刪除情境",
+        if (MessageBox.Show($"Delete context “{_selected.Name}”?", "Delete Context",
                 MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
         {
             return;
@@ -323,30 +323,30 @@ public partial class ContextPage : UserControl
         var img = Clipboard.ContainsImage() ? Clipboard.GetImage() : null;
         if (img is null)
         {
-            MessageBox.Show("剪貼簿沒有圖片。", "貼上圖片");
+            MessageBox.Show("No image on the clipboard.", "Paste Image");
             return;
         }
         _pending = ToPng(img);
         ShowPreview(FromBytes(_pending));
-        StatusLine.Text = "已貼上圖片；可「以圖片自動解釋」或直接「儲存」。";
+        StatusLine.Text = "Image pasted. You can “Auto-explain from Image” or just “Save”.";
     }
 
     private void OnUpload(object? sender, RoutedEventArgs e)
     {
         if (_selected is null) { return; }
-        var dlg = new OpenFileDialog { Filter = "圖片|*.png;*.jpg;*.jpeg;*.bmp;*.gif|所有檔案|*.*" };
+        var dlg = new OpenFileDialog { Filter = "Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif|All files|*.*" };
         if (dlg.ShowDialog() != true) { return; }
         try
         {
             var src = LoadImage(dlg.FileName);
-            if (src is null) { MessageBox.Show("無法讀取圖片。", "上傳檔案"); return; }
+            if (src is null) { MessageBox.Show("Couldn’t read the image.", "Upload File"); return; }
             _pending = ToPng(src);
             ShowPreview(FromBytes(_pending));
-            StatusLine.Text = "已載入圖片；可「以圖片自動解釋」或直接「儲存」。";
+            StatusLine.Text = "Image loaded. You can “Auto-explain from Image” or just “Save”.";
         }
         catch (Exception ex)
         {
-            MessageBox.Show("讀取失敗：" + ex.Message, "上傳檔案");
+            MessageBox.Show("Read failed: " + ex.Message, "Upload File");
         }
     }
 
@@ -360,11 +360,11 @@ public partial class ContextPage : UserControl
         }
         if (bytes is null)
         {
-            MessageBox.Show("請先貼上或上傳圖片。", "以圖片自動解釋");
+            MessageBox.Show("Please paste or upload an image first.", "Auto-explain from Image");
             return;
         }
         DescribeBtn.IsEnabled = false;
-        StatusLine.Text = "AI 解釋中…";
+        StatusLine.Text = "AI is analyzing…";
         try
         {
             var result = await _describe(bytes);
@@ -378,13 +378,13 @@ public partial class ContextPage : UserControl
                 filledName = true;
             }
             StatusLine.Text = filledName
-                ? $"已辨識「{result.Name.Trim()}」並填入名稱與描述，可手動補充後「儲存」。"
-                : "已產生描述，可手動補充後「儲存」。";
+                ? $"Recognized “{result.Name.Trim()}” and filled in name and description. Edit if needed, then “Save”."
+                : "Description generated. Edit if needed, then “Save”.";
         }
         catch (Exception ex)
         {
             StatusLine.Text = "";
-            MessageBox.Show("圖片解釋失敗：" + ex.Message, "以圖片自動解釋");
+            MessageBox.Show("Image analysis failed: " + ex.Message, "Auto-explain from Image");
         }
         finally
         {

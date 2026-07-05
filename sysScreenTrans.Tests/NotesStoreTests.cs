@@ -351,33 +351,33 @@ public class NotesStoreTests
         var d = new NotesData();
         NotesStore.AddFolder(d, "我的筆記");
 
-        Assert.Equal("新資料夾", NotesStore.NextNewFolderName(d));
+        Assert.Equal("New Folder", NotesStore.NextNewFolderName(d));
     }
 
     [Fact]
     public void NextNewFolderName_Taken_AppendsOrdinal_TreeWide()
     {
         var d = new NotesData();
-        var a = NotesStore.AddFolder(d, "新資料夾");
-        NotesStore.AddSubFolder(d, a.Id, "新資料夾 (2)"); // 占用在子層也算（全樹唯一）
+        var a = NotesStore.AddFolder(d, "New Folder");
+        NotesStore.AddSubFolder(d, a.Id, "New Folder (2)"); // 占用在子層也算（全樹唯一）
 
-        Assert.Equal("新資料夾 (3)", NotesStore.NextNewFolderName(d));
+        Assert.Equal("New Folder (3)", NotesStore.NextNewFolderName(d));
     }
 
     [Fact]
     public void NextNewFolderName_GapInOrdinals_TakesFirstFree()
     {
         var d = new NotesData();
-        NotesStore.AddFolder(d, "新資料夾");
-        NotesStore.AddFolder(d, "新資料夾 (3)"); // (2) 空缺 → 先補 (2)
+        NotesStore.AddFolder(d, "New Folder");
+        NotesStore.AddFolder(d, "New Folder (3)"); // (2) 空缺 → 先補 (2)
 
-        Assert.Equal("新資料夾 (2)", NotesStore.NextNewFolderName(d));
+        Assert.Equal("New Folder (2)", NotesStore.NextNewFolderName(d));
     }
 
     [Fact]
     public void NaturalCompare_DigitRuns_CompareNumerically()
     {
-        Assert.True(NotesStore.NaturalCompare("新資料夾 (2)", "新資料夾 (10)") < 0);
+        Assert.True(NotesStore.NaturalCompare("New Folder (2)", "New Folder (10)") < 0);
         Assert.True(NotesStore.NaturalCompare("a10b", "a2b") > 0);
         Assert.Equal(0, NotesStore.NaturalCompare("f01", "f1")); // 前導零視同數值相等
     }

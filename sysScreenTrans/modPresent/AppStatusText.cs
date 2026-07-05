@@ -8,27 +8,27 @@ public static class AppStatusText
 {
     /// <summary>金鑰狀態列（tray 選單與主控頁共用）。</summary>
     public static string KeyStatus(bool keyReady) =>
-        keyReady ? "● 金鑰已備妥（OPENAI_API_KEY）" : "○ 金鑰未設定（OPENAI_API_KEY）";
+        keyReady ? "● Key ready (OPENAI_API_KEY)" : "○ Key not set (OPENAI_API_KEY)";
 
     /// <summary>主控頁的喚起快捷鍵列。</summary>
-    public static string HotkeyLine(string hotkeyDisplay) => $"喚起快捷鍵：{hotkeyDisplay}";
+    public static string HotkeyLine(string hotkeyDisplay) => $"Hotkey: {hotkeyDisplay}";
 
     /// <summary>系統匣停留提示（滑鼠移到圖示上顯示）。</summary>
     public static string TrayTip(string hotkeyDisplay) =>
-        $"ScreenTrans — 遊戲畫面英文查詢（{hotkeyDisplay}）";
+        $"ScreenTrans — English lookup for game screens ({hotkeyDisplay})";
 
     /// <summary>新版下載就緒（底部狀態列與關於分頁共用，Issue #51）。</summary>
-    public static string UpdateReady(string version) => $"新版 v{version} 已就緒，重新啟動後套用";
+    public static string UpdateReady(string version) => $"Update v{version} ready — restart to apply";
 
     /// <summary>新版就緒時之主視窗標題（OS 標題列＝工作列按鈕同步可見；USR 回饋）。</summary>
-    public static string TitleUpdateReady(string version) => $"ScreenTrans — 新版 v{version} 已就緒";
+    public static string TitleUpdateReady(string version) => $"ScreenTrans — Update v{version} ready";
 
     /// <summary>手動檢查更新：已是最新（關於分頁）。</summary>
-    public const string UpdateUpToDate = "已是最新版本";
+    public const string UpdateUpToDate = "You're up to date";
 
     /// <summary>手動檢查更新：進行中（關於分頁）。</summary>
-    public const string UpdateChecking = "檢查更新中…";
+    public const string UpdateChecking = "Checking for updates…";
 
     /// <summary>手動檢查更新：失敗（離線／來源不可達；不誤報「已是最新」）。</summary>
-    public const string UpdateCheckFailed = "無法檢查更新，請確認網路後再試";
+    public const string UpdateCheckFailed = "Couldn't check for updates. Check your connection and try again.";
 }

@@ -32,7 +32,7 @@ public partial class OptionsPage : UserControl
         InitializeComponent();
         Config = current;
 
-        VoiceBox.Items.Add(new ComboBoxItem { Content = "（系統預設英文語音）", Tag = DefaultVoiceTag });
+        VoiceBox.Items.Add(new ComboBoxItem { Content = "(System default English voice)", Tag = DefaultVoiceTag });
         foreach (var v in SpeechService.InstalledVoiceNames())
         {
             VoiceBox.Items.Add(new ComboBoxItem { Content = v, Tag = v });
@@ -52,19 +52,19 @@ public partial class OptionsPage : UserControl
     {
         Config = c;
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
-        KeyStatus.Text = string.IsNullOrWhiteSpace(key) ? "目前狀態：○ 未設定" : "目前狀態：● 已設定";
+        KeyStatus.Text = string.IsNullOrWhiteSpace(key) ? "Status: ○ Not set" : "Status: ● Set";
         SelectByTag(VoiceBox, c.Voice ?? DefaultVoiceTag);
         QueryModelBox.Text = c.Model;
         _hotkey = HotKeyBinding.Parse(c.Hotkey);
         UpdateHotkeyStatus();
     }
 
-    private void UpdateHotkeyStatus() => HotkeyStatus.Text = "目前：" + _hotkey.DisplayName;
+    private void UpdateHotkeyStatus() => HotkeyStatus.Text = "Current: " + _hotkey.DisplayName;
 
     private void StartListening()
     {
         _listening = true;
-        HotkeyStatus.Text = "請按下快捷鍵…（Esc 取消）";
+        HotkeyStatus.Text = "Press a hotkey… (Esc to cancel)";
         ChangeHotkeyBtn.IsEnabled = false;
         Focus();
         Keyboard.Focus(this);
@@ -186,11 +186,11 @@ public partial class OptionsPage : UserControl
             KeyBox.Clear();
             SetConfig(Config);
             SettingsChanged?.Invoke(Config);
-            System.Windows.MessageBox.Show("已儲存。", "ScreenTrans 選項");
+            System.Windows.MessageBox.Show("Saved.", "ScreenTrans Options");
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show("儲存失敗：" + ex.Message, "ScreenTrans 選項");
+            System.Windows.MessageBox.Show("Save failed: " + ex.Message, "ScreenTrans Options");
         }
     }
 
@@ -202,11 +202,11 @@ public partial class OptionsPage : UserControl
             (_testSvc as IDisposable)?.Dispose();
             _testSvc = new SpeechService(cfg.Voice);
             _testSvc.Speak("Hello, this is ScreenTrans.", "en-US", stopPrevious: true);
-            _testSvc.Speak("你好，這是螢幕英文翻譯工具。", "zh-TW", stopPrevious: false);
+            _testSvc.Speak("Hello, this is the screen English lookup tool.", "en-US", stopPrevious: false);
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show("測試失敗：" + ex.Message, "ScreenTrans 選項");
+            System.Windows.MessageBox.Show("Test failed: " + ex.Message, "ScreenTrans Options");
         }
     }
 }

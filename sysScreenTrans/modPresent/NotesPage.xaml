@@ -15,7 +15,7 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
-      <Button x:Name="NewFolderBtn" Grid.Row="0" Content="＋ 建立資料夾" Style="{StaticResource GhostButton}"
+      <Button x:Name="NewFolderBtn" Grid.Row="0" Content="＋ New Folder" Style="{StaticResource GhostButton}"
               HorizontalAlignment="Left" Padding="10,4" Margin="0,0,0,6"/>
       <Border Grid.Row="1" Style="{StaticResource Card}">
         <TreeView x:Name="FolderTree" BorderThickness="0" Background="Transparent" AllowDrop="True" Margin="2"/>
@@ -32,18 +32,18 @@
       </Grid.RowDefinitions>
       <!-- 條目工具列（Issue #52 排序鈕於[清除全部]左側；均右對齊比照歷史分頁） -->
       <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,6">
-        <Button x:Name="SortAscBtn" Content="順向排序" Style="{StaticResource GhostButton}"
-                ToolTip="依原文 A→Z 排序目前資料夾條目" Margin="0,0,6,0"/>
-        <Button x:Name="SortDescBtn" Content="反向排序" Style="{StaticResource GhostButton}"
-                ToolTip="依原文 Z→A 排序目前資料夾條目" Margin="0,0,6,0"/>
-        <Button x:Name="ClearEntriesBtn" Content="清除全部"
+        <Button x:Name="SortAscBtn" Content="Sort A→Z" Style="{StaticResource GhostButton}"
+                ToolTip="Sort entries in this folder A→Z by original text" Margin="0,0,6,0"/>
+        <Button x:Name="SortDescBtn" Content="Sort Z→A" Style="{StaticResource GhostButton}"
+                ToolTip="Sort entries in this folder Z→A by original text" Margin="0,0,6,0"/>
+        <Button x:Name="ClearEntriesBtn" Content="Clear All"
                 Foreground="#8A2B2B" Style="{StaticResource GhostButton}"/>
       </StackPanel>
       <Grid Grid.Row="1">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,0,4,0">
           <StackPanel x:Name="EntryPanel"/>
         </ScrollViewer>
-        <TextBlock x:Name="EmptyHint" Text="此資料夾尚無筆記。在結果或歷史按「加入我的筆記」即可收藏；左側資料夾可右鍵管理、拖曳移動。"
+        <TextBlock x:Name="EmptyHint" Text="No notes in this folder yet. Use “Add to My Notes” on a result or history entry to save one; right-click folders on the left to manage, drag to move."
                    Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="320"
                    TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
       </Grid>

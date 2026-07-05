@@ -106,7 +106,7 @@ public partial class HistoryPage : UserControl
 
     private void OnClearAll(object? sender, RoutedEventArgs e)
     {
-        if (MessageBox.Show("確定清除全部查詢歷史？此動作無法復原。", "清除全部",
+        if (MessageBox.Show("Clear all query history? This cannot be undone.", "Clear All",
                 MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
         {
             return;
@@ -125,7 +125,7 @@ public partial class HistoryPage : UserControl
             FontWeight = FontWeights.SemiBold,
             Foreground = Brush("#3A2C33"),
         });
-        sp.Children.Add(new TextBlock { Text = $"{g.Entries.Count} 筆", FontSize = 11, Foreground = Brush("#8A5A6D") });
+        sp.Children.Add(new TextBlock { Text = $"{g.Entries.Count} item" + (g.Entries.Count == 1 ? "" : "s"), FontSize = 11, Foreground = Brush("#8A5A6D") });
         return sp;
     }
 
@@ -149,7 +149,7 @@ public partial class HistoryPage : UserControl
 
         var text = new TextBlock
         {
-            Text = string.IsNullOrWhiteSpace(entry.Original) ? "（未偵測到英文文字）" : entry.Original,
+            Text = string.IsNullOrWhiteSpace(entry.Original) ? "(No English text detected)" : entry.Original,
             FontSize = 13.5,
             Foreground = Brush("#3A2C33"),
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -182,7 +182,7 @@ public partial class HistoryPage : UserControl
             Margin = new Thickness(6, 0, 0, 0),
             Cursor = Cursors.Hand,
             VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = "播音",
+            ToolTip = "Play",
         };
         playBtn.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
         Grid.SetColumn(playBtn, 2);
@@ -206,13 +206,13 @@ public partial class HistoryPage : UserControl
     private ContextMenu MakeEntryMenu(HistoryEntry entry)
     {
         var menu = new ContextMenu();
-        var play = new MenuItem { Header = "▶ 播音", Foreground = Brush("#2F6FED") };
+        var play = new MenuItem { Header = "▶ Play", Foreground = Brush("#2F6FED") };
         play.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
-        var view = new MenuItem { Header = "檢視" };
+        var view = new MenuItem { Header = "View" };
         view.Click += (_, _) => ViewRequested?.Invoke(entry);
-        var addNote = new MenuItem { Header = "加入筆記", Foreground = Brush("#2F6F4A") };
+        var addNote = new MenuItem { Header = "Add to Notes", Foreground = Brush("#2F6F4A") };
         addNote.Click += (_, _) => AddToNotesRequested?.Invoke(entry);
-        var delete = new MenuItem { Header = "刪除", Foreground = Brush("#B23B3B") };
+        var delete = new MenuItem { Header = "Delete", Foreground = Brush("#B23B3B") };
         delete.Click += (_, _) => { _store.Delete(entry.Id); Reload(); };
         menu.Items.Add(play);
         menu.Items.Add(view);

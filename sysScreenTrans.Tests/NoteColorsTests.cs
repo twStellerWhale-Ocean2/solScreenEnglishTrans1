@@ -7,16 +7,16 @@ namespace ScreenTrans.Tests;
 public class NoteColorsTests
 {
     [Theory]
-    [InlineData("粉紅", "#FBE4EC")]
-    [InlineData("粉藍", "#E1EFFB")]
-    [InlineData("  粉綠 ", "#E4F5E9")] // 前後空白容錯
+    [InlineData("Pink", "#FBE4EC")]
+    [InlineData("Blue", "#E1EFFB")]
+    [InlineData("  Green ", "#E4F5E9")] // 前後空白容錯
     public void HexOfName_KnownName_ReturnsHex(string name, string hex)
     {
         Assert.Equal(hex, NoteColors.HexOfName(name));
     }
 
     [Theory]
-    [InlineData("紅色")]
+    [InlineData("Crimson")]
     [InlineData("")]
     [InlineData(null)]
     public void HexOfName_Unknown_ReturnsEmpty(string? name)
@@ -27,7 +27,7 @@ public class NoteColorsTests
     [Fact]
     public void NormalizeSuggested_ColorName_ToHex()
     {
-        Assert.Equal("#FBE4EC", NoteColors.NormalizeSuggested("粉紅"));
+        Assert.Equal("#FBE4EC", NoteColors.NormalizeSuggested("Pink"));
     }
 
     [Fact]
@@ -39,7 +39,7 @@ public class NoteColorsTests
     [Theory]
     [InlineData("")]
     [InlineData(null)]
-    [InlineData("紫色")]      // 非盤上色名
+    [InlineData("Purple")]    // 非盤上色名
     [InlineData("#123456")]  // 非盤上 hex
     public void NormalizeSuggested_UnknownOrEmpty_ReturnsEmpty(string? raw)
     {
