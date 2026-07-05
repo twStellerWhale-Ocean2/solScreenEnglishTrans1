@@ -476,6 +476,7 @@ public partial class NotesPage : UserControl
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 行尾播音鈕（Issue #56）
 
         var handle = new TextBlock
         {
@@ -503,6 +504,25 @@ public partial class NotesPage : UserControl
         };
         Grid.SetColumn(text, 1);
         grid.Children.Add(text);
+
+        // 行尾播音鈕（Issue #56）：最高頻動作一鍵可達，其餘（檢視/底色/刪除）仍走右鍵選單。
+        // Button 自行處理點擊、不冒泡至卡片（故單擊播音不觸發雙擊檢視、不啟動拖曳）。
+        var playBtn = new Button
+        {
+            Content = "", // Segoe MDL2 Assets：Play
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 13,
+            Foreground = Brush("#2F6FED"),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(6, 2, 6, 2),
+            Cursor = Cursors.Hand,
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "播音",
+        };
+        playBtn.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
+        Grid.SetColumn(playBtn, 2);
+        grid.Children.Add(playBtn);
 
         card.Child = grid;
         card.Tag = entry;
