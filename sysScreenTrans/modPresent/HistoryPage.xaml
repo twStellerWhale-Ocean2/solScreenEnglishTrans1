@@ -3,9 +3,11 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <!-- 左日期欄頂端對齊（上不留空）；「清除全部」僅佔右欄頂（Issue #40） -->
   <Grid>
+    <!-- 左側日期欄寬可拖拉調整（Issue #58） -->
     <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="180"/>
-      <ColumnDefinition Width="*"/>
+      <ColumnDefinition Width="180" MinWidth="130"/>
+      <ColumnDefinition Width="Auto"/>
+      <ColumnDefinition Width="*" MinWidth="240"/>
     </Grid.ColumnDefinitions>
 
     <Border Grid.Column="0" Style="{StaticResource Card}" Margin="10,8,4,10">
@@ -13,7 +15,9 @@
                Margin="4" HorizontalContentAlignment="Stretch"/>
     </Border>
 
-    <Grid Grid.Column="1">
+    <GridSplitter Grid.Column="1" Style="{StaticResource ColSplitter}"/>
+
+    <Grid Grid.Column="2">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
