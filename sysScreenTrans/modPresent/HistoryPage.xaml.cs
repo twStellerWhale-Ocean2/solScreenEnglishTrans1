@@ -20,6 +20,12 @@ using TextTrimming = System.Windows.TextTrimming;
 using VerticalAlignment = System.Windows.VerticalAlignment;
 using UIElement = System.Windows.UIElement;
 using Cursors = System.Windows.Input.Cursors;
+using ContextMenu = System.Windows.Controls.ContextMenu;
+using MenuItem = System.Windows.Controls.MenuItem;
+using Separator = System.Windows.Controls.Separator;
+using FontFamily = System.Windows.Media.FontFamily;
+using Brushes = System.Windows.Media.Brushes;
+using HorizontalAlignment = System.Windows.HorizontalAlignment;
 using MessageBox = System.Windows.MessageBox;
 using MessageBoxButton = System.Windows.MessageBoxButton;
 using MessageBoxResult = System.Windows.MessageBoxResult;
@@ -123,7 +129,8 @@ public partial class HistoryPage : UserControl
         return sp;
     }
 
-    // 緊湊列（Issue #38）：單行原文＋時刻併列、低 padding，同容量顯示更多筆。
+    // 條目卡（Issue #77）：改比照筆記機制——單行原文＋時刻、行尾播音鈕、右鍵選單（播音/檢視/加入筆記/刪除）、
+    // 雙擊＝檢視；歷史不排序/不移動故無拖曳握把、無底色。
     private UIElement EntryRow(HistoryEntry entry)
     {
         var card = new Border
@@ -132,20 +139,13 @@ public partial class HistoryPage : UserControl
             BorderBrush = Brush("#F4C2D0"),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(6),
-            Padding = new Thickness(8, 4, 8, 4),
+            Padding = new Thickness(10, 6, 10, 6),
             Margin = new Thickness(0, 0, 0, 5),
         };
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-
-        var addNote = ActionButton("＋筆記", "加入我的筆記", "#2F6F4A", "#E9F6EE", "#C9E6D3",
-            () => AddToNotesRequested?.Invoke(entry));
-        addNote.Margin = new Thickness(0, 0, 8, 0);
-        Grid.SetColumn(addNote, 0);
-        grid.Children.Add(addNote);
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // 原文
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                     // 時刻
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                     // 行尾播音鈕
 
         var text = new TextBlock
         {
@@ -155,7 +155,7 @@ public partial class HistoryPage : UserControl
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Grid.SetColumn(text, 1);
+        Grid.SetColumn(text, 0);
         grid.Children.Add(text);
 
         var time = new TextBlock
@@ -166,40 +166,60 @@ public partial class HistoryPage : UserControl
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(8, 0, 0, 0),
         };
-        Grid.SetColumn(time, 2);
+        Grid.SetColumn(time, 1);
         grid.Children.Add(time);
 
-        var actions = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
-        actions.Children.Add(ActionButton("▶", "播音（英文原句）", "#2F6FED", "#F0F6FF", "#CFE0FB",
-            () => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true)));
-        actions.Children.Add(ActionButton("檢視", "開啟中英詳情", "#4A4A4A", "#F5F5F5", "#DCDCDC",
-            () => ViewRequested?.Invoke(entry)));
-        actions.Children.Add(ActionButton("刪除", "自歷史移除此筆", "#B23B3B", "#FDF2F2", "#F0D2D2",
-            () => { _store.Delete(entry.Id); Reload(); }));
-        Grid.SetColumn(actions, 3);
-        grid.Children.Add(actions);
+        // 行尾播音鈕（比照筆記 Issue #56）：單擊播音、不冒泡至卡片（不觸發雙擊檢視）
+        var playBtn = new Button
+        {
+            Content = "", // Segoe MDL2 Assets：Play
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 13,
+            Foreground = Brush("#2F6FED"),
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(6, 2, 6, 2),
+            Margin = new Thickness(6, 0, 0, 0),
+            Cursor = Cursors.Hand,
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = "播音",
+        };
+        playBtn.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
+        Grid.SetColumn(playBtn, 2);
+        grid.Children.Add(playBtn);
 
         card.Child = grid;
+        card.Tag = entry;
+        card.ContextMenu = MakeEntryMenu(entry);
+        card.MouseLeftButtonDown += (_, e) =>
+        {
+            if (e.ClickCount == 2) // 雙擊＝檢視（比照筆記）
+            {
+                ViewRequested?.Invoke(entry);
+                e.Handled = true;
+            }
+        };
         return card;
     }
 
-    private static Button ActionButton(string content, string tip, string fg, string bg, string border, Action onClick)
+    // 右鍵選單（Issue #77，比照筆記；差異：以「加入筆記」取代筆記之「底色」、無移動）
+    private ContextMenu MakeEntryMenu(HistoryEntry entry)
     {
-        var btn = new Button
-        {
-            Content = content,
-            ToolTip = tip,
-            Foreground = Brush(fg),
-            Background = Brush(bg),
-            BorderBrush = Brush(border),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(9, 2, 9, 2),
-            Margin = new Thickness(6, 0, 0, 0),
-            FontSize = 12,
-            Cursor = Cursors.Hand,
-        };
-        btn.Click += (_, _) => onClick();
-        return btn;
+        var menu = new ContextMenu();
+        var play = new MenuItem { Header = "▶ 播音", Foreground = Brush("#2F6FED") };
+        play.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
+        var view = new MenuItem { Header = "檢視" };
+        view.Click += (_, _) => ViewRequested?.Invoke(entry);
+        var addNote = new MenuItem { Header = "加入筆記", Foreground = Brush("#2F6F4A") };
+        addNote.Click += (_, _) => AddToNotesRequested?.Invoke(entry);
+        var delete = new MenuItem { Header = "刪除", Foreground = Brush("#B23B3B") };
+        delete.Click += (_, _) => { _store.Delete(entry.Id); Reload(); };
+        menu.Items.Add(play);
+        menu.Items.Add(view);
+        menu.Items.Add(addNote);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(delete);
+        return menu;
     }
 
     private static SolidColorBrush Brush(string hex) => new((Color)ColorConverter.ConvertFromString(hex));
