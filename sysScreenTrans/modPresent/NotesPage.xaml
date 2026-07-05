@@ -20,14 +20,22 @@
       </Border>
     </Grid>
 
-    <!-- 右：選取夾之條目 -->
+    <!-- 右：選取夾之條目（右欄頂[清除全部]，比照歷史分頁；Issue #42） -->
     <Grid Grid.Column="1" Margin="4,8,10,10">
-      <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,0,4,0">
-        <StackPanel x:Name="EntryPanel"/>
-      </ScrollViewer>
-      <TextBlock x:Name="EmptyHint" Text="此資料夾尚無筆記。在結果或歷史按「加入我的筆記」即可收藏；左側資料夾可右鍵管理、拖曳移動。"
-                 Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="320"
-                 TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+      <Button x:Name="ClearEntriesBtn" Grid.Row="0" Content="清除全部" HorizontalAlignment="Right"
+              Foreground="#8A2B2B" Style="{StaticResource GhostButton}" Margin="0,0,0,6"/>
+      <Grid Grid.Row="1">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,0,4,0">
+          <StackPanel x:Name="EntryPanel"/>
+        </ScrollViewer>
+        <TextBlock x:Name="EmptyHint" Text="此資料夾尚無筆記。在結果或歷史按「加入我的筆記」即可收藏；左側資料夾可右鍵管理、拖曳移動。"
+                   Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="320"
+                   TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+      </Grid>
     </Grid>
   </Grid>
 </UserControl>

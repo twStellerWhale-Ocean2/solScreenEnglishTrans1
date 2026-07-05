@@ -82,7 +82,9 @@ public partial class NotesPage : UserControl
         _data = _store.LoadEnsured();
 
         NewFolderBtn.Click += (_, _) => CreateFolder(parent: null); // 一律建頂層；子資料夾走節點右鍵選單（檔案總管慣例）
+        ClearEntriesBtn.Click += (_, _) => OnClearEntries();
         FolderTree.SelectedItemChanged += OnFolderSelected;
+        FolderTree.PreviewMouseLeftButtonUp += (_, _) => _pressItem = null; // 放開即清，防殘留按壓被後續拖曳劫持
         FolderTree.KeyDown += OnTreeKeyDown;                // F2＝更名、Del＝刪除（檔案總管慣例）
         FolderTree.Drop += OnTreeBackgroundDrop;            // 拖到空白處 → 移到頂層
         FolderTree.DragOver += (_, e) => { e.Effects = DragDropEffects.Move; e.Handled = true; };
@@ -108,6 +110,7 @@ public partial class NotesPage : UserControl
 
     private void BuildTree()
     {
+        NotesStore.SortFolders(_data); // 同層一律依名稱自然排序（檔案總管慣例，Issue #42）
         var keepId = Selected?.Id;
         _dropHighlight = null;
         FolderTree.Items.Clear();
@@ -220,6 +223,7 @@ public partial class NotesPage : UserControl
         var f = Selected;
         bool any = f is not null && f.Entries.Count > 0;
         EmptyHint.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
+        ClearEntriesBtn.IsEnabled = any;
         if (f is null)
         {
             return;
@@ -230,7 +234,29 @@ public partial class NotesPage : UserControl
         }
     }
 
-    private void Persist() { _store.Save(_data); BuildTree(); }
+    private void Persist()
+    {
+        NotesStore.SortFolders(_data); // 存檔順序與顯示一致（名稱序）
+        _store.Save(_data);
+        BuildTree();
+    }
+
+    /// <summary>右欄[清除全部]：清空選取夾內全部條目（確認對話載明夾名筆數；子夾不動）。</summary>
+    private void OnClearEntries()
+    {
+        var f = Selected;
+        if (f is null || f.Entries.Count == 0)
+        {
+            return;
+        }
+        if (MessageBox.Show($"清除資料夾「{f.Name}」內全部 {f.Entries.Count} 筆筆記？此動作無法復原（子資料夾不受影響）。",
+                "清除全部", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+        {
+            return;
+        }
+        NotesStore.ClearEntries(_data, f.Id);
+        Persist();
+    }
 
     // ---- 資料夾操作（頂部[建立資料夾]＋右鍵選單／F2／Del，原地更名如檔案總管） ----
 
@@ -244,8 +270,7 @@ public partial class NotesPage : UserControl
         {
             return;
         }
-        _store.Save(_data);
-        BuildTree();
+        Persist(); // 依名稱歸位後入原地更名
         var item = FindItem(FolderTree.Items, created.Id);
         if (item is not null)
         {
@@ -274,7 +299,8 @@ public partial class NotesPage : UserControl
             if (save && !string.IsNullOrWhiteSpace(box.Text) && box.Text.Trim() != f.Name)
             {
                 NotesStore.RenameFolder(_data, f.Id, box.Text);
-                _store.Save(_data);
+                Persist(); // 更名後依名稱歸位
+                return;
             }
             BuildTree(); // 取消或未變更亦重建，還原一般節點頭
         }
@@ -350,7 +376,8 @@ public partial class NotesPage : UserControl
 
     private void OnItemMouseMove(object sender, MouseEventArgs e)
     {
-        if (_pressItem is null || e.LeftButton != MouseButtonState.Pressed)
+        // 僅由被按壓的節點本身啟動拖曳：防止殘留 _pressItem 在滑鼠（因其他拖曳）持鍵掃過樹時誤啟動資料夾拖曳
+        if (_pressItem is null || !ReferenceEquals(sender, _pressItem) || e.LeftButton != MouseButtonState.Pressed)
         {
             return;
         }
@@ -433,6 +460,7 @@ public partial class NotesPage : UserControl
             ToolTip = "拖曳排序／拖到左側資料夾移動",
         };
         handle.PreviewMouseLeftButtonDown += (_, ev) => { _entryDrag = entry; _entryStart = ev.GetPosition(null); };
+        handle.PreviewMouseLeftButtonUp += (_, _) => _entryDrag = null; // 放開即清（對稱防殘留）
         handle.PreviewMouseMove += OnEntryHandleMove;
         Grid.SetColumn(handle, 0);
         grid.Children.Add(handle);
