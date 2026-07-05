@@ -561,7 +561,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 
 > 建置／測試／部署指令（繼承 techStack；GATE 由此取建置/測試指令）。
 
-* [sysScreenTrans系統]：繼承 [techStackDotnetWin]（候選）——**建置指令** `dotnet build -c Release`、**發佈指令** `dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true`、**測試指令** `dotnet test`、**部署方法** 單一 exe 手動放置（免安裝）。
+* [sysScreenTrans系統]：繼承 [techStackDotnetWin]（候選）——**建置指令** `dotnet build -c Release`、**發佈指令** `dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true`（csproj 內建 `IncludeNativeLibrariesForSelfExtract=true`：WPF 原生庫入 bundle，**裸 exe 於乾淨目錄可獨立執行**，Issue #49）、**測試指令** `dotnet test`、**部署方法** 單一 exe 手動放置（免安裝）。
 * **方案層**：於 Windows 11 實機以發佈 exe 跑 intTest／e2eTest。
 
 ## D. 規格效益
@@ -576,7 +576,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 
 | # | 驗證 WI | 基底 | 步驟 → 預期 |
 | --- | --- | --- | --- |
-| 01 | setWi自訂Usr安裝設定金鑰 | 無 | 發佈 exe、設 `OPENAI_API_KEY` → 檔案就位、環境變數存在非空 |
+| 01 | setWi自訂Usr安裝設定金鑰 | 無 | 發佈 exe、設 `OPENAI_API_KEY` → 檔案就位、環境變數存在非空；**裸 exe 單獨拷至乾淨目錄可啟動運行**（單檔含 WPF 原生庫、不依賴 publish 夾散落 DLL） |
 | 02 | setWi自訂Usr啟動結束常駐 | 01 | 啟動 exe → 常駐主控入口以工作列按鈕呈現（Alt+Tab 可尋）、預設最小化不擋畫面、系統匣圖示出現；明確結束 → 程序退出、熱鍵與系統匣釋放；重複啟動 → 單一實例提示、不重複建立主控視窗 |
 | 03 | runWi自訂Usr熱鍵喚起框選（喚起） | 02 | 按 `Alt+L`（左右各測） → 遮罩 <300ms 出現；按 `ESC` → 遮罩消失、無殘影 |
 | 04 | runWi自訂Usr熱鍵喚起框選（框選） | 03 | 拖曳框選 → 取得選區影像；多螢幕／125%／150% DPI 下與框選範圍 0px 偏移 |

@@ -2,6 +2,19 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [0.14.2] - 2026-07-05
+
+Issue #49 增量：單檔發佈納入 WPF 原生庫——裸 exe 於乾淨目錄可獨立執行（發佈列車 v0.14.1 成品層 smoke 攔獲）。
+
+### 修正
+- csproj 設 `IncludeNativeLibrariesForSelfExtract=true`：`PresentationNative_cor3`／`wpfgfx_cor3`／
+  `vcruntime140_cor3`／`D3DCompiler_47_cor3`／`PenImc_cor3` 等 WPF 原生庫**納入單檔 bundle**（執行期自解）。
+  修前這些 DLL 散落 publish 夾旁，裸 exe 拷至乾淨目錄執行會 `DllNotFoundException` 崩潰——dev 期 smoke 皆於
+  publish 夾執行故未觸發，v0.1.0 已發佈之裸 exe 資產同樣帶病；「免安裝單一執行檔」自此名實相符。
+
+### 備註
+- design.md ＜C.(D)＞ 發佈指令補述、intTest#01 補「裸 exe 乾淨目錄可啟動」；驗收於乾淨目錄對裸 exe 實測五分頁走訪。
+
 ## [0.14.1] - 2026-07-05
 
 Issue #46 增量：筆記條目拖曳游標改**四向移動**（實測回饋修正）。
