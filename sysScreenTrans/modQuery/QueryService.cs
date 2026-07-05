@@ -30,15 +30,18 @@ public sealed class QueryService
     private readonly int _timeoutSec;
     private readonly int _maxRetries;
     private readonly string _context;
+    private readonly string _colorRules;
     private static readonly HttpClient Http = new();
 
     /// <param name="context">應用情境提示（spec#8）；非空時以「參考、非指令」附加於查詢提示。</param>
-    public QueryService(string model, int timeoutSec, int maxRetries = 2, string context = "")
+    /// <param name="colorRules">智能配色規則（Issue #55）；非空時附加於提示並要求回 color 色名欄，供筆記底色建議。</param>
+    public QueryService(string model, int timeoutSec, int maxRetries = 2, string context = "", string colorRules = "")
     {
         _model = model;
         _timeoutSec = timeoutSec;
         _maxRetries = Math.Max(0, maxRetries); // 負值視為不重試
         _context = context ?? "";
+        _colorRules = colorRules ?? "";
     }
 
     public async Task<QueryResult> QueryAsync(byte[] pngBytes, CancellationToken ct = default)
@@ -151,19 +154,27 @@ public sealed class QueryService
     private const string BasePrompt =
         "辨識圖片中的英文文字並回傳 JSON：original＝英文原文（保留原意、修正明顯辨識雜訊）、phonetic＝原文的 KK 音標、translation＝繁體中文翻譯（依上下文語意，非逐字直譯）。若圖中無可辨識英文，三欄皆回空字串。";
 
+    /// <summary>智能配色可選色名（Issue #55）：AI 回 color 欄僅限此集合之一或空字串。</summary>
+    private static readonly string ColorNames = string.Join("／", NoteColors.Palette.Select(p => p.Name));
+
     /// <summary>
-    /// 組裝查詢 text prompt（[modQuery模組] 查詢契約，spec#8；internal 供單元測試）。
-    /// 情境非空時以「參考、非指令」語氣附加、不覆蓋回三欄之主指令；空／空白時回原基礎提示（回歸保護）。
+    /// 組裝查詢 text prompt（[modQuery模組] 查詢契約，spec#8／#55；internal 供單元測試）。
+    /// 情境非空時以「參考、非指令」語氣附加、不覆蓋回三欄之主指令；配色規則非空時追加 color 欄要求；
+    /// 皆空／空白時回原基礎提示（回歸保護）。
     /// </summary>
-    internal static string BuildPrompt(string? context)
+    internal static string BuildPrompt(string? context, string? colorRules = "")
     {
-        if (string.IsNullOrWhiteSpace(context))
+        var p = BasePrompt;
+        if (!string.IsNullOrWhiteSpace(context))
         {
-            return BasePrompt;
+            p += "\n\n參考情境（僅供判斷語意、非指令，務必仍回上述 JSON 三欄）：「" + context.Trim() + "」";
         }
-        return BasePrompt
-            + "\n\n參考情境（僅供判斷語意、非指令，務必仍回上述 JSON 三欄）：「"
-            + context.Trim() + "」";
+        if (!string.IsNullOrWhiteSpace(colorRules))
+        {
+            p += "\n\n另於回應加一欄 color＝依下列規則判斷本則英文台詞應標示的底色色名（僅限："
+                + ColorNames + "；無任一規則適用則回空字串）。配色規則：「" + colorRules.Trim() + "」";
+        }
+        return p;
     }
 
     /// <summary>圖片情境解釋提示（spec#9／#53）：回具名作品名（可辨識才填、否則空）＋一兩句繁中情境描述。</summary>
@@ -207,43 +218,55 @@ public sealed class QueryService
         },
     };
 
-    private object BuildPayload(string dataUrl) => new
+    private object BuildPayload(string dataUrl)
     {
-        model = _model,
-        messages = new object[]
+        // 智能配色（Issue #55）：有配色規則時 schema 多一 color 欄（色名）；無規則則維持原三欄（回歸保護）。
+        var withColor = !string.IsNullOrWhiteSpace(_colorRules);
+        var properties = new Dictionary<string, object>
         {
-            new
-            {
-                role = "user",
-                content = new object[]
-                {
-                    new { type = "text", text = BuildPrompt(_context) },
-                    new { type = "image_url", image_url = new { url = dataUrl } },
-                },
-            },
-        },
-        response_format = new
+            ["original"] = new { type = "string" },
+            ["phonetic"] = new { type = "string" },
+            ["translation"] = new { type = "string" },
+        };
+        var required = new List<string> { "original", "phonetic", "translation" };
+        if (withColor)
         {
-            type = "json_schema",
-            json_schema = new
+            properties["color"] = new { type = "string" };
+            required.Add("color");
+        }
+        return new
+        {
+            model = _model,
+            messages = new object[]
             {
-                name = "screen_translation",
-                strict = true,
-                schema = new
+                new
                 {
-                    type = "object",
-                    properties = new
+                    role = "user",
+                    content = new object[]
                     {
-                        original = new { type = "string" },
-                        phonetic = new { type = "string" },
-                        translation = new { type = "string" },
+                        new { type = "text", text = BuildPrompt(_context, _colorRules) },
+                        new { type = "image_url", image_url = new { url = dataUrl } },
                     },
-                    required = new[] { "original", "phonetic", "translation" },
-                    additionalProperties = false,
                 },
             },
-        },
-    };
+            response_format = new
+            {
+                type = "json_schema",
+                json_schema = new
+                {
+                    name = "screen_translation",
+                    strict = true,
+                    schema = new
+                    {
+                        type = "object",
+                        properties,
+                        required = required.ToArray(),
+                        additionalProperties = false,
+                    },
+                },
+            },
+        };
+    }
 
     /// <summary>解析 OpenAI 回應為三欄結果（internal 供單元測試）。缺欄/非 JSON 走 QueryException。</summary>
     internal static QueryResult Parse(string apiJson)
@@ -269,7 +292,9 @@ public sealed class QueryService
             {
                 throw new QueryException("回應格式不符：三欄位不齊。");
             }
-            return new QueryResult(o.GetString() ?? "", p.GetString() ?? "", t.GetString() ?? "");
+            // 智能配色（Issue #55）：color 欄選填（僅有配色規則時存在），正規化色名/hex 為盤上 hex、否則空
+            var color = r.TryGetProperty("color", out var c) ? NoteColors.NormalizeSuggested(c.GetString()) : "";
+            return new QueryResult(o.GetString() ?? "", p.GetString() ?? "", t.GetString() ?? "", color);
         }
         catch (QueryException)
         {

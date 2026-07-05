@@ -27,27 +27,36 @@
       <StackPanel x:Name="BodyPanel" Margin="18,14,18,10"/>
     </ScrollViewer>
 
-    <!-- 底部工具列（Issue #34）：加入我的筆記＋自動加入筆記 -->
+    <!-- 底部工具列（Issue #34）：加入我的筆記＋自動加入筆記；下方為預設資料夾/底色（Issue #55） -->
     <Grid Grid.Row="1">
       <Border Height="1" Background="#F4C2D0" VerticalAlignment="Top"/>
-      <StackPanel Orientation="Horizontal" Margin="16,10,16,12" VerticalAlignment="Center">
-        <Button x:Name="AddNoteBtn" Cursor="Hand" ToolTip="加入我的筆記">
-          <Button.Template>
-            <ControlTemplate TargetType="Button">
-              <Border x:Name="bg" CornerRadius="8" Background="#E9F6EE" BorderBrush="#C9E6D3"
-                      BorderThickness="1" Padding="12,5">
-                <TextBlock Text="＋ 加入我的筆記" FontSize="13.5" Foreground="#2F6F4A"/>
-              </Border>
-              <ControlTemplate.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                  <Setter TargetName="bg" Property="Background" Value="#D9EFE0"/>
-                </Trigger>
-              </ControlTemplate.Triggers>
-            </ControlTemplate>
-          </Button.Template>
-        </Button>
-        <CheckBox x:Name="AutoAddChk" Content="自動加入筆記" Margin="14,0,0,0"
-                  VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="13"/>
+      <StackPanel Margin="16,10,16,12">
+        <StackPanel Orientation="Horizontal">
+          <Button x:Name="AddNoteBtn" Cursor="Hand" ToolTip="加入我的筆記">
+            <Button.Template>
+              <ControlTemplate TargetType="Button">
+                <Border x:Name="bg" CornerRadius="8" Background="#E9F6EE" BorderBrush="#C9E6D3"
+                        BorderThickness="1" Padding="12,5">
+                  <TextBlock Text="＋ 加入我的筆記" FontSize="13.5" Foreground="#2F6F4A"/>
+                </Border>
+                <ControlTemplate.Triggers>
+                  <Trigger Property="IsMouseOver" Value="True">
+                    <Setter TargetName="bg" Property="Background" Value="#D9EFE0"/>
+                  </Trigger>
+                </ControlTemplate.Triggers>
+              </ControlTemplate>
+            </Button.Template>
+          </Button>
+          <CheckBox x:Name="AutoAddChk" Content="自動加入筆記" Margin="14,0,0,0"
+                    VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="13"/>
+        </StackPanel>
+        <!-- #55：加入至哪個資料夾＋底色（此列兼作「設定預設」與「臨時調整」；智能配色下自動預選 AI 建議色） -->
+        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+          <TextBlock Text="加入至" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="0,0,6,0"/>
+          <ComboBox x:Name="FolderCombo" MinWidth="118" MaxWidth="180" FontSize="12.5" VerticalAlignment="Center"/>
+          <TextBlock Text="底色" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="14,0,6,0"/>
+          <StackPanel x:Name="SwatchRow" Orientation="Horizontal" VerticalAlignment="Center"/>
+        </StackPanel>
       </StackPanel>
     </Grid>
   </Grid>

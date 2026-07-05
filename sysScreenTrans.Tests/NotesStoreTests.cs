@@ -111,6 +111,71 @@ public class NotesStoreTests
         Assert.Equal(new[] { "b", "c", "a" }, f.Entries.Select(x => x.Original).ToArray());
     }
 
+    // ---- #55：具名資料夾加入＋底色 ----
+
+    [Fact]
+    public void EnsureTopFolderByName_Existing_ReturnsSame()
+    {
+        var d = new NotesData();
+        d.Folders.Add(new NoteFolder { Name = "遊戲A" });
+        var f = NotesStore.EnsureTopFolderByName(d, "遊戲A");
+        Assert.Equal("遊戲A", f.Name);
+        Assert.Single(d.Folders); // 未重複建立
+    }
+
+    [Fact]
+    public void EnsureTopFolderByName_Missing_Creates()
+    {
+        var d = new NotesData();
+        var f = NotesStore.EnsureTopFolderByName(d, "星際旅行");
+        Assert.Equal("星際旅行", f.Name);
+        Assert.Contains(d.Folders, x => x.Name == "星際旅行");
+    }
+
+    [Fact]
+    public void AddToTopFolder_AddsToTarget_DedupAcrossTree()
+    {
+        var d = new NotesData();
+        var a = NotesStore.EnsureTopFolderByName(d, "A");
+        var b = NotesStore.EnsureTopFolderByName(d, "B");
+        Assert.Equal(NoteAddResult.Added, NotesStore.AddToTopFolder(d, a, E("hello")));
+        Assert.Equal(NoteAddResult.AlreadyExists, NotesStore.AddToTopFolder(d, b, E("Hello"))); // 跨全樹去重
+        Assert.Single(a.Entries);
+        Assert.Empty(b.Entries);
+    }
+
+    [Fact]
+    public void AddToNamedFolderAndSave_CreatesFolder_SetsColor_Persists()
+    {
+        var path = TempPath();
+        try
+        {
+            var store = new NotesStore(path);
+            Assert.Equal(NoteAddResult.Added,
+                store.AddToNamedFolderAndSave(R("Attack!"), "戰鬥", "#FBE4EC", DateTimeOffset.Now));
+            var d = store.Load();
+            var f = d.Folders.Single(x => x.Name == "戰鬥");
+            Assert.Equal("Attack!", f.Entries[0].Original);
+            Assert.Equal("#FBE4EC", f.Entries[0].Color); // 套底色
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void AddToNamedFolderAndSave_EmptyName_UsesDefaultFolder()
+    {
+        var path = TempPath();
+        try
+        {
+            var store = new NotesStore(path);
+            store.AddToNamedFolderAndSave(R("hi"), "", "", DateTimeOffset.Now);
+            var d = store.Load();
+            Assert.Equal(NotesStore.DefaultFolderName, d.Folders[0].Name);
+            Assert.Equal("hi", d.Folders[0].Entries[0].Original);
+        }
+        finally { File.Delete(path); }
+    }
+
     // ---- #52：順向/反向排序 ----
 
     [Fact]

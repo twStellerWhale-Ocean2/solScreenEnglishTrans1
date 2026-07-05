@@ -53,6 +53,7 @@ public partial class App : System.Windows.Application
         // 設定檔在 %APPDATA%（Issue #51 遷居：Velopack 更新換置版本目錄，存 exe 旁會失）；exe 旁舊檔一次性遷移
         _config = AppConfig.Load(AppConfig.ResolveSettingsPath(
             Path.Combine(AppContext.BaseDirectory, "appsettings.json"), AppConfig.SettingsPath));
+        NoteDefaults.Load(); // 筆記加入預設（資料夾/底色/智能配色規則，Issue #55）
         var keyReady = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
         _speech = new SpeechService(_config.Voice);
 
@@ -82,7 +83,8 @@ public partial class App : System.Windows.Application
         _notesPage.ViewRequested += entry => ShowDetail(entry.ToResult());
         _historyPage = new HistoryPage(_historyStore, () => _speech);
         _historyPage.ViewRequested += entry => ShowDetail(entry.ToResult());
-        _historyPage.AddToNotesRequested += entry => AddToNotes(entry.ToResult());
+        _historyPage.AddToNotesRequested += entry => // 歷史「＋筆記」：套目前預設資料夾/底色（#55）
+            AddToNotes(new NoteAddRequest(entry.ToResult(), NoteDefaults.FolderName, NoteDefaults.ColorHex));
         _optionsPage = new OptionsPage(_config);
         _optionsPage.SettingsChanged += ApplySettings;
         _contextStore.LoadMigrated(_config.Context); // #14 單一情境提示相容遷移為一則命名情境
@@ -182,7 +184,8 @@ public partial class App : System.Windows.Application
 
             try
             {
-                var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries, _contextStore.ActiveText());
+                var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries,
+                    _contextStore.ActiveText(), NoteDefaults.ColorRules); // #55 智能配色規則注入
                 var result = await query.QueryAsync(mask.Result.PngBytes);
                 if (!result.IsEmpty)
                 {
@@ -221,8 +224,15 @@ public partial class App : System.Windows.Application
         _result = win;
         win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
         win.AddToNotesRequested += AddToNotes;
+        win.SetNoteTargets(TopFolderNames(), ActiveContextName()); // #55「加入至」下拉來源
         return win;
     }
+
+    /// <summary>目前頂層資料夾名清單（供結果視窗「加入至」下拉，#55）。</summary>
+    private List<string> TopFolderNames() => _notesStore.LoadEnsured().Folders.Select(f => f.Name).ToList();
+
+    /// <summary>使用中情境名（空＝無使用中情境；供「加入至」預設夾解析與標籤，#55）。</summary>
+    private string ActiveContextName() => ContextStore.GetActive(_contextStore.Load())?.Name ?? "";
 
     /// <summary>開啟統一主視窗並切到指定分頁（tray／入口）；先關 topmost 結果卡片免遮蔽。</summary>
     private void OpenMain(MainTab tab)
@@ -231,17 +241,32 @@ public partial class App : System.Windows.Application
         _main?.ShowTab(tab);
     }
 
-    /// <summary>加入我的筆記（去重）：結果視窗、自動加入或歷史條目觸發，右下角 toast 回饋（spec#7）。</summary>
-    private void AddToNotes(QueryResult r)
+    /// <summary>
+    /// 加入我的筆記（去重）：結果視窗或自動加入觸發，加入至請求指定之資料夾並套底色（#55），右下角 toast 回饋（spec#7）。
+    /// 資料夾名空 → 依使用中情境名（無情境則預設夾）解析。
+    /// </summary>
+    private void AddToNotes(NoteAddRequest req)
     {
-        var msg = _notesStore.AddAndSave(r, DateTimeOffset.Now) switch
+        var folder = ResolveFolderName(req.FolderName);
+        var msg = _notesStore.AddToNamedFolderAndSave(req.Result, folder, req.ColorHex, DateTimeOffset.Now) switch
         {
-            NoteAddResult.Added => "✓ 已加入我的筆記",
+            NoteAddResult.Added => folder == NotesStore.DefaultFolderName ? "✓ 已加入我的筆記" : $"✓ 已加入「{folder}」",
             NoteAddResult.AlreadyExists => "已在筆記中",
             _ => "無可收藏內容",
         };
         ToastNotifier.Show(msg);
         _notesPage?.Reload();
+    }
+
+    /// <summary>解析目標資料夾名（#55）：非空即固定夾；空則使用中情境名、無情境則預設夾。</summary>
+    private string ResolveFolderName(string chosen)
+    {
+        if (!string.IsNullOrWhiteSpace(chosen))
+        {
+            return chosen.Trim();
+        }
+        var ctx = ActiveContextName();
+        return ctx.Length > 0 ? ctx : NotesStore.DefaultFolderName;
     }
 
     /// <summary>「檢視」：以結果卡片顯示三欄詳情（重用 ResultWindow 之整句/逐字發音，供歷史與筆記共用）。</summary>

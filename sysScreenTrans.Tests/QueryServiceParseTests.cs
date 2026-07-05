@@ -51,4 +51,30 @@ public class QueryServiceParseTests
     {
         Assert.Throws<QueryException>(() => QueryService.Parse("not json at all"));
     }
+
+    // ---- #55：智能配色 color 欄解析 ----
+
+    [Fact]
+    public void Parse_WithColorName_SetsSuggestedColorHex()
+    {
+        var api = WrapApi("{\"original\":\"Attack!\",\"phonetic\":\"x\",\"translation\":\"攻擊！\",\"color\":\"粉紅\"}");
+        var r = QueryService.Parse(api);
+        Assert.Equal("#FBE4EC", r.SuggestedColor); // 色名→盤上 hex
+    }
+
+    [Fact]
+    public void Parse_NoColorField_SuggestedColorEmpty()
+    {
+        // 無配色規則之查詢（無 color 欄）→ 建議色空、回歸行為
+        var api = WrapApi("{\"original\":\"Hi\",\"phonetic\":\"x\",\"translation\":\"嗨\"}");
+        var r = QueryService.Parse(api);
+        Assert.Equal("", r.SuggestedColor);
+    }
+
+    [Fact]
+    public void Parse_EmptyOrUnknownColor_SuggestedColorEmpty()
+    {
+        var api = WrapApi("{\"original\":\"Hi\",\"phonetic\":\"x\",\"translation\":\"嗨\",\"color\":\"紅色\"}");
+        Assert.Equal("", QueryService.Parse(api).SuggestedColor); // 非盤上色名→不套色
+    }
 }

@@ -90,6 +90,25 @@ public sealed class NotesStore
         return res;
     }
 
+    /// <summary>
+    /// 加入至**指定名稱之頂層資料夾**並套底色（Issue #55）：<paramref name="folderName"/> 空則退回預設夾行為
+    /// （第一個頂層夾）；找不到同名頂層夾則建立。跨全樹去重（同 <see cref="AddAndSave"/> 語意），
+    /// 加入時設 <paramref name="colorHex"/>（空＝無底色）。回 <see cref="NoteAddResult"/>。
+    /// </summary>
+    public NoteAddResult AddToNamedFolderAndSave(QueryResult r, string? folderName, string? colorHex, DateTimeOffset now)
+    {
+        var d = LoadEnsured();
+        var entry = NoteEntry.From(r, now) with { Color = colorHex ?? "" };
+        var res = string.IsNullOrWhiteSpace(folderName)
+            ? AddTo(d, entry) // 空名＝預設夾（第一個頂層）
+            : AddToTopFolder(d, EnsureTopFolderByName(d, folderName!), entry);
+        if (res == NoteAddResult.Added)
+        {
+            Save(d);
+        }
+        return res;
+    }
+
     // ---- 純函式（樹感知，可單元測試） ----
 
     /// <summary>樹的前序走訪（含所有子資料夾）。</summary>
@@ -127,6 +146,35 @@ public sealed class NotesStore
         }
         Ensure(d);
         d.Folders[0].Entries.Insert(0, entry);
+        return NoteAddResult.Added;
+    }
+
+    /// <summary>取得指定名稱之頂層資料夾（Issue #55）；不存在則於頂層新建並回傳。名稱空白退回預設夾名。</summary>
+    public static NoteFolder EnsureTopFolderByName(NotesData d, string name)
+    {
+        var target = string.IsNullOrWhiteSpace(name) ? DefaultFolderName : name.Trim();
+        var existing = d.Folders.FirstOrDefault(f => string.Equals(f.Name, target, StringComparison.Ordinal));
+        if (existing is not null)
+        {
+            return existing;
+        }
+        var created = new NoteFolder { Name = target };
+        d.Folders.Add(created);
+        return created;
+    }
+
+    /// <summary>加入至指定頂層資料夾頂端（Issue #55）；空原文回 Empty、跨全樹去重已存在回 AlreadyExists。</summary>
+    public static NoteAddResult AddToTopFolder(NotesData d, NoteFolder folder, NoteEntry entry)
+    {
+        if (string.IsNullOrEmpty(entry.Key))
+        {
+            return NoteAddResult.Empty;
+        }
+        if (Contains(d, entry.Key))
+        {
+            return NoteAddResult.AlreadyExists;
+        }
+        folder.Entries.Insert(0, entry);
         return NoteAddResult.Added;
     }
 

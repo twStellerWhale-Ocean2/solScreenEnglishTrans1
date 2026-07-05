@@ -44,6 +44,7 @@ public partial class OptionsPage : UserControl
         SaveBtn.Click += OnSave;
         TestBtn.Click += OnTest;
 
+        ColorRulesBox.Text = NoteDefaults.ColorRules; // 智能配色規則（Issue #55）
         SetConfig(current);
     }
 
@@ -183,6 +184,8 @@ public partial class OptionsPage : UserControl
             ApplyKeyIfProvided();
             Config = Gather();
             Config.Save(AppConfig.SettingsPath); // %APPDATA%（Issue #51 遷居；exe 旁不再寫）
+            NoteDefaults.ColorRules = ColorRulesBox.Text ?? ""; // 智能配色規則（Issue #55）
+            NoteDefaults.Save();
             KeyBox.Clear();
             SetConfig(Config);
             SettingsChanged?.Invoke(Config);

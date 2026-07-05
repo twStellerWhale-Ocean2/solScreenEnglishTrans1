@@ -41,4 +41,35 @@ public class QueryServicePromptTests
         var p = QueryService.BuildPrompt("  spooky dungeon  ");
         Assert.Contains("「spooky dungeon」", p);
     }
+
+    // ---- #55：智能配色規則注入 ----
+
+    [Fact]
+    public void BuildPrompt_NoColorRules_NoColorInstruction()
+    {
+        var p = QueryService.BuildPrompt("some context");
+        Assert.DoesNotContain("color", p);
+        Assert.DoesNotContain("配色規則", p);
+    }
+
+    [Fact]
+    public void BuildPrompt_ColorRules_AddsColorInstruction_AndKeepsThreeColumns()
+    {
+        var p = QueryService.BuildPrompt("", "戰士的台詞用粉紅、法師用粉藍");
+        Assert.Contains("配色規則", p);
+        Assert.Contains("戰士的台詞用粉紅", p);
+        Assert.Contains("color", p);           // 要求 color 欄
+        Assert.Contains("粉紅", p);             // 可選色名清單
+        Assert.Contains("空字串", p);           // 無規則適用回空
+        Assert.StartsWith(QueryService.BuildPrompt(""), p); // 基礎提示仍在前
+    }
+
+    [Fact]
+    public void BuildPrompt_BothContextAndColorRules_ContainsBoth()
+    {
+        var p = QueryService.BuildPrompt("RPG", "boss 台詞用粉紫");
+        Assert.Contains("參考情境", p);
+        Assert.Contains("配色規則", p);
+        Assert.Contains("boss 台詞用粉紫", p);
+    }
 }

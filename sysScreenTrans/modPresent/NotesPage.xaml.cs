@@ -449,16 +449,6 @@ public partial class NotesPage : UserControl
 
     // ---- 條目版型與排序（拖曳中顯示插入位置指示線，Issue #38） ----
 
-    /// <summary>條目底色粉彩盤（Issue #44）：名稱＋hex；空 hex＝預設白。</summary>
-    private static readonly (string Name, string Hex)[] Palette =
-    {
-        ("粉紅", "#FBE4EC"),
-        ("粉藍", "#E1EFFB"),
-        ("粉綠", "#E4F5E9"),
-        ("粉黃", "#FBF3D9"),
-        ("粉紫", "#EFE6F9"),
-    };
-
     // 條目卡（Issue #44）：底色套 NoteEntry.Color；操作循 Windows 清單慣例——右鍵選單＋雙擊檢視、無常駐按鈕列。
     private UIElement EntryRow(NoteEntry entry)
     {
@@ -548,7 +538,7 @@ public partial class NotesPage : UserControl
 
         var color = new MenuItem { Header = "底色" };
         color.Items.Add(ColorItem(entry, "無底色", ""));
-        foreach (var (name, hex) in Palette)
+        foreach (var (name, hex) in NoteColors.Palette) // 集中色盤（Issue #55）
         {
             color.Items.Add(ColorItem(entry, name, hex));
         }

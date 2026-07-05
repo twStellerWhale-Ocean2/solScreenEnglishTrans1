@@ -20,6 +20,12 @@ using Run = System.Windows.Documents.Run;
 namespace ScreenTrans.Present;
 
 /// <summary>
+/// 加入我的筆記之請求（Issue #55）：結果＋目標資料夾名（空＝依使用中情境/預設夾，由 App 解析）＋底色 hex。
+/// 由結果視窗依當下「加入至／底色」選擇組成，供 App 加入指定夾並套色。
+/// </summary>
+public readonly record struct NoteAddRequest(QueryResult Result, string FolderName, string ColorHex);
+
+/// <summary>
 /// 浮動結果視窗（[runWi自訂Usr查看聆聽結果]、design ＜III.C.(C)＞ 查詢結果頁）：
 /// 淺粉底、大字；英文組（原文＋KK音標）與中文組（中譯）各有獨立播放鈕與「自動播放」勾選，
 /// 兩組間留空白行。勾選自動播放者，結果一出即朗讀對應語言。
@@ -35,12 +41,15 @@ public partial class ResultWindow : Window
     private bool _closing;
     private readonly UiStateStore _ui;
     private QueryResult? _current; // 目前顯示中的結果（供「加入我的筆記」收藏）
+    private string _activeContextName = ""; // 使用中情境名（供「加入至」預設夾選項標籤與解析，#55）
+    private string _currentColor = "";      // 目前選定底色 hex（空＝無底色，#55）
+    private bool _wiring;                    // 建構下拉/色塊時抑制事件回寫
 
     /// <summary>是否已進入關閉序列（供呼叫端避免對關閉中視窗重複 Close，Issue #32）。</summary>
     public bool IsClosing => _closing;
 
-    /// <summary>按「加入我的筆記」或勾選「自動加入筆記」時觸發（傳目前結果，呼叫端去重加入並 toast，spec#7）。</summary>
-    public event Action<QueryResult>? AddToNotesRequested;
+    /// <summary>按「加入我的筆記」或勾選「自動加入筆記」時觸發（傳加入請求：結果＋目標夾＋底色，#55）。</summary>
+    public event Action<NoteAddRequest>? AddToNotesRequested;
 
     public ResultWindow()
     {
@@ -48,16 +57,137 @@ public partial class ResultWindow : Window
         _ui = UiStateStore.Load();
         ApplyBounds();
         // 移動/縮放/關閉皆由 OS 標準 chrome 提供（Issue #59），不再自訂 HeaderBar 拖曳/Thumb 握把/關閉鈕。
-        AddNoteBtn.Click += (_, _) =>
-        {
-            if (_current is { IsEmpty: false } r)
-            {
-                AddToNotesRequested?.Invoke(r);
-            }
-        };
+        AddNoteBtn.Click += (_, _) => RaiseAdd();
         AutoAddChk.IsChecked = AutoAddSettings.Enabled;
         AutoAddChk.Checked += (_, _) => AutoAddSettings.Enabled = true;
         AutoAddChk.Unchecked += (_, _) => AutoAddSettings.Enabled = false;
+
+        _currentColor = NoteDefaults.ColorHex; // 預設底色（#55）
+        FolderCombo.SelectionChanged += OnFolderChanged;
+        BuildSwatches();
+        BuildFolderCombo(); // 無情境資訊時先以預設建；App 設定 targets 後重建
+    }
+
+    /// <summary>
+    /// 供 App 提供「加入至」下拉之來源（Issue #55）：頂層資料夾名清單＋使用中情境名（空＝無情境）。
+    /// 於顯示結果前呼叫，重建下拉並依 <see cref="NoteDefaults.FolderName"/> 還原選擇。
+    /// </summary>
+    public void SetNoteTargets(IEnumerable<string> topFolderNames, string activeContextName)
+    {
+        _activeContextName = activeContextName ?? "";
+        _folderNames = topFolderNames?.ToList() ?? new List<string>();
+        BuildFolderCombo();
+    }
+
+    private List<string> _folderNames = new();
+
+    private void BuildFolderCombo()
+    {
+        _wiring = true;
+        FolderCombo.Items.Clear();
+        // 第一項＝依使用中情境/預設夾（映射 NoteDefaults.FolderName＝""）
+        FolderCombo.Items.Add(_activeContextName.Length > 0
+            ? $"（使用中情境：{_activeContextName}）"
+            : "（預設：我的筆記）");
+        foreach (var n in _folderNames)
+        {
+            FolderCombo.Items.Add(n);
+        }
+        // 還原選擇：NoteDefaults.FolderName 非空且存在於清單 → 選之；否則選第一項（情境/預設）
+        int idx = 0;
+        if (NoteDefaults.FolderName.Length > 0)
+        {
+            int found = _folderNames.FindIndex(n => string.Equals(n, NoteDefaults.FolderName, StringComparison.Ordinal));
+            idx = found >= 0 ? found + 1 : 0;
+        }
+        FolderCombo.SelectedIndex = idx;
+        _wiring = false;
+    }
+
+    private void OnFolderChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_wiring)
+        {
+            return;
+        }
+        // 第一項＝情境/預設（FolderName＝""）；其餘＝固定夾名。改選即記為預設（#55）
+        NoteDefaults.FolderName = FolderCombo.SelectedIndex <= 0 ? "" : (FolderCombo.SelectedItem as string ?? "");
+        NoteDefaults.Save();
+    }
+
+    /// <summary>目前「加入至」選擇之資料夾名（空＝依使用中情境/預設夾，由 App 解析）。</summary>
+    private string CurrentFolderName() => FolderCombo.SelectedIndex <= 0 ? "" : (FolderCombo.SelectedItem as string ?? "");
+
+    // ---- 底色色塊列（#55：無＋粉彩盤；點選即設當前底色並記為預設；智能配色下自動預選 AI 建議色） ----
+
+    private void BuildSwatches()
+    {
+        SwatchRow.Children.Clear();
+        SwatchRow.Children.Add(MakeSwatch("無", ""));
+        foreach (var (name, hex) in NoteColors.Palette)
+        {
+            SwatchRow.Children.Add(MakeSwatch(name, hex));
+        }
+        HighlightSwatches();
+    }
+
+    private System.Windows.Controls.Border MakeSwatch(string name, string hex)
+    {
+        var swatch = new System.Windows.Controls.Border
+        {
+            Width = 20,
+            Height = 20,
+            CornerRadius = new System.Windows.CornerRadius(4),
+            Background = string.IsNullOrEmpty(hex) ? Brush("#FFFFFF") : Brush(hex),
+            BorderBrush = Brush("#D8B4C2"),
+            BorderThickness = new Thickness(1),
+            Margin = new Thickness(0, 0, 5, 0),
+            Cursor = Cursors.Hand,
+            ToolTip = string.IsNullOrEmpty(hex) ? "無底色" : name,
+            Tag = hex,
+        };
+        if (string.IsNullOrEmpty(hex))
+        {
+            swatch.Child = new TextBlock
+            {
+                Text = "／",
+                Foreground = Brush("#B0688A"),
+                FontSize = 12,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+        }
+        swatch.MouseLeftButtonDown += (_, _) =>
+        {
+            _currentColor = hex;
+            NoteDefaults.ColorHex = hex; // 改選即記為預設（#55）
+            NoteDefaults.Save();
+            HighlightSwatches();
+        };
+        return swatch;
+    }
+
+    /// <summary>依 <see cref="_currentColor"/> 標示選定色塊（加粗深框）。</summary>
+    private void HighlightSwatches()
+    {
+        foreach (var child in SwatchRow.Children)
+        {
+            if (child is System.Windows.Controls.Border b)
+            {
+                bool sel = string.Equals((b.Tag as string) ?? "", _currentColor, StringComparison.OrdinalIgnoreCase);
+                b.BorderBrush = sel ? Brush("#2F6FED") : Brush("#D8B4C2");
+                b.BorderThickness = new Thickness(sel ? 2.5 : 1);
+            }
+        }
+    }
+
+    /// <summary>組成加入請求並觸發（供「加入我的筆記」與自動加入共用，#55）。</summary>
+    private void RaiseAdd()
+    {
+        if (_current is { IsEmpty: false } r)
+        {
+            AddToNotesRequested?.Invoke(new NoteAddRequest(r, CurrentFolderName(), _currentColor));
+        }
     }
 
     /// <summary>套用記住的大小；位置若仍落在螢幕內則還原，否則置中。</summary>
@@ -138,6 +268,10 @@ public partial class ResultWindow : Window
         _current = r;
         BodyPanel.Children.Clear();
 
+        // 智能配色（#55）：AI 依規則建議底色 → 本則預選該色（仍可手動改）；無建議則沿用預設底色
+        _currentColor = string.IsNullOrEmpty(r.SuggestedColor) ? NoteDefaults.ColorHex : r.SuggestedColor;
+        HighlightSwatches();
+
         if (r.IsEmpty)
         {
             BodyPanel.Children.Add(new TextBlock
@@ -176,10 +310,10 @@ public partial class ResultWindow : Window
             speech.Speak(r.Translation, "zh-TW", stopPrevious: !AutoPlaySettings.English);
         }
 
-        // 自動加入筆記（Issue #34）：勾選後查詢成功即去重收藏（App 端 AddToNotes 去重＋toast）
+        // 自動加入筆記（Issue #34）：勾選後查詢成功即去重收藏，套當前資料夾/底色選擇（#55）
         if (AutoAddSettings.Enabled)
         {
-            AddToNotesRequested?.Invoke(r);
+            RaiseAdd();
         }
     }
 
