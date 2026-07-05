@@ -19,6 +19,38 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
     /// <summary>查詢歷史保留筆數預設／下限（缺欄或非正值皆退回此值）。</summary>
     public const int DefaultHistoryMax = 200;
 
+    /// <summary>
+    /// 設定檔正式路徑（Issue #51 遷居）：%APPDATA%\ScreenTrans\appsettings.json，與筆記/歷史/情境
+    /// 三 store 同居——Velopack 更新會換置版本目錄，設定不得存 exe 旁（否則升級即失）。
+    /// </summary>
+    public static string SettingsPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "ScreenTrans", "appsettings.json");
+
+    /// <summary>
+    /// 路徑解析＋一次性遷移：appData 尚無設定檔而 exe 旁有舊檔（含發佈內附之預設檔）→ 複製過去；
+    /// 之後一律讀寫 appData 路徑、exe 旁檔不再讀寫。遷移失敗不致命（Load 缺檔本就退預設）。
+    /// </summary>
+    public static string ResolveSettingsPath(string legacyPath, string appDataPath)
+    {
+        try
+        {
+            if (!File.Exists(appDataPath) && File.Exists(legacyPath))
+            {
+                var dir = Path.GetDirectoryName(appDataPath);
+                if (!string.IsNullOrEmpty(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+                File.Copy(legacyPath, appDataPath);
+            }
+        }
+        catch
+        {
+            // 複製失敗（權限等）沿用 appData 路徑：Load 退預設、Save 會重建
+        }
+        return appDataPath;
+    }
+
     public static AppConfig Load(string path)
     {
         try
@@ -42,9 +74,14 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
         }
     }
 
-    /// <summary>寫回 appsettings.json（僅非機密參數；金鑰一律走環境變數、不落地）。</summary>
+    /// <summary>寫回 appsettings.json（僅非機密參數；金鑰一律走環境變數、不落地）。目錄不存在時建立。</summary>
     public void Save(string path)
     {
+        var parent = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(parent))
+        {
+            Directory.CreateDirectory(parent);
+        }
         var obj = new
         {
             paramModel = Model,

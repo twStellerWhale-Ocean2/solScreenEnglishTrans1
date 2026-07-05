@@ -182,7 +182,7 @@ public partial class OptionsPage : UserControl
         {
             ApplyKeyIfProvided();
             Config = Gather();
-            Config.Save(System.IO.Path.Combine(AppContext.BaseDirectory, "appsettings.json"));
+            Config.Save(AppConfig.SettingsPath); // %APPDATA%（Issue #51 遷居；exe 旁不再寫）
             KeyBox.Clear();
             SetConfig(Config);
             SettingsChanged?.Invoke(Config);

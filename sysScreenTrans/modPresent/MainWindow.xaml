@@ -70,6 +70,11 @@
         <StatusBarItem>
           <TextBlock x:Name="HotkeyText" FontSize="12" Foreground="#8A5A6D"/>
         </StatusBarItem>
+        <Separator x:Name="UpdateSeparator" Background="{StaticResource PinkAccent}" Visibility="Collapsed"/>
+        <StatusBarItem>
+          <!-- 更新就緒提示（Issue #51）：新版靜默下載完成才顯示，平時隱藏 -->
+          <TextBlock x:Name="UpdateText" FontSize="12" Foreground="#2F6FED" Visibility="Collapsed"/>
+        </StatusBarItem>
       </StatusBar>
     </Grid>
   </Grid>

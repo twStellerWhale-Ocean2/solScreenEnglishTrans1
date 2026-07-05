@@ -32,6 +32,7 @@ public partial class App : System.Windows.Application
     private readonly HistoryStore _historyStore = new();
     private readonly NotesStore _notesStore = new();
     private readonly ContextStore _contextStore = new();
+    private UpdateService? _updates;
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "ScreenTrans-error.log");
 
     protected override void OnStartup(StartupEventArgs e)
@@ -49,7 +50,9 @@ public partial class App : System.Windows.Application
 
         DispatcherUnhandledException += OnUnhandled;
 
-        _config = AppConfig.Load(Path.Combine(AppContext.BaseDirectory, "appsettings.json"));
+        // 設定檔在 %APPDATA%（Issue #51 遷居：Velopack 更新換置版本目錄，存 exe 旁會失）；exe 旁舊檔一次性遷移
+        _config = AppConfig.Load(AppConfig.ResolveSettingsPath(
+            Path.Combine(AppContext.BaseDirectory, "appsettings.json"), AppConfig.SettingsPath));
         var keyReady = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
         _speech = new SpeechService(_config.Voice);
 
@@ -86,7 +89,10 @@ public partial class App : System.Windows.Application
         _contextPage = new ContextPage(_contextStore,
             bytes => new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries).DescribeImageAsync(bytes));
 
-        _main = new MainWindow(_notesPage, _historyPage, _contextPage, _optionsPage, new AboutPage());
+        _updates = new UpdateService();
+        _updates.UpdateReady += v => Dispatcher.BeginInvoke(() => _main?.ShowUpdateReady(v));
+
+        _main = new MainWindow(_notesPage, _historyPage, _contextPage, _optionsPage, new AboutPage(_updates));
         _main.RefreshStatus(keyReady, HotkeyDisplay());
         // 主視窗被帶到前景時關 topmost 結果卡片（否則會蓋住主視窗）
         _main.Activated += (_, _) => CloseResult();
@@ -96,6 +102,9 @@ public partial class App : System.Windows.Application
         _hotkey = new HotKeyService();
         _hotkey.HotKeyPressed += OnHotKey;
         RegisterHotkeyOrWarn();
+
+        // 啟動即背景檢查更新（Issue #51）：靜默下載、就緒才提示；未安裝形態/失敗皆靜默跳過
+        _ = _updates.CheckAndDownloadAsync();
     }
 
     /// <summary>明確結束常駐：允許主視窗真正關閉後 Shutdown（關主視窗本身只收合、不結束）。</summary>
@@ -286,6 +295,7 @@ public partial class App : System.Windows.Application
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _updates?.ApplyOnExit(); // 新版已就緒者結束時掛起套用（下次啟動即新版；無則 no-op）
         _main?.AllowClose();
         _hotkey?.Dispose();
         (_speech as IDisposable)?.Dispose();

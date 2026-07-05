@@ -243,6 +243,86 @@ public class AppConfigTests
         finally { File.Delete(path); }
     }
 
+    private static string TempDir()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), $"screentrans-cfgdir-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    [Fact]
+    public void ResolveSettingsPath_LegacyOnly_MigratesToAppData()
+    {
+        // Issue #51：%APPDATA% 尚無檔而 exe 旁有舊檔 → 一次性複製（升級不洗設定），回傳 appData 路徑
+        var legacyDir = TempDir();
+        var appDataDir = TempDir();
+        var legacy = Path.Combine(legacyDir, "appsettings.json");
+        var target = Path.Combine(appDataDir, "sub", "appsettings.json"); // 目標目錄不存在也要能建
+        File.WriteAllText(legacy, "{\"paramModel\":\"gpt-4o\"}");
+        try
+        {
+            Assert.Equal(target, AppConfig.ResolveSettingsPath(legacy, target));
+            Assert.True(File.Exists(target));
+            Assert.Equal("gpt-4o", AppConfig.Load(target).Model);
+        }
+        finally
+        {
+            Directory.Delete(legacyDir, true);
+            Directory.Delete(appDataDir, true);
+        }
+    }
+
+    [Fact]
+    public void ResolveSettingsPath_AppDataExists_DoesNotOverwrite()
+    {
+        // 兩邊都有檔 → %APPDATA% 為準（exe 旁為發佈內附預設檔，不得倒灌覆蓋使用者設定）
+        var legacyDir = TempDir();
+        var appDataDir = TempDir();
+        var legacy = Path.Combine(legacyDir, "appsettings.json");
+        var target = Path.Combine(appDataDir, "appsettings.json");
+        File.WriteAllText(legacy, "{\"paramModel\":\"legacy-model\"}");
+        File.WriteAllText(target, "{\"paramModel\":\"user-model\"}");
+        try
+        {
+            Assert.Equal(target, AppConfig.ResolveSettingsPath(legacy, target));
+            Assert.Equal("user-model", AppConfig.Load(target).Model);
+        }
+        finally
+        {
+            Directory.Delete(legacyDir, true);
+            Directory.Delete(appDataDir, true);
+        }
+    }
+
+    [Fact]
+    public void ResolveSettingsPath_NeitherExists_ReturnsAppDataPath_NoFileCreated()
+    {
+        // 全新安裝且無舊檔 → 不產檔（Load 缺檔退預設、Save 時才建）
+        var appDataDir = TempDir();
+        var target = Path.Combine(appDataDir, "appsettings.json");
+        try
+        {
+            Assert.Equal(target, AppConfig.ResolveSettingsPath(
+                Path.Combine(appDataDir, "no-such-legacy.json"), target));
+            Assert.False(File.Exists(target));
+        }
+        finally { Directory.Delete(appDataDir, true); }
+    }
+
+    [Fact]
+    public void Save_CreatesMissingParentDirectory()
+    {
+        // Issue #51：首次於 %APPDATA%\ScreenTrans 存檔時目錄可能不存在
+        var dir = TempDir();
+        var path = Path.Combine(dir, "nested", "appsettings.json");
+        try
+        {
+            new AppConfig("gpt-4o-mini", 15, "").Save(path);
+            Assert.True(File.Exists(path));
+        }
+        finally { Directory.Delete(dir, true); }
+    }
+
     [Fact]
     public void Load_LegacyConfigWithTtsProviderModel_IgnoresExtraKeys()
     {

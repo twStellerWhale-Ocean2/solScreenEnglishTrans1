@@ -2,6 +2,24 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [0.15.0] - 2026-07-05
+
+Issue #51 增量：換 **Velopack** 安裝式散佈＋啟動自動檢查更新（差量升級）。
+
+### 新增
+- **自動更新**：啟動時背景檢查 GitHub Releases 更新源、**靜默下載**；就緒後底部狀態列提示
+  「新版 vX 已就緒」、主視窗標題列同步標示（工作列按鈕可見）、「關於」分頁可「立即重啟更新」
+  （未按者結束程式時掛起套用、下次啟動即新版）；
+  「關於」分頁另設手動「檢查更新」（回「已是最新版本」或就緒態）。dev 裸跑（未安裝形態）整段跳過；
+  離線／來源不可達靜默略過、不影響查詢主動線。更新源可由 `SCREENTRANS_UPDATE_URL` 覆寫（測試縫）。
+- **散佈形態**：GitHub Release 資產改 `Setup.exe`（安裝式、支援差量更新）＋`Portable.zip`（免安裝）
+  ＋`full.nupkg`＋`releases.win.json`（更新源），由 `vpk pack` 產出；發佈不再用 `PublishSingleFile`。
+
+### 變更
+- **設定檔遷居**：`appsettings.json` 改存 `%APPDATA%\ScreenTrans\`（與筆記/歷史/情境同居）——
+  Velopack 更新會換置版本目錄，設定存 exe 旁會被升級洗掉；首次啟動自 exe 旁一次性遷移既有檔。
+- 進入點改自訂 `Program.Main`（`VelopackApp.Build().Run()` 承接安裝/更新 hooks，csproj `StartupObject`）。
+
 ## [0.14.2] - 2026-07-05
 
 Issue #49 增量：單檔發佈納入 WPF 原生庫——裸 exe 於乾淨目錄可獨立執行（發佈列車 v0.14.1 成品層 smoke 攔獲）。

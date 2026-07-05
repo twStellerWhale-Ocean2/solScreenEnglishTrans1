@@ -154,7 +154,7 @@ solScreenEnglishTrans1 畫面選區查詢工具，對內以單一系統實現（
 
 > 描述本層部署作法：大方向。
 
-* **免安裝單一 exe**：self-contained 發佈，複製即用；系統匣常駐、不開主視窗。
+* **安裝式散佈＋自動更新（Velopack，Issue #51）**：GitHub Release 掛 `Setup.exe`（安裝即用）與 `Portable.zip`（免安裝解壓即用）；程式啟動時背景檢查更新、靜默下載、重啟自動套用（支援差量升級）；系統匣常駐、不開主視窗。
 * 開發 REPO＝`twMoonBear-Laboratory/solScreenEnglishTrans1`（私有）。
 * productReadme 為自然語言操作腳本，供自然人或 AI Agent 依步驟執行。
 
@@ -332,7 +332,7 @@ SYS -.->|"常駐於"| ENV
 > 描述本層部署作法。
 
 * **首版實作範圍（MVP）**：單次查詢一圈（常駐→熱鍵→框選→查詢→顯示朗讀→關閉）做深做透，過逐頁審查後才擴充。
-* **方案層（e2e 環境）**：於 Windows 11 實機以發佈之單一 exe 執行 ＜III.D＞ intTest 與 ＜I.D＞ e2eTest。
+* **方案層（e2e 環境）**：於 Windows 11 實機以 Velopack 安裝之發佈版執行 ＜III.D＞ intTest 與 ＜I.D＞ e2eTest。
 * 各建置單元之建置／測試／部署指令見 ＜III.C.(D) 部署做法＞。
 
 ## D. 規格效益
@@ -451,6 +451,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
   * **[modQuery模組] 應用情境儲存契約**（spec#9）：`ContextStore` 讀寫 `contexts.json`（命名情境清單：id／名稱／描述／圖片檔名／使用中），圖片存 `%APPDATA%\ScreenTrans\contexts\{id}.png`；CRUD、**單一使用中**、`ActiveText()` 為查詢注入來源（沿 spec#8 之 `BuildPrompt`）；讀寫失敗退空／降級、金鑰不入情境；**相容遷移**舊 `paramContextHint`（清單空且 hint 非空→建預設情境設使用中）。CRUD／使用中／注入／遷移為不依賴 UI 之純函式、可單元測試。**invariant**：至多一則使用中；無使用中＝查詢回歸現行；`contexts.json` 毀損退空且不影響查詢；情境與金鑰隔離。
   * **[modQuery模組] 圖片情境解釋契約**（spec#9）：`QueryService.DescribeImageAsync` 以單次 vision 呼叫回一兩句繁中情境描述純文字（非三欄 schema），沿用金鑰／重試／降級；**僅於使用者為情境加入圖片時呼叫、非每次查詢**，查詢仍只注入文字（成本/延遲不變）。**invariant**：回純文字描述或明確錯誤降級；金鑰不隨圖入日誌。
   * **[modPresent模組] 應用情境分頁契約**（spec#9）：統一主視窗『情境』分頁（`ContextPage`）：左命名情境清單（名稱＋縮圖＋使用中標記），右編輯（名稱、描述多行、貼上剪貼簿圖片／上傳畫面檔、「以圖片自動解釋」→`DescribeImageAsync` 填描述供手動補充、設為使用中、刪除、儲存）。查詢注入來源＝使用中情境之描述文字。**invariant**：情境變更即落地 `contexts.json`；使用中切換即改變後續查詢注入；vision 解釋非同步、UI 執行緒不阻塞。
+  * **應用自動更新契約**（Issue #51）：Velopack 整合——自訂 `Program.Main` 首句 `VelopackApp.Build().Run()` 承接安裝/更新 hooks；啟動後背景由 `UpdateService` 檢查更新源（預設 GitHub Releases；`SCREENTRANS_UPDATE_URL` 可覆寫為 URL/本地路徑 feed，測試縫）→ 有新版即**靜默下載** → 底部狀態列與關於分頁顯示「新版已就緒」、**主視窗 OS 標題列於「ScreenTrans」後追加「— 新版 vX 已就緒」**（工作列按鈕同步可見；USR 回饋）、關於分頁提供「立即重啟更新」→ 重啟即套用（新進程標題自然回復）；未按者於程式結束時掛起套用（下次啟動即新版）。關於分頁另提供手動「檢查更新」。**dev 裸跑（未安裝形態，`IsInstalled=false`）更新流程整段跳過**；檢查/下載失敗（離線、來源不可達）靜默略過、不打擾。**設定檔遷居**：`appsettings.json` 改存 `%APPDATA%\ScreenTrans\appsettings.json`（與三 store 同居；Velopack 更新會換置版本目錄，設定不得存 exe 旁），首啟自 exe 旁一次性遷移既有檔。**invariant**：更新流程任何失敗不影響查詢主動線；套用更新後筆記/歷史/情境/設定（`%APPDATA%`）全數留存；金鑰仍僅在環境變數、不隨更新流程落地。
   * **單一實例 invariant**：重複啟動偵測既有實例並提示，不重複註冊熱鍵。
 * **模組間介面（in-process）**：[modCapture模組]→[modQuery模組]＝`ICaptureResult`（選區影像＋來源螢幕資訊）；[modQuery模組]→[modPresent模組]＝[datIntf自訂查詢結果格式]（成功）或錯誤描述（降級）。C# interface 簽章歸 code。
 * **對外介面**：[modQuery模組]→OpenAI＝[comIntf通用HTTPS連線]＋[apiIntf標準OPENAI的API協定]；[modPresent模組]→Windows 語音＝[techItem語音合成]。
@@ -491,7 +492,8 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 * **語音合成**：`System.Speech.Synthesis`（SAPI，離線免金鑰）；語音以 `GetInstalledVoices()` 列舉供選擇。
 * **本機查詢歷史**：`System.Text.Json` 序列化之 `%APPDATA%\ScreenTrans\history.json`（與 `ui-state.json` 同資料夾、各自檔名；讀寫失敗退空清單、不致命）。
 * **本機我的筆記**：`System.Text.Json` 序列化之 `%APPDATA%\ScreenTrans\notes.json`（資料夾樹＋條目＋順序；讀寫失敗退空結構、不致命）。
-* **外部端點**：OpenAI vision API（HTTPS）。
+* **自動更新**：Velopack（`Update.exe`＋版本目錄結構、差量 nupkg；更新源＝GitHub Release 資產 `releases.win.json`）。
+* **外部端點**：OpenAI vision API（HTTPS）；GitHub Releases（HTTPS，更新檢查與下載）。
 
 ## C. 組態設定
 
@@ -505,10 +507,14 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 * [modQuery模組]：`HttpClient`（內建）＋`System.Text.Json`（解析與 schema 驗證）；OpenAI chat completions vision（structured output），模型預設 `gpt-4o-mini`；暫時性錯誤以自寫指數退避重試迴圈（不引入第三方套件），送出單次請求與退避延遲皆接縫化以供單元測試注入。另新增 `HistoryStore`：`System.Text.Json` 讀寫 `history.json`（仿 `UiStateStore` 存 `%APPDATA%\ScreenTrans\`）、成功查詢後追加、依 `paramHistoryMax` 環形截汰最舊、讀寫失敗退空清單／靜默降級；序列化與截汰為純函式、抽可測。另新增 `NotesStore`：`System.Text.Json` 讀寫 `notes.json`（資料夾＋**條目順序**；**資料夾同層順序不入手動語意——一律 `NaturalCompare`/`SortFolders` 名稱自然排序**，Issue #42），加入去重（英文原文正規化為 key）、資料夾 CRUD、條目同夾排序/跨夾移動、`ClearEntries`、`SetEntryColor`（`NoteEntry.Color` 底色換置）皆為純函式抽可測、讀寫失敗退空／靜默降級。`BuildPayload` 之 text prompt 組裝抽為純函式並接受 `paramContextHint`（`AppConfig.Context`）：非空時附加參考情境片段、空時回原提示，供單元測試涵蓋。另新增 `ContextStore`（`contexts.json`：命名情境清單、單一使用中、`ActiveText` 注入來源、舊 `paramContextHint` 相容遷移；純函式抽可測）與 `QueryService.DescribeImageAsync`（單次 vision 回純文字情境描述、`ExtractContent` 解析；`SendOnceAsync` 泛化收 payload 供三欄查詢與圖片解釋共用）。
 * [modPresent模組]：WPF 視窗＋**語音合成**＝[techItem語音合成]：`System.Speech.Synthesis`（SAPI，離線、免金鑰、零外部依賴）朗讀，中英佇列循序播放；語音以 `SpeechSynthesizer.GetInstalledVoices()` 列舉、由設定選定並存 `paramTtsVoice`（`SelectVoice`）；語音缺失時明確提示、不當機。另新增 `HistoryWindow`（WPF 視窗：左日期分組清單、右條目堆疊；單筆重聽／檢視／刪除、頂部清除全部），重用抽出之三欄詳情/發音組件；結果視窗新增「展示歷史紀錄」入口按鈕。再新增 `ToastNotifier`（右下角無邊框 topmost 小視窗、`Storyboard` 淡入淡出、不搶焦、逾時自動關閉）；結果視窗與歷史條目新增「加入我的筆記」入口，共用同一收藏動作來源。本增量整合為 **`MainWindow`（Office 式分頁殼）** ＋ `NotesPage`／`HistoryPage`／`OptionsPage`／`AboutPage`（`UserControl`）取代各獨立維運/檢視視窗（`DockWindow`／`HistoryWindow`／`NotesWindow`／`SettingsWindow`）；`MainWindow` 為標準視窗（`ShowInTaskbar`、最小化收合、關閉＝收合非結束、工作列還原）。筆記分頁以標準 `TreeView`＋`HierarchicalDataTemplate` 承載**多層樹**、以 `DragDrop` 移動節點（防成環）。結果視窗改**底部工具列**（「加入我的筆記」＋「自動加入筆記」勾選，靜態 `AutoAddNote`）、移除歷史/筆記入口按鈕。淺粉底＋`assets/icon.png`（小女孩 logo）背景以**共用樣式資源**（`App.xaml` 資源字典）套用於主視窗與各分頁。再新增 `ContextPage`（主視窗「情境」分頁：命名情境清單＋縮圖＋編輯區；`Clipboard.GetImage` 貼圖、`OpenFileDialog` 上傳、「以圖片自動解釋」呼叫 `DescribeImageAsync`、設為使用中）。
 
+* **自動更新（app 層，Issue #51）**：`Velopack` NuGet `1.2.0`（Squirrel 後繼、.NET 生態主流）——`VelopackApp.Build().Run()` 置自訂 `Program.Main` 首句（csproj `StartupObject` 指定、`[STAThread]`）；`UpdateService` 封裝 `UpdateManager`＋`GithubSource`（預設）或 `SCREENTRANS_UPDATE_URL` 指定之 URL/本地路徑 feed，`CheckForUpdatesAsync`→`DownloadUpdatesAsync`→`ApplyUpdatesAndRestart`（關於頁「立即重啟更新」）／`WaitExitThenApplyUpdates`（結束時掛起套用）；`IsInstalled=false`（dev 裸跑）整段跳過；UI 僅收事件、狀態字串歸 `AppStatusText` 單源。`AppConfig` 讀寫路徑改 `%APPDATA%\ScreenTrans\appsettings.json`（`ResolveSettingsPath` 路徑解析＋exe 旁舊檔一次性遷移，純函式、可單元測試）。
+
 ### (B) 關鍵參數
 
 > 列本層關鍵參數／組態；列舉即可、不解釋。
 
+* **appsettings.json 存放**（Issue #51 起）：`%APPDATA%\ScreenTrans\appsettings.json`——Velopack 更新會換置版本目錄，設定不得存 exe 旁；首啟若 `%APPDATA%` 無檔而 exe 旁有舊檔則一次性遷移，exe 旁檔此後不再讀寫。
+* **Env（更新測試縫）**：`SCREENTRANS_UPDATE_URL`（選填；覆寫更新源為 URL 或本地路徑 feed，僅供測試/自訂佈署，不設＝GitHub Releases）。
 * **Env**：`OPENAI_API_KEY`（[modQuery模組]；僅此一機密；可經系統匣「設定…」寫入使用者環境變數，仍不落地於程式／設定檔）。
 * **appsettings.json**：`paramModel=gpt-4o-mini`、`paramQueryTimeoutSec=15`（查詢逾時秒數；**非正值（≤0）於組態讀取邊界套用安全下限 15**，令逾時機制不致因不當組態即刻取消而失效）、`paramQueryMaxRetries=2`（查詢暫時性錯誤最大重試次數；0＝不重試）、`paramTtsVoice=`（空＝系統預設英文語音；值為 `GetInstalledVoices()` 列舉之語音名稱）、`paramContextHint=`（應用情境提示；預設空＝現行提示行為；非空時查詢注入為參考情境）。
 * **appsettings.json（喚起快捷鍵）**：`paramHotkey`＝可序列化綁定（預設 `Alt+L`）——鍵盤組合以修飾鍵集合＋主鍵表達、滑鼠鍵以中鍵／`XButton1`／`XButton2`／左右同按表達；於系統匣「設定」監聽擷取、`Esc` 取消，存回後重啟沿用。
@@ -527,12 +533,12 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 | --- | --- | --- | --- | --- | --- |
 | 選區遮罩頁 | 遊戲查詢／teamSop#1.1 | capture | 全螢幕 45% 變暗遮罩＋十字游標＋accent 橡皮筋選框（差顯反白）＋頂部一行提示（`拖曳框選要查詢的文字，ESC 取消`） | #1.1.1 | 桌面 overlay（topmost） |
 | 查詢結果頁 | 遊戲查詢／teamSop#1.2·1.3·4.1 | query＋present | 淺粉底圓角大字卡片（可縮放、記住位置大小；預設約 560×380）：查詢中＝`辨識翻譯中…`；完成＝三區直排（原文→KK 音標→中譯，**不加欄目標示**、以字級/色彩/字體分層一望即知），英文原文逐字可點（點詞即單獨發音、游標呈可點狀），英文組與中文組各附獨立整句播放鈕與「自動播放」勾選；**縮放握把於視窗右下角**（Windows 慣例、SizeNWSE）；**卡片底部工具列**置「加入我的筆記」按鈕與「自動加入筆記」勾選（類比自動播放，勾選後查詢成功即去重加入並 toast）；**不再置歷史／我的筆記入口**（改由統一主視窗）；失敗＝錯誤訊息＋下一步指引 | #1.2.1·#1.3.1·#4.1.1 | 桌面浮動視窗（topmost、可拖曳縮放） |
-| 統一主視窗（Office 式殼） | 工具維保／teamSop#2.2 | 維運 | **標準工作列視窗**（`ShowInTaskbar`、可最小化收合、關閉（✕）＝收合非結束、點工作列／Alt+Tab 還原）：**頂部功能列分頁**（每個分頁鈕採**圖示在上、文字在下**，序：🖼情境／📒筆記／🕘歷史／⚙選項／ℹ關於；**Segoe MDL2 Assets 字圖**——情境=Picture 風景、筆記=QuickNote、歷史=History、選項=Setting 齒輪、關於=Info）＋下方對應功能頁；**內容區不重複視窗標題**（OS 標題列已有）；**底部狀態列**（`StatusBar`：金鑰狀態＋當前快捷鍵）；淺粉底（承結果卡片色）＋小女孩 logo 背景浮水印；預設開啟分頁維持「筆記」。取代原各獨立維運/檢視視窗，為第一線常顯主控入口 | #2.2.1 | 桌面視窗（工作列按鈕、分頁殼） |
+| 統一主視窗（Office 式殼） | 工具維保／teamSop#2.2 | 維運 | **標準工作列視窗**（`ShowInTaskbar`、可最小化收合、關閉（✕）＝收合非結束、點工作列／Alt+Tab 還原）：**頂部功能列分頁**（每個分頁鈕採**圖示在上、文字在下**，序：🖼情境／📒筆記／🕘歷史／⚙選項／ℹ關於；**Segoe MDL2 Assets 字圖**——情境=Picture 風景、筆記=QuickNote、歷史=History、選項=Setting 齒輪、關於=Info）＋下方對應功能頁；**內容區不重複視窗標題**（OS 標題列已有）；**底部狀態列**（`StatusBar`：金鑰狀態＋當前快捷鍵＋**更新就緒提示**〔新版已下載時顯示，平時隱藏；同時 OS 標題列追加「— 新版 vX 已就緒」〕）；淺粉底（承結果卡片色）＋小女孩 logo 背景浮水印；預設開啟分頁維持「筆記」。取代原各獨立維運/檢視視窗，為第一線常顯主控入口 | #2.2.1 | 桌面視窗（工作列按鈕、分頁殼） |
 | 筆記分頁 | 遊戲查詢／teamSop#4.2 | present | 主視窗『筆記』分頁：左側**多層資料夾樹如檔案總管**——頂部工具列僅**[建立資料夾]**一鈕（建立即進原地更名）；標準樹節點＋**右鍵選單**（新增子資料夾／更名〔`F2`，**原地編輯**：Enter 確認、Esc 取消〕／刪除〔`Del`，確認對話〕）；**同層一律依名稱自動排序**（檔案總管式**自然排序**：數字段依數值，「新資料夾 (2)」＜「新資料夾 (10)」；新增/更名/移動後即歸位）；**拖曳移動節點＝只改所屬父夾**（滑過目標夾**高亮**、防自我或子孫巢狀、同層無手動排序）。右側選取夾之條目（新在上、可拖曳排序〔顯示**插入位置指示線**〕、**亦可拖至左樹任一資料夾改歸屬**〔握把游標＝**四向移動 SizeAll**〕、可設**粉彩底色**〔粉紅/粉藍/粉綠/粉黃/粉紫、預設白、隨 notes.json 留存〕），右欄頂**[清除全部]**（清除選取夾內全部條目、確認對話載明夾名筆數、空夾停用）；條目操作循 Windows 清單慣例——**右鍵選單**（`▶ 播音`／`檢視`／`底色 ▸` 色塊子選單〔含無底色、目前色打勾〕／`刪除`）＋**雙擊＝檢視**（回三欄中英），**尾端不設常駐按鈕列**；收藏由結果頁「加入我的筆記」寫入、toast 回饋 | #4.1.1·#4.2.1 | 主視窗分頁 |
 | 歷史分頁 | 遊戲查詢／teamSop#3.1·3.2·4.1 | present | 主視窗『歷史』分頁：左側依**日期分組**（**頂端對齊、上不留空**）、右側該日條目（新在上、最舊在下，**緊湊列高**——單行原文＋時刻併列），每筆前端「＋筆記」（去重＋toast）、尾端 `▶ 播音`／`檢視`（回三欄中英）／`刪除`；「清除全部」置**右欄頂**；空清單提示 | #3.1.1·#3.2.1·#4.1.1 | 主視窗分頁 |
 | 情境分頁 | 遊戲查詢／teamSop#5.1·5.2 | query（設定） | 主視窗『情境』分頁：左側命名情境清單（名稱＋縮圖＋使用中標記）、右側編輯（名稱、描述多行、**貼上剪貼簿圖片／上傳檔**、「以圖片自動解釋」→vision 產描述、設為使用中、刪除、儲存）；查詢注入使用中情境描述 | #5.1.1·#5.2.1 | 主視窗分頁 |
 | 選項分頁 | 工具維保／teamSop#2.2 | 維運 | 主視窗『選項』分頁（即設定、版面美化），區塊序依使用頻率與關聯：①**喚起快捷鍵**〔顯示當前綁定＋「變更」監聽鍵鼠、`Esc` 取消〕②**AI 辨識翻譯（OpenAI）**〔API 金鑰（寫使用者環境變數、不落地）＋查詢模型，同屬 AI 辨識〕③**朗讀語音**〔Windows 已安裝、含「測試發音」鈕〕；頁尾僅「儲存」；分組卡片、淺粉底 | #2.2.1 | 主視窗分頁 |
-| 關於分頁 | 工具維保／teamSop#2.2 | 維運 | 主視窗『關於』分頁：程式名／版本、版權宣告、聯絡 email（`carlton0521@gmail.com`）、小女孩 logo | #2.2.1 | 主視窗分頁 |
+| 關於分頁 | 工具維保／teamSop#2.2 | 維運 | 主視窗『關於』分頁：程式名／版本、版權宣告、聯絡 email（`carlton0521@gmail.com`）、小女孩 logo；**更新區**——「檢查更新」鈕（回「已是最新版本」／「新版 vX 已就緒」；失敗**如實回報**「無法檢查更新」、不誤報最新）、新版就緒時顯示「立即重啟更新」鈕（重啟套用）；dev 裸跑（未安裝）隱藏更新區 | #2.2.1 | 主視窗分頁 |
 | 系統匣選單頁（輔助） | 工具維保／teamSop#2.2·2.3 | 維運 | tray 圖示右鍵選單（**主視窗之輔助鏡像**）：狀態列（金鑰備妥／缺失）、開啟主視窗、查詢歷史、我的筆記、選項、關於、結束（前五開主視窗至該分頁） | #2.2.1 | 系統匣 |
 
 > **設計原則**：每頁只服務一個專業目的（遮罩＝選取、卡片＝呈現朗讀、主視窗分頁＝維運與檢視）；統一主視窗（Office 式分頁殼）與系統匣選單頁為**同一組動作之兩個入口鏡像**（動作來源單一），主視窗為第一線常顯入口、tray 為輔助。安裝金鑰與移除（#2.1.1／#2.3.1）走 OS 標準設定（檔案總管＋環境變數），非本系統頁面。`prsnSop→頁` 以 ＜B.(C)＞ 為準、本節為反查。
@@ -561,8 +567,8 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 
 > 建置／測試／部署指令（繼承 techStack；GATE 由此取建置/測試指令）。
 
-* [sysScreenTrans系統]：繼承 [techStackDotnetWin]（候選）——**建置指令** `dotnet build -c Release`、**發佈指令** `dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true`（csproj 內建 `IncludeNativeLibrariesForSelfExtract=true`：WPF 原生庫入 bundle，**裸 exe 於乾淨目錄可獨立執行**，Issue #49）、**測試指令** `dotnet test`、**部署方法** 單一 exe 手動放置（免安裝）。
-* **方案層**：於 Windows 11 實機以發佈 exe 跑 intTest／e2eTest。
+* [sysScreenTrans系統]：繼承 [techStackDotnetWin]（候選）——**建置指令** `dotnet build -c Release`、**發佈指令** `dotnet publish sysScreenTrans -c Release -r win-x64 --self-contained -p:Version={VERSION} -o publish`（**不用** `PublishSingleFile`——Velopack 打包以目錄為單位、官方明示不需單檔；csproj 之 `IncludeNativeLibrariesForSelfExtract=true` 對非單檔發佈惰性無害、留置以保單檔路徑健康，Issue #49/#51）、**打包指令** `vpk pack --packId ScreenTrans --packVersion {VERSION} --packDir publish --mainExe ScreenTrans.exe`（`dotnet tool` `vpk`；產 `Setup.exe`／`Portable.zip`／`full.nupkg`〔有前版基準時另產 delta〕／`releases.win.json`）、**測試指令** `dotnet test`、**部署方法** GitHub Release 掛上述打包資產（即自動更新之更新源；新使用者跑 `Setup.exe`，既有安裝啟動時自動更新）。
+* **方案層**：於 Windows 11 實機以 Velopack 安裝版跑 intTest／e2eTest。
 
 ## D. 規格效益
 
@@ -570,13 +576,13 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 
 ### (A) 規格要求
 
-> 模組層品管測試：遞增整合（intTest）。另模組層單元測試（query 解析、選區座標換算、present 段英文單字切分純函式〔標點剝除／撇號連字號與大小寫保留／多空白邊界〕、筆記資料夾預設名唯一化 `NextNewFolderName`、自然排序 `NaturalCompare`/`SortFolders`、清除 `ClearEntries`、條目底色 `SetEntryColor` 等，涵蓋度目標 ≥80%）與介面測試（datIntf 契約一致）全文歸 code。
+> 模組層品管測試：遞增整合（intTest）。另模組層單元測試（query 解析、選區座標換算、present 段英文單字切分純函式〔標點剝除／撇號連字號與大小寫保留／多空白邊界〕、筆記資料夾預設名唯一化 `NextNewFolderName`、自然排序 `NaturalCompare`/`SortFolders`、清除 `ClearEntries`、條目底色 `SetEntryColor`、設定路徑解析與一次性遷移 `ResolveSettingsPath` 等，涵蓋度目標 ≥80%）與介面測試（datIntf 契約一致）全文歸 code。
 
 **遞增整合測試（intTest）**：
 
 | # | 驗證 WI | 基底 | 步驟 → 預期 |
 | --- | --- | --- | --- |
-| 01 | setWi自訂Usr安裝設定金鑰 | 無 | 發佈 exe、設 `OPENAI_API_KEY` → 檔案就位、環境變數存在非空；**裸 exe 單獨拷至乾淨目錄可啟動運行**（單檔含 WPF 原生庫、不依賴 publish 夾散落 DLL） |
+| 01 | setWi自訂Usr安裝設定金鑰 | 無 | 執行 `Setup.exe` → 安裝至使用者目錄、捷徑就位、可啟動；設 `OPENAI_API_KEY` → 環境變數存在非空；`Portable.zip` 解壓任意乾淨目錄亦可啟動運行（Issue #51 起取代裸 exe 拷貝驗收） |
 | 02 | setWi自訂Usr啟動結束常駐 | 01 | 啟動 exe → 常駐主控入口以工作列按鈕呈現（Alt+Tab 可尋）、預設最小化不擋畫面、系統匣圖示出現；明確結束 → 程序退出、熱鍵與系統匣釋放；重複啟動 → 單一實例提示、不重複建立主控視窗 |
 | 03 | runWi自訂Usr熱鍵喚起框選（喚起） | 02 | 按 `Alt+L`（左右各測） → 遮罩 <300ms 出現；按 `ESC` → 遮罩消失、無殘影 |
 | 04 | runWi自訂Usr熱鍵喚起框選（框選） | 03 | 拖曳框選 → 取得選區影像；多螢幕／125%／150% DPI 下與框選範圍 0px 偏移 |
@@ -584,7 +590,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 | 06 | runWi自訂Sys辨識翻譯選區（降級／重試） | 02 | 未設金鑰／400／401 → 立即明確錯誤、不重試；斷網／逾時／429／5xx → 有限次指數退避重試後成功則正常顯示、耗盡仍失敗則明確錯誤；全程程式續存活（暫時性重試後成功、永久性不重試之分類另有模組層單元測試涵蓋） |
 | 07 | runWi自訂Usr查看聆聽結果（顯示） | 05 | 結果視窗顯示三區內容 → 與查詢結果一致；可拖曳移動與縮放、關閉後再開還原上次位置大小 |
 | 08 | runWi自訂Usr查看聆聽結果（朗讀） | 07 | 點播放 → Windows 語音播放呼叫發生（測試攔截驗證，無網路／無金鑰亦可）；於設定選擇語音 → 後續播放採該語音（缺語音時提示不當機）；重複點 → 先停再播；切換到其他視窗（失焦）→ 結果視窗保留不自動關閉；`ESC`／關閉鈕 → 視窗關閉；連續再查一次 → 前一結果視窗由喚起流程關閉取代（同時至多一個）|
-| 09 | setWi自訂Usr移除工具 | 02 | 刪除 exe＋環境變數 → 無殘留檔案、程序、開機項 |
+| 09 | setWi自訂Usr移除工具 | 02 | 「設定 → 應用程式」解除安裝（Portable 版＝刪目錄）＋刪環境變數 → 無殘留程序、開機項；`%APPDATA%\ScreenTrans` 使用者資料由使用者自行決定刪留 |
 | 10 | runWi自訂Usr熱鍵喚起框選（自訂快捷鍵） | 02 | 設定→變更快捷鍵→監聽模式：按鍵盤組合（如 `Ctrl+Shift+F`）→ 顯示並存綁定，重啟後以該組合喚起遮罩；改綁滑鼠鍵（中鍵／側鍵／左右同按）→ 以該滑鼠鍵喚起、且滑鼠一般移動點擊無可感延遲；監聽中按 `Esc` → 取消不變更；存設定後 `paramQueryMaxRetries`／既有值不被重置 |
 | 11 | runWi自訂Usr查看聆聽結果（單字發音） | 07 | 點選英文原文中任一單字 → Windows 語音以該單字（`en-US`）單獨播放呼叫發生（測試攔截驗證，無網路／無金鑰亦可）；含標點之詞（如 `world.`／`"quote"`／`it's`／`co-op`）→ 朗讀詞為剝除前後標點後之原詞、內部撇號/連字號與大小寫保留；點選單字後整句播放鈕仍可用、自動播放不受影響 → 逐字與整句發音並存 |
 | 12 | setWi自訂Usr啟動結束常駐（常駐主控入口） | 02 | 啟動 → 主控視窗以工作列按鈕呈現、Alt+Tab／點工作列可還原，顯示金鑰狀態與當前喚起快捷鍵；按主控視窗 ✕（關閉）→ 收合（最小化/隱藏），程序續存、熱鍵仍可喚起遮罩；經主控頁或系統匣「結束」→ 退出常駐、熱鍵與系統匣釋放、無殘留；換資料夾（模擬換版/換路徑）重啟 → 仍以工作列／Alt+Tab 尋得、不需重設系統匣顯示 |
@@ -604,6 +610,7 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 | 26 | runWi自訂Usr查看聆聽結果（版面慣例） | 07 | 查詢結果卡片三區**無**「原文/音標/中譯」欄目標示、內容以字級/色彩/字體分層一望即知；縮放握把位於**視窗右下角**（底部工具列右角、SizeNWSE）且不遮「加入我的筆記／自動加入筆記」；選項分頁區塊序＝快捷鍵→AI 辨識翻譯（金鑰＋模型）→朗讀語音（含測試發音）、頁尾僅「儲存」；歷史分頁日期欄頂端對齊、「清除全部」在右欄頂 |
 | 27 | runWi自訂Usr管理我的筆記（名稱排序/清除全部） | 20 | 筆記樹同層一律依名稱**自然排序**（「新資料夾 (2)」＜「新資料夾 (10)」；新增/更名/拖曳移動後即歸位、拖曳不改同層順序）；條目拖至左樹他夾 → 歸屬改變、順序插頂；右欄頂[清除全部] → 確認對話載明夾名筆數、確認後清空**該夾**條目（子夾與他夾不動）、空夾時停用（排序/清除純函式測涵蓋）|
 | 28 | runWi自訂Usr管理我的筆記（底色/右鍵/雙擊） | 27 | 條目**右鍵**帶出選單（`▶ 播音`／`檢視`／`底色 ▸` 粉彩色塊子選單／`刪除`）、尾端無常駐按鈕列；自子選單選粉藍 → 卡片即套底色、重啟後留存（`notes.json` 存 hex）；選「無底色」→ 回預設白；**雙擊**條目 → 直接開三欄檢視卡片；舊檔（無 Color 欄）開啟 → 預設白、不失資料（SetEntryColor/相容純函式測涵蓋）|
+| 29 | setWi自訂Usr啟動結束常駐（自動更新） | 02 | 安裝 vN 啟動、更新源（`SCREENTRANS_UPDATE_URL` 指本地 feed，測試縫）備妥 vN+1 → 背景靜默下載後底部狀態列顯示「新版 vN+1 已就緒」、主視窗標題列變「ScreenTrans — 新版 vN+1 已就緒」、關於分頁現「立即重啟更新」→ 按下重啟 → 版本變 vN+1、筆記/歷史/情境/設定（`%APPDATA%`）全留存；無新版 → 關於分頁「檢查更新」回「已是最新版本」；離線/來源不可達 → 自動檢查靜默略過、查詢主動線不受影響，手動「檢查更新」如實回報「無法檢查更新」（不誤報最新）；dev 裸跑（未安裝）→ 更新流程整段跳過、更新區隱藏；exe 旁舊 `appsettings.json` 首啟一次性遷移至 `%APPDATA%\ScreenTrans`（`ResolveSettingsPath`/遷移純函式測涵蓋）|
 
 ### (B) 效益指標
 

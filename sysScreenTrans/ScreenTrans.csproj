@@ -17,6 +17,9 @@
          預設它們散落於 publish 夾旁，裸 exe 拷至乾淨目錄執行會 DllNotFoundException（Issue #49，
          由發佈列車成品層 smoke 攔獲）。設此屬性使原生庫入 bundle、執行期自解，「單一執行檔」名實相符。 -->
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Velopack 安裝/更新 hooks 須為進程第一句執行（Issue #51）：WPF 產生之 App.Main 無法插句，
+         改以自訂 Program.Main 為進入點（首句 VelopackApp.Build().Run() 後再啟動 App）。 -->
+    <StartupObject>ScreenTrans.Program</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,6 +30,8 @@
   <ItemGroup>
     <!-- TTS：Windows 內建語音合成（SAPI）[techItem語音合成] -->
     <PackageReference Include="System.Speech" Version="9.0.0" />
+    <!-- 安裝式散佈＋自動更新（Issue #51）：GitHub Release 為更新源、差量升級 -->
+    <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>
 
   <ItemGroup>
