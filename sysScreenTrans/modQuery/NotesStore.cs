@@ -152,6 +152,61 @@ public sealed class NotesStore
         }
     }
 
+    /// <summary>
+    /// 檔案總管式**自然排序**比較（Issue #42，等效 `StrCmpLogicalW` 核心行為）：
+    /// 連續數字段依**數值**比較（「新資料夾 (2)」＜「新資料夾 (10)」），其餘字元依目前文化、不分大小寫。
+    /// </summary>
+    public static int NaturalCompare(string a, string b)
+    {
+        int i = 0, j = 0;
+        while (i < a.Length && j < b.Length)
+        {
+            if (char.IsAsciiDigit(a[i]) && char.IsAsciiDigit(b[j]))
+            {
+                int si = i, sj = j;
+                while (i < a.Length && char.IsAsciiDigit(a[i])) { i++; }
+                while (j < b.Length && char.IsAsciiDigit(b[j])) { j++; }
+                var na = a[si..i].TrimStart('0');
+                var nb = b[sj..j].TrimStart('0');
+                if (na.Length != nb.Length)
+                {
+                    return na.Length - nb.Length; // 位數多者數值大
+                }
+                var c = string.CompareOrdinal(na, nb);
+                if (c != 0)
+                {
+                    return c;
+                }
+            }
+            else
+            {
+                var c = string.Compare(a[i].ToString(), b[j].ToString(), StringComparison.CurrentCultureIgnoreCase);
+                if (c != 0)
+                {
+                    return c;
+                }
+                i++;
+                j++;
+            }
+        }
+        return (a.Length - i) - (b.Length - j); // 前綴相同者短在前
+    }
+
+    /// <summary>全樹**同層依名稱自然排序**（檔案總管慣例，Issue #42）：拖曳只改歸屬、順序一律由名稱決定。</summary>
+    public static void SortFolders(NotesData d) => SortSiblings(d.Folders);
+
+    private static void SortSiblings(List<NoteFolder> list)
+    {
+        list.Sort((x, y) => NaturalCompare(x.Name, y.Name));
+        foreach (var f in list)
+        {
+            SortSiblings(f.Folders);
+        }
+    }
+
+    /// <summary>清空指定資料夾之全部條目（不含子資料夾；右欄[清除全部]，Issue #42）。找不到夾即無為。</summary>
+    public static void ClearEntries(NotesData d, string folderId) => FindFolder(d, folderId)?.Entries.Clear();
+
     /// <summary>新增頂層資料夾。</summary>
     public static NoteFolder AddFolder(NotesData d, string name)
     {

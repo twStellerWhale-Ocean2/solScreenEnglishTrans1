@@ -272,6 +272,55 @@ public class NotesStoreTests
     }
 
     [Fact]
+    public void NaturalCompare_DigitRuns_CompareNumerically()
+    {
+        Assert.True(NotesStore.NaturalCompare("新資料夾 (2)", "新資料夾 (10)") < 0);
+        Assert.True(NotesStore.NaturalCompare("a10b", "a2b") > 0);
+        Assert.Equal(0, NotesStore.NaturalCompare("f01", "f1")); // 前導零視同數值相等
+    }
+
+    [Fact]
+    public void NaturalCompare_Letters_CaseInsensitive_PrefixShorterFirst()
+    {
+        Assert.True(NotesStore.NaturalCompare("apple", "Banana") < 0);
+        Assert.True(NotesStore.NaturalCompare("ab", "abc") < 0);
+        Assert.Equal(0, NotesStore.NaturalCompare("Same", "same"));
+    }
+
+    [Fact]
+    public void SortFolders_SortsSiblingsRecursively_ByNaturalName()
+    {
+        var d = new NotesData();
+        var b = NotesStore.AddFolder(d, "B");
+        NotesStore.AddFolder(d, "A10");
+        NotesStore.AddFolder(d, "A2");
+        NotesStore.AddSubFolder(d, b.Id, "z");
+        NotesStore.AddSubFolder(d, b.Id, "k");
+
+        NotesStore.SortFolders(d);
+
+        Assert.Equal(new[] { "A2", "A10", "B" }, d.Folders.Select(f => f.Name));
+        Assert.Equal(new[] { "k", "z" }, b.Folders.Select(f => f.Name));
+    }
+
+    [Fact]
+    public void ClearEntries_OnlyTargetFolder_UnknownIdNoop()
+    {
+        var d = new NotesData();
+        var a = NotesStore.AddFolder(d, "A");
+        var b = NotesStore.AddFolder(d, "B");
+        NotesStore.AddTo(d, NoteEntry.From(new QueryResult("one", "w", "一"), DateTimeOffset.UtcNow)); // 落第一個頂層夾（A）
+        b.Entries.Insert(0, NoteEntry.From(new QueryResult("two", "t", "二"), DateTimeOffset.UtcNow));
+
+        NotesStore.ClearEntries(d, a.Id);
+        Assert.Empty(a.Entries);
+        Assert.Single(b.Entries);
+
+        NotesStore.ClearEntries(d, "no-such-id"); // 無為、不擲例外
+        Assert.Single(b.Entries);
+    }
+
+    [Fact]
     public void Load_LegacyFlatJson_UpgradesToTree_NoDataLoss()
     {
         // 舊平面 notes.json（NoteFolder 無 Folders 子夾鍵）
