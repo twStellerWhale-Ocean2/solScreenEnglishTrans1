@@ -41,6 +41,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- 嵌入更新紀錄供「關於」分頁顯示（Issue #79）；反映建置當下之 CHANGELOG -->
+    <EmbeddedResource Include="..\CHANGELOG.md" LogicalName="CHANGELOG.md" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- 系統匣／視窗圖示與浮水印（打包為 WPF 資源，執行期以 pack URI 載入） -->
     <Resource Include="assets\app.ico" />
     <Resource Include="assets\icon.png" />

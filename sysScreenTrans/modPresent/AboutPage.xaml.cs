@@ -1,3 +1,4 @@
+using System.IO;
 using System.Reflection;
 using System.Windows;
 using UserControl = System.Windows.Controls.UserControl;
@@ -18,6 +19,7 @@ public partial class AboutPage : UserControl
         InitializeComponent();
         var ver = Assembly.GetExecutingAssembly().GetName().Version;
         VersionText.Text = "版本 v" + (ver is null ? "?" : $"{ver.Major}.{ver.Minor}.{ver.Build}");
+        ChangeLogBox.Text = LoadChangeLog(); // 更新紀錄（Issue #79）
 
         _updates = updates;
         if (_updates is null || !_updates.IsSupported)
@@ -31,6 +33,25 @@ public partial class AboutPage : UserControl
         if (_updates.ReadyVersion is not null)
         {
             ShowReady(_updates.ReadyVersion);
+        }
+    }
+
+    /// <summary>讀嵌入之 CHANGELOG.md（Issue #79）供「更新紀錄」顯示；缺失/失敗回提示、不致命。</summary>
+    private static string LoadChangeLog()
+    {
+        try
+        {
+            using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("CHANGELOG.md");
+            if (s is null)
+            {
+                return "（找不到更新紀錄）";
+            }
+            using var r = new StreamReader(s);
+            return r.ReadToEnd();
+        }
+        catch
+        {
+            return "（無法載入更新紀錄）";
         }
     }
 
