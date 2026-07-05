@@ -21,6 +21,10 @@
                    Foreground="{StaticResource PinkSub}" HorizontalAlignment="Center" Margin="0,8,0,2"/>
         <TextBlock Text="Contact: carlton0521@gmail.com" FontSize="12.5"
                    Foreground="{StaticResource PinkSub}" HorizontalAlignment="Center"/>
+        <TextBlock FontSize="12.5" HorizontalAlignment="Center" Margin="0,2,0,0">
+          <Hyperlink x:Name="GitHubLink" NavigateUri="https://github.com/twStellerWhale-Ocean2/solScreenEnglishTrans1"
+                     RequestNavigate="OnOpenLink" Foreground="{StaticResource PinkText}">GitHub</Hyperlink>
+        </TextBlock>
         <TextBlock Text="Recognition &amp; translation by OpenAI; speech by Windows built-in voices." FontSize="11.5"
                    Foreground="#9A6A82" HorizontalAlignment="Center" Margin="0,10,0,0"/>
         <!-- 更新區（Issue #51）：僅 Velopack 安裝形態顯示；dev 裸跑隱藏 -->

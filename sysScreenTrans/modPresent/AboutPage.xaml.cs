@@ -55,6 +55,17 @@ public partial class AboutPage : UserControl
         }
     }
 
+    /// <summary>以預設瀏覽器開啟外部連結（Issue #84 GitHub 連結）；失敗不致命。</summary>
+    private void OnOpenLink(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(e.Uri.AbsoluteUri) { UseShellExecute = true });
+        }
+        catch { /* 開啟失敗不致命 */ }
+        e.Handled = true;
+    }
+
     /// <summary>手動檢查：檢查中鎖鈕；有新版轉就緒態、無新版顯示已是最新、失敗如實回報（不誤報最新）。</summary>
     private async Task CheckAsync()
     {
