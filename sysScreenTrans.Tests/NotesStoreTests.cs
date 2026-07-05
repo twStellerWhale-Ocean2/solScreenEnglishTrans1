@@ -111,6 +111,44 @@ public class NotesStoreTests
         Assert.Equal(new[] { "b", "c", "a" }, f.Entries.Select(x => x.Original).ToArray());
     }
 
+    // ---- #52：順向/反向排序 ----
+
+    [Fact]
+    public void SortEntries_Ascending_ByOriginalNatural()
+    {
+        var f = new NoteFolder();
+        f.Entries.AddRange(new[] { E("banana"), E("Apple"), E("cherry") });
+        NotesStore.SortEntries(f, ascending: true);
+        Assert.Equal(new[] { "Apple", "banana", "cherry" }, f.Entries.Select(x => x.Original).ToArray());
+    }
+
+    [Fact]
+    public void SortEntries_Descending_ReversesOrder()
+    {
+        var f = new NoteFolder();
+        f.Entries.AddRange(new[] { E("banana"), E("Apple"), E("cherry") });
+        NotesStore.SortEntries(f, ascending: false);
+        Assert.Equal(new[] { "cherry", "banana", "Apple" }, f.Entries.Select(x => x.Original).ToArray());
+    }
+
+    [Fact]
+    public void SortEntries_CaseInsensitive_AndNumericAware()
+    {
+        // 自然排序：大小寫不敏感、數字段依數值（item 2 < item 10）
+        var f = new NoteFolder();
+        f.Entries.AddRange(new[] { E("item 10"), E("ITEM 2"), E("item 1") });
+        NotesStore.SortEntries(f, ascending: true);
+        Assert.Equal(new[] { "item 1", "ITEM 2", "item 10" }, f.Entries.Select(x => x.Original).ToArray());
+    }
+
+    [Fact]
+    public void SortEntries_EmptyFolder_NoThrow()
+    {
+        var f = new NoteFolder();
+        NotesStore.SortEntries(f, ascending: true); // 空夾無為、不擲例外
+        Assert.Empty(f.Entries);
+    }
+
     [Fact]
     public void RemoveEntry_RemovesById()
     {

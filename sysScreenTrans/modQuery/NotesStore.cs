@@ -366,6 +366,20 @@ public sealed class NotesStore
         return false;
     }
 
+    /// <summary>
+    /// 依英文原文自然排序目前資料夾之條目（Issue #52）：<paramref name="ascending"/>＝順向（A→Z）、否則反向（Z→A）。
+    /// 沿用 <see cref="NaturalCompare"/>（大小寫不敏感、數字段依數值），與資料夾排序一致；重排後由呼叫端 Save 持久化。
+    /// 空夾即無為。純函式、可單元測試。
+    /// </summary>
+    public static void SortEntries(NoteFolder f, bool ascending)
+    {
+        f.Entries.Sort((x, y) =>
+        {
+            var c = NaturalCompare(x.Original ?? "", y.Original ?? "");
+            return ascending ? c : -c;
+        });
+    }
+
     /// <summary>同一資料夾內把條目自 from 位置移到 to 位置（拖曳排序）。</summary>
     public static void Reorder(NoteFolder f, int from, int to)
     {

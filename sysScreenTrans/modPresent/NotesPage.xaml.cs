@@ -83,6 +83,8 @@ public partial class NotesPage : UserControl
         _data = _store.LoadEnsured();
 
         NewFolderBtn.Click += (_, _) => CreateFolder(parent: null); // 一律建頂層；子資料夾走節點右鍵選單（檔案總管慣例）
+        SortAscBtn.Click += (_, _) => SortEntries(ascending: true);   // 順向 A→Z（Issue #52）
+        SortDescBtn.Click += (_, _) => SortEntries(ascending: false); // 反向 Z→A
         ClearEntriesBtn.Click += (_, _) => OnClearEntries();
         FolderTree.SelectedItemChanged += OnFolderSelected;
         FolderTree.PreviewMouseLeftButtonUp += (_, _) => _pressItem = null; // 放開即清，防殘留按壓被後續拖曳劫持
@@ -225,6 +227,8 @@ public partial class NotesPage : UserControl
         bool any = f is not null && f.Entries.Count > 0;
         EmptyHint.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
         ClearEntriesBtn.IsEnabled = any;
+        SortAscBtn.IsEnabled = any;   // 空夾無可排序（Issue #52）
+        SortDescBtn.IsEnabled = any;
         if (f is null)
         {
             return;
@@ -240,6 +244,19 @@ public partial class NotesPage : UserControl
         NotesStore.SortFolders(_data); // 存檔順序與顯示一致（名稱序）
         _store.Save(_data);
         BuildTree();
+    }
+
+    /// <summary>順向/反向排序目前資料夾條目（Issue #52）：依原文自然排序、即時落地 notes.json、重繪。</summary>
+    private void SortEntries(bool ascending)
+    {
+        var f = Selected;
+        if (f is null || f.Entries.Count == 0)
+        {
+            return;
+        }
+        NotesStore.SortEntries(f, ascending);
+        _store.Save(_data);
+        RenderFolder();
     }
 
     /// <summary>右欄[清除全部]：清空選取夾內全部條目（確認對話載明夾名筆數；子夾不動）。</summary>

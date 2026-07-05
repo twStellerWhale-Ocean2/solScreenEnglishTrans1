@@ -26,8 +26,15 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
-      <Button x:Name="ClearEntriesBtn" Grid.Row="0" Content="清除全部" HorizontalAlignment="Right"
-              Foreground="#8A2B2B" Style="{StaticResource GhostButton}" Margin="0,0,0,6"/>
+      <!-- 條目工具列（Issue #52 排序鈕於[清除全部]左側；均右對齊比照歷史分頁） -->
+      <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,6">
+        <Button x:Name="SortAscBtn" Content="順向排序" Style="{StaticResource GhostButton}"
+                ToolTip="依原文 A→Z 排序目前資料夾條目" Margin="0,0,6,0"/>
+        <Button x:Name="SortDescBtn" Content="反向排序" Style="{StaticResource GhostButton}"
+                ToolTip="依原文 Z→A 排序目前資料夾條目" Margin="0,0,6,0"/>
+        <Button x:Name="ClearEntriesBtn" Content="清除全部"
+                Foreground="#8A2B2B" Style="{StaticResource GhostButton}"/>
+      </StackPanel>
       <Grid Grid.Row="1">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,0,4,0">
           <StackPanel x:Name="EntryPanel"/>
