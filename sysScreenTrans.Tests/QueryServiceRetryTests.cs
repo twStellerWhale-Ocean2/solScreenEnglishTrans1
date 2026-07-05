@@ -87,7 +87,7 @@ public class QueryServiceRetryTests
         var ex = await Assert.ThrowsAsync<QueryException>(
             () => Svc(2).RunWithRetryAsync(Attempt, CancellationToken.None, backoff));
 
-        Assert.Contains("已重試 2 次", ex.Message);
+        Assert.Contains("after 2 retries", ex.Message);
         Assert.Equal(3, attempts);           // 初次 + 2 次重試皆失敗
         Assert.Equal(new[] { 0, 1 }, calls); // 僅在重試前退避、耗盡後不再退避
     }

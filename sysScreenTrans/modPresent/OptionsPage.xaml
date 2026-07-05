@@ -8,28 +8,28 @@
 
       <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,10">
         <StackPanel>
-          <TextBlock Text="喚起快捷鍵" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="Hotkey" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
           <StackPanel Orientation="Horizontal" Margin="0,4,0,4" VerticalAlignment="Center">
             <TextBlock x:Name="HotkeyStatus" MinWidth="150" VerticalAlignment="Center"
                        Foreground="{StaticResource PinkText}" FontWeight="SemiBold"/>
-            <Button x:Name="ChangeHotkeyBtn" Content="變更" Style="{StaticResource GhostButton}" Margin="10,0,0,0"/>
+            <Button x:Name="ChangeHotkeyBtn" Content="Change" Style="{StaticResource GhostButton}" Margin="10,0,0,0"/>
           </StackPanel>
           <TextBlock x:Name="HotkeyHint"
-                     Text="按「變更」後直接按下想用的鍵盤組合或滑鼠鍵（中鍵／側鍵／左右同按）；Esc 取消。"
+                     Text="After clicking “Change”, press the key combination or mouse button you want (middle / side / both buttons); Esc to cancel."
                      FontSize="12" Foreground="#9A6A82" TextWrapping="Wrap"/>
         </StackPanel>
       </Border>
 
       <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,10">
         <StackPanel>
-          <TextBlock Text="AI 辨識翻譯（OpenAI）" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-          <TextBlock Text="API 金鑰（OPENAI_API_KEY）" FontSize="12.5" Foreground="{StaticResource PinkSub}" Margin="0,6,0,0"/>
+          <TextBlock Text="AI Recognition &amp; Translation (OpenAI)" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="API Key (OPENAI_API_KEY)" FontSize="12.5" Foreground="{StaticResource PinkSub}" Margin="0,6,0,0"/>
           <TextBlock x:Name="KeyStatus" Margin="0,2,0,4" Foreground="{StaticResource PinkSub}"/>
           <PasswordBox x:Name="KeyBox" Padding="6"/>
-          <TextBlock Text="貼上以更新；留空則不變更。存入使用者環境變數，不寫進程式或設定檔。"
+          <TextBlock Text="Paste to update; leave blank to keep unchanged. Saved to your user environment variable, never written to the app or config files."
                      FontSize="12" Foreground="#9A6A82" TextWrapping="Wrap" Margin="0,3,0,0"/>
           <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Center">
-            <TextBlock Text="查詢模型（vision）" FontSize="12.5" Foreground="{StaticResource PinkSub}"
+            <TextBlock Text="Query model (vision)" FontSize="12.5" Foreground="{StaticResource PinkSub}"
                        VerticalAlignment="Center" Margin="0,0,8,0"/>
             <TextBox x:Name="QueryModelBox" Padding="6,4" MinWidth="200"/>
           </StackPanel>
@@ -38,18 +38,18 @@
 
       <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,10">
         <StackPanel>
-          <TextBlock Text="朗讀語音（Windows 內建）" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="Speech voice (Windows built-in)" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
           <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
             <ComboBox x:Name="VoiceBox" MinWidth="260"/>
-            <Button x:Name="TestBtn" Content="測試發音" Style="{StaticResource GhostButton}" Margin="10,0,0,0"/>
+            <Button x:Name="TestBtn" Content="Test Voice" Style="{StaticResource GhostButton}" Margin="10,0,0,0"/>
           </StackPanel>
-          <TextBlock Text="使用系統已安裝的 Windows 語音，離線可用、免額度。"
+          <TextBlock Text="Uses Windows voices installed on your system; works offline, no quota."
                      FontSize="12" Foreground="#9A6A82" TextWrapping="Wrap"/>
         </StackPanel>
       </Border>
 
       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,4,0,0">
-        <Button x:Name="SaveBtn" Content="儲存" Style="{StaticResource PinkButton}"/>
+        <Button x:Name="SaveBtn" Content="Save" Style="{StaticResource PinkButton}"/>
       </StackPanel>
 
     </StackPanel>

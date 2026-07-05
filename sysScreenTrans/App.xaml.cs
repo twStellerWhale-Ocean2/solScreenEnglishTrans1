@@ -43,7 +43,7 @@ public partial class App : System.Windows.Application
         _instanceGuard = SingleInstanceGuard.Acquire();
         if (!_instanceGuard.IsFirstInstance)
         {
-            System.Windows.MessageBox.Show("ScreenTrans 已在執行中（請見系統匣圖示）。", "ScreenTrans");
+            System.Windows.MessageBox.Show("ScreenTrans is already running (see the tray icon).", "ScreenTrans");
             Shutdown();
             return;
         }
@@ -67,14 +67,14 @@ public partial class App : System.Windows.Application
         _keyStatusItem = new WinForms.ToolStripMenuItem(AppStatusText.KeyStatus(keyReady)) { Enabled = false };
         menu.Items.Add(_keyStatusItem);
         menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add("開啟主視窗", null, (_, _) => OpenMain(MainTab.Notes));
-        menu.Items.Add("查詢歷史", null, (_, _) => OpenMain(MainTab.History));
-        menu.Items.Add("我的筆記", null, (_, _) => OpenMain(MainTab.Notes));
-        menu.Items.Add("情境", null, (_, _) => OpenMain(MainTab.Context));
-        menu.Items.Add("選項", null, (_, _) => OpenMain(MainTab.Options));
-        menu.Items.Add("關於", null, (_, _) => OpenMain(MainTab.About));
+        menu.Items.Add("Open Main Window", null, (_, _) => OpenMain(MainTab.Notes));
+        menu.Items.Add("Query History", null, (_, _) => OpenMain(MainTab.History));
+        menu.Items.Add("My Notes", null, (_, _) => OpenMain(MainTab.Notes));
+        menu.Items.Add("Context", null, (_, _) => OpenMain(MainTab.Context));
+        menu.Items.Add("Options", null, (_, _) => OpenMain(MainTab.Options));
+        menu.Items.Add("About", null, (_, _) => OpenMain(MainTab.About));
         menu.Items.Add(new WinForms.ToolStripSeparator());
-        menu.Items.Add("結束", null, (_, _) => ExitApp());
+        menu.Items.Add("Exit", null, (_, _) => ExitApp());
         _tray.ContextMenuStrip = menu;
         _tray.DoubleClick += (_, _) => OpenMain(MainTab.Notes);
 
@@ -125,7 +125,7 @@ public partial class App : System.Windows.Application
         if (!_hotkey.Register(HotKeyBinding.Parse(_config.Hotkey)))
         {
             System.Windows.MessageBox.Show(
-                $"喚起快捷鍵「{HotkeyDisplay()}」註冊失敗（可能已被其他程式占用）。ScreenTrans 仍常駐，可於「選項」改用其他快捷鍵。",
+                $"Failed to register hotkey “{HotkeyDisplay()}” (it may be in use by another app). ScreenTrans keeps running; you can change the hotkey in Options.",
                 "ScreenTrans");
         }
     }
@@ -154,7 +154,7 @@ public partial class App : System.Windows.Application
         try { File.WriteAllText(LogPath, DateTime.Now + "\n" + args.Exception); }
         catch { /* log 寫入失敗不致命 */ }
         System.Windows.MessageBox.Show(
-            "發生錯誤（已記錄至 " + LogPath + "）：\n\n" + args.Exception.Message, "ScreenTrans 錯誤");
+            "An error occurred (logged to " + LogPath + "):\n\n" + args.Exception.Message, "ScreenTrans Error");
         args.Handled = true;
     }
 
@@ -209,7 +209,7 @@ public partial class App : System.Windows.Application
         }
         catch (Exception ex)
         {
-            System.Windows.MessageBox.Show("喚起流程錯誤：\n" + ex.Message, "ScreenTrans");
+            System.Windows.MessageBox.Show("Lookup error:\n" + ex.Message, "ScreenTrans");
         }
         finally
         {
@@ -250,9 +250,9 @@ public partial class App : System.Windows.Application
         var folder = ResolveFolderName(req.FolderName);
         var msg = _notesStore.AddToNamedFolderAndSave(req.Result, folder, req.ColorHex, DateTimeOffset.Now) switch
         {
-            NoteAddResult.Added => folder == NotesStore.DefaultFolderName ? "✓ 已加入我的筆記" : $"✓ 已加入「{folder}」",
-            NoteAddResult.AlreadyExists => "已在筆記中",
-            _ => "無可收藏內容",
+            NoteAddResult.Added => folder == NotesStore.DefaultFolderName ? "✓ Added to My Notes" : $"✓ Added to “{folder}”",
+            NoteAddResult.AlreadyExists => "Already in Notes",
+            _ => "Nothing to save",
         };
         ToastNotifier.Show(msg);
         _notesPage?.Reload();

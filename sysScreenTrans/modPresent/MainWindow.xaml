@@ -49,11 +49,11 @@
       <!-- 功能列分頁（圖示＋文字；標題僅在 OS 標題列、內容區不重複——Issue #38 Windows 慣例） -->
       <Grid Grid.Row="0">
         <StackPanel Orientation="Horizontal" Margin="12,10,0,6">
-          <RadioButton x:Name="TabContext" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xEB9F;" Content="情境"/>
-          <RadioButton x:Name="TabNotes" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE70B;" Content="筆記" IsChecked="True"/>
-          <RadioButton x:Name="TabHistory" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE81C;" Content="歷史"/>
-          <RadioButton x:Name="TabOptions" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE713;" Content="選項"/>
-          <RadioButton x:Name="TabAbout" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE946;" Content="關於"/>
+          <RadioButton x:Name="TabContext" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xEB9F;" Content="Context"/>
+          <RadioButton x:Name="TabNotes" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE70B;" Content="Notes" IsChecked="True"/>
+          <RadioButton x:Name="TabHistory" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE81C;" Content="History"/>
+          <RadioButton x:Name="TabOptions" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE713;" Content="Options"/>
+          <RadioButton x:Name="TabAbout" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE946;" Content="About"/>
         </StackPanel>
         <Border Height="1" Background="{StaticResource PinkAccent}" VerticalAlignment="Bottom"/>
       </Grid>

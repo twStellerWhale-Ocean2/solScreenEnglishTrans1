@@ -30,20 +30,20 @@ public class ContextStoreTests
     public void BuildColorRulesText_FormatsNonEmptyByPaletteOrder()
     {
         var it = new ContextItem();
-        it.ColorRules["粉藍"] = "悲傷的台詞";
-        it.ColorRules["粉紅"] = "勇敢或戰鬥";
+        it.ColorRules["Blue"] = "悲傷的台詞";
+        it.ColorRules["Pink"] = "勇敢或戰鬥";
         var text = ContextStore.BuildColorRulesText(it);
-        // 依盤序：粉紅在粉藍前
-        Assert.Equal("粉紅＝「勇敢或戰鬥」；粉藍＝「悲傷的台詞」", text);
+        // 依盤序：Pink 在 Blue 前
+        Assert.Equal("Pink = \"勇敢或戰鬥\"; Blue = \"悲傷的台詞\"", text);
     }
 
     [Fact]
     public void BuildColorRulesText_SkipsBlankDescriptions()
     {
         var it = new ContextItem();
-        it.ColorRules["粉紅"] = "  ";      // 空白略過
-        it.ColorRules["粉綠"] = "系統訊息";
-        Assert.Equal("粉綠＝「系統訊息」", ContextStore.BuildColorRulesText(it));
+        it.ColorRules["Pink"] = "  ";      // 空白略過
+        it.ColorRules["Green"] = "系統訊息";
+        Assert.Equal("Green = \"系統訊息\"", ContextStore.BuildColorRulesText(it));
     }
 
     [Fact]
@@ -62,10 +62,10 @@ public class ContextStoreTests
             var store = new ContextStore(path);
             var d = new ContextsData();
             var it = ContextStore.Add(d, "遊戲A");
-            it.ColorRules["粉黃"] = "旁白";
+            it.ColorRules["Yellow"] = "旁白";
             store.Save(d);
             var loaded = store.Load().Items.Single();
-            Assert.Equal("旁白", loaded.ColorRules["粉黃"]);
+            Assert.Equal("旁白", loaded.ColorRules["Yellow"]);
         }
         finally { File.Delete(path); }
     }
@@ -79,11 +79,11 @@ public class ContextStoreTests
             var store = new ContextStore(path);
             var d = new ContextsData();
             var a = ContextStore.Add(d, "A"); // 首則使用中
-            a.ColorRules["淺灰"] = "boss";
+            a.ColorRules["Gray"] = "boss";
             var b = ContextStore.Add(d, "B");
-            b.ColorRules["粉紅"] = "小兵";
+            b.ColorRules["Pink"] = "小兵";
             store.Save(d);
-            Assert.Equal("淺灰＝「boss」", store.ActiveColorRules()); // A 使用中
+            Assert.Equal("Gray = \"boss\"", store.ActiveColorRules()); // A 使用中
         }
         finally { File.Delete(path); }
     }
@@ -94,8 +94,8 @@ public class ContextStoreTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    [InlineData("新情境")]     // 預設佔位符視為「尚未填」
-    [InlineData("  新情境 ")]  // 前後空白亦視為佔位
+    [InlineData("New Context")]     // 預設佔位符視為「尚未填」
+    [InlineData("  New Context ")]  // 前後空白亦視為佔位
     public void ShouldAutoFillName_TrueWhenBlankOrPlaceholder(string? current)
     {
         Assert.True(ContextStore.ShouldAutoFillName(current));
@@ -104,7 +104,7 @@ public class ContextStoreTests
     [Theory]
     [InlineData("薩爾達傳說")]
     [InlineData("我的遊戲")]
-    [InlineData("新情境備註")] // 含佔位但非等於＝使用者已鍵入實名
+    [InlineData("New Context notes")] // 含佔位但非等於＝使用者已鍵入實名
     public void ShouldAutoFillName_FalseWhenUserNamed(string current)
     {
         Assert.False(ContextStore.ShouldAutoFillName(current));

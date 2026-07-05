@@ -87,8 +87,8 @@ public partial class ResultWindow : Window
         FolderCombo.Items.Clear();
         // 第一項＝依使用中情境/預設夾（映射 NoteDefaults.FolderName＝""）
         FolderCombo.Items.Add(_activeContextName.Length > 0
-            ? $"（使用中情境：{_activeContextName}）"
-            : "（預設：我的筆記）");
+            ? $"(Active context: {_activeContextName})"
+            : "(Default: My Notes)");
         foreach (var n in _folderNames)
         {
             FolderCombo.Items.Add(n);
@@ -123,7 +123,7 @@ public partial class ResultWindow : Window
     private void BuildSwatches()
     {
         SwatchRow.Children.Clear();
-        SwatchRow.Children.Add(MakeSwatch("無", ""));
+        SwatchRow.Children.Add(MakeSwatch("None", ""));
         foreach (var (name, hex) in NoteColors.Palette)
         {
             SwatchRow.Children.Add(MakeSwatch(name, hex));
@@ -143,14 +143,14 @@ public partial class ResultWindow : Window
             BorderThickness = new Thickness(1),
             Margin = new Thickness(0, 0, 5, 0),
             Cursor = Cursors.Hand,
-            ToolTip = string.IsNullOrEmpty(hex) ? "無底色" : name,
+            ToolTip = string.IsNullOrEmpty(hex) ? "No color" : name,
             Tag = hex,
         };
         if (string.IsNullOrEmpty(hex))
         {
             swatch.Child = new TextBlock
             {
-                Text = "／",
+                Text = "/",
                 Foreground = Brush("#B0688A"),
                 FontSize = 12,
                 HorizontalAlignment = HorizontalAlignment.Center,
@@ -256,7 +256,7 @@ public partial class ResultWindow : Window
         BodyPanel.Children.Clear();
         BodyPanel.Children.Add(new TextBlock
         {
-            Text = "辨識翻譯中…",
+            Text = "Recognizing & translating…",
             Foreground = Brush("#8A5A6D"),
             FontSize = 22,
         });
@@ -276,7 +276,7 @@ public partial class ResultWindow : Window
         {
             BodyPanel.Children.Add(new TextBlock
             {
-                Text = "未偵測到英文文字",
+                Text = "No English text detected",
                 Foreground = Brush("#9A6A82"),
                 FontSize = 24,
             });
@@ -287,7 +287,7 @@ public partial class ResultWindow : Window
         // 三區不加欄目標示（Issue #40）：字級/色彩/字體本身分層、一望即知。
         BodyPanel.Children.Add(WordifiedOriginal(r.Original));
         BodyPanel.Children.Add(Value(r.Phonetic, "#9A6A82", 24, bold: false, font: "Georgia", topMargin: 6));
-        BodyPanel.Children.Add(PlayRow("▶ 整句發音",
+        BodyPanel.Children.Add(PlayRow("▶ Play sentence",
             () => _speech?.Speak(r.Original, "en-US", stopPrevious: true),
             AutoPlaySettings.English, v => AutoPlaySettings.English = v));
 
@@ -296,7 +296,7 @@ public partial class ResultWindow : Window
 
         // 中文組：中譯 ＋ 中文播放/自動
         BodyPanel.Children.Add(Value(r.Translation, "#3A2C33", 26, bold: false));
-        BodyPanel.Children.Add(PlayRow("▶ 中文發音",
+        BodyPanel.Children.Add(PlayRow("▶ Play Chinese",
             () => _speech?.Speak(r.Translation, "zh-TW", stopPrevious: true),
             AutoPlaySettings.Chinese, v => AutoPlaySettings.Chinese = v));
 
@@ -323,7 +323,7 @@ public partial class ResultWindow : Window
         BodyPanel.Children.Clear();
         BodyPanel.Children.Add(new TextBlock
         {
-            Text = "查詢失敗",
+            Text = "Query failed",
             Foreground = Brush("#C0506D"),
             FontSize = 24,
             FontWeight = FontWeights.SemiBold,
@@ -357,7 +357,7 @@ public partial class ResultWindow : Window
 
         var chk = new CheckBox
         {
-            Content = "自動播放",
+            Content = "Auto-play",
             IsChecked = autoInit,
             Foreground = Brush("#8A5A6D"),
             FontSize = 16,
@@ -398,7 +398,7 @@ public partial class ResultWindow : Window
                 Foreground = Brush("#3A2C33"), // 維持大字原色，不用預設藍色連結色
                 TextDecorations = WordUnderline, // 淡粉點狀底線＝可點提示（游標另呈手形）
                 Cursor = Cursors.Hand,
-                ToolTip = $"朗讀「{word}」",
+                ToolTip = $"Read “{word}”",
             };
             link.Click += (_, _) => _speech?.Speak(word, "en-US", stopPrevious: true);
             tb.Inlines.Add(link);

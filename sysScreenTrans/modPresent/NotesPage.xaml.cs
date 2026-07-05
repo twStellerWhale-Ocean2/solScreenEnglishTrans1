@@ -186,11 +186,11 @@ public partial class NotesPage : UserControl
     private ContextMenu MakeMenu(TreeViewItem item, NoteFolder f)
     {
         var menu = new ContextMenu();
-        var addSub = new MenuItem { Header = "新增子資料夾" };
+        var addSub = new MenuItem { Header = "New Subfolder" };
         addSub.Click += (_, _) => CreateFolder(f);
-        var rename = new MenuItem { Header = "更名", InputGestureText = "F2" };
+        var rename = new MenuItem { Header = "Rename", InputGestureText = "F2" };
         rename.Click += (_, _) => BeginRename(item);
-        var delete = new MenuItem { Header = "刪除", InputGestureText = "Del", Foreground = Brush("#B23B3B") };
+        var delete = new MenuItem { Header = "Delete", InputGestureText = "Del", Foreground = Brush("#B23B3B") };
         delete.Click += (_, _) => DeleteFolder(f);
         menu.Items.Add(addSub);
         menu.Items.Add(new Separator());
@@ -267,8 +267,8 @@ public partial class NotesPage : UserControl
         {
             return;
         }
-        if (MessageBox.Show($"清除資料夾「{f.Name}」內全部 {f.Entries.Count} 筆筆記？此動作無法復原（子資料夾不受影響）。",
-                "清除全部", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+        if (MessageBox.Show($"Clear all {f.Entries.Count} notes in folder “{f.Name}”? This cannot be undone (subfolders are not affected).",
+                "Clear All", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
         {
             return;
         }
@@ -357,9 +357,9 @@ public partial class NotesPage : UserControl
     private void DeleteFolder(NoteFolder f)
     {
         var msg = (f.Entries.Count > 0 || f.Folders.Count > 0)
-            ? $"刪除資料夾「{f.Name}」及其子夾與 {f.Entries.Count} 筆筆記？此動作無法復原。"
-            : $"刪除資料夾「{f.Name}」？";
-        if (MessageBox.Show(msg, "刪除資料夾", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+            ? $"Delete folder “{f.Name}” with its subfolders and {f.Entries.Count} notes? This cannot be undone."
+            : $"Delete folder “{f.Name}”?";
+        if (MessageBox.Show(msg, "Delete Folder", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
         {
             return;
         }
@@ -476,7 +476,7 @@ public partial class NotesPage : UserControl
             Cursor = Cursors.SizeAll, // 四向移動：可上下排序亦可拖入左樹資料夾（Issue #46）
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(2, 0, 8, 0),
-            ToolTip = "拖曳排序／拖到左側資料夾移動",
+            ToolTip = "Drag to reorder / drag onto a folder to move",
         };
         handle.PreviewMouseLeftButtonDown += (_, ev) => { _entryDrag = entry; _entryStart = ev.GetPosition(null); };
         handle.PreviewMouseLeftButtonUp += (_, _) => _entryDrag = null; // 放開即清（對稱防殘留）
@@ -486,7 +486,7 @@ public partial class NotesPage : UserControl
 
         var text = new TextBlock
         {
-            Text = string.IsNullOrWhiteSpace(entry.Original) ? "（無內容）" : entry.Original,
+            Text = string.IsNullOrWhiteSpace(entry.Original) ? "(no content)" : entry.Original,
             FontSize = 14,
             Foreground = Brush("#3A2C33"),
             TextTrimming = TextTrimming.CharacterEllipsis,
@@ -508,7 +508,7 @@ public partial class NotesPage : UserControl
             Padding = new Thickness(6, 2, 6, 2),
             Cursor = Cursors.Hand,
             VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = "播音",
+            ToolTip = "Play",
         };
         playBtn.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
         Grid.SetColumn(playBtn, 2);
@@ -531,19 +531,19 @@ public partial class NotesPage : UserControl
     private ContextMenu MakeEntryMenu(NoteEntry entry)
     {
         var menu = new ContextMenu();
-        var play = new MenuItem { Header = "▶ 播音", Foreground = Brush("#2F6FED") };
+        var play = new MenuItem { Header = "▶ Play", Foreground = Brush("#2F6FED") };
         play.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
-        var view = new MenuItem { Header = "檢視" };
+        var view = new MenuItem { Header = "View" };
         view.Click += (_, _) => ViewRequested?.Invoke(entry);
 
-        var color = new MenuItem { Header = "底色" };
-        color.Items.Add(ColorItem(entry, "無底色", ""));
+        var color = new MenuItem { Header = "Color" };
+        color.Items.Add(ColorItem(entry, "None", ""));
         foreach (var (name, hex) in NoteColors.Palette) // 集中色盤（Issue #55）
         {
             color.Items.Add(ColorItem(entry, name, hex));
         }
 
-        var delete = new MenuItem { Header = "刪除", Foreground = Brush("#B23B3B") };
+        var delete = new MenuItem { Header = "Delete", Foreground = Brush("#B23B3B") };
         delete.Click += (_, _) => { NotesStore.RemoveEntry(_data, entry.Id); Persist(); };
 
         menu.Items.Add(play);

@@ -23,14 +23,14 @@
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
 
-      <Button x:Name="ClearAllBtn" Grid.Row="0" Content="清除全部" HorizontalAlignment="Right"
+      <Button x:Name="ClearAllBtn" Grid.Row="0" Content="Clear All" HorizontalAlignment="Right"
               Foreground="#8A2B2B" Style="{StaticResource GhostButton}" Margin="8,8,10,4"/>
 
       <Grid Grid.Row="1">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,0,10,10">
           <StackPanel x:Name="EntryPanel"/>
         </ScrollViewer>
-        <TextBlock x:Name="EmptyHint" Text="尚無查詢紀錄。查詢後會自動出現在這裡。"
+        <TextBlock x:Name="EmptyHint" Text="No query history yet. Queries will appear here automatically."
                    Foreground="#9A6A82" FontSize="13"
                    HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
       </Grid>

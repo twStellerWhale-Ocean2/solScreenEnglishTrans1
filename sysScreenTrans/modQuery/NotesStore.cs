@@ -30,7 +30,7 @@ public enum NoteAddResult { Added, AlreadyExists, Empty }
 /// </summary>
 public sealed class NotesStore
 {
-    public const string DefaultFolderName = "我的筆記";
+    public const string DefaultFolderName = "My Notes";
 
     private static readonly JsonSerializerOptions Opts = new() { WriteIndented = true };
     private readonly string _path;
@@ -185,7 +185,7 @@ public sealed class NotesStore
     public static string NextNewFolderName(NotesData d)
     {
         var names = AllFolders(d).Select(f => f.Name).ToHashSet();
-        const string baseName = "新資料夾";
+        const string baseName = "New Folder";
         if (!names.Contains(baseName))
         {
             return baseName;
@@ -445,5 +445,5 @@ public sealed class NotesStore
         f.Entries.Insert(to, e);
     }
 
-    private static string Clean(string name) => string.IsNullOrWhiteSpace(name) ? "新資料夾" : name.Trim();
+    private static string Clean(string name) => string.IsNullOrWhiteSpace(name) ? "New Folder" : name.Trim();
 }

@@ -15,21 +15,21 @@
                    Foreground="{StaticResource PinkText}" HorizontalAlignment="Center"/>
         <TextBlock x:Name="VersionText" FontSize="13" Foreground="{StaticResource PinkSub}"
                    HorizontalAlignment="Center" Margin="0,4,0,10"/>
-        <TextBlock Text="遊戲畫面英文即時查詢工具" FontSize="12.5" Foreground="{StaticResource PinkSub}"
+        <TextBlock Text="Instant English lookup for game screens" FontSize="12.5" Foreground="{StaticResource PinkSub}"
                    HorizontalAlignment="Center"/>
-        <TextBlock Text="© 2026 Carlton Chen. 保留一切權利。" FontSize="12.5"
+        <TextBlock Text="© 2026 Carlton Chen. All rights reserved." FontSize="12.5"
                    Foreground="{StaticResource PinkSub}" HorizontalAlignment="Center" Margin="0,8,0,2"/>
-        <TextBlock Text="聯絡：carlton0521@gmail.com" FontSize="12.5"
+        <TextBlock Text="Contact: carlton0521@gmail.com" FontSize="12.5"
                    Foreground="{StaticResource PinkSub}" HorizontalAlignment="Center"/>
-        <TextBlock Text="辨識翻譯使用 OpenAI；朗讀使用 Windows 內建語音。" FontSize="11.5"
+        <TextBlock Text="Recognition &amp; translation by OpenAI; speech by Windows built-in voices." FontSize="11.5"
                    Foreground="#9A6A82" HorizontalAlignment="Center" Margin="0,10,0,0"/>
         <!-- 更新區（Issue #51）：僅 Velopack 安裝形態顯示；dev 裸跑隱藏 -->
         <StackPanel x:Name="UpdatePanel" Orientation="Horizontal" HorizontalAlignment="Center"
                     Margin="0,12,0,0" Visibility="Collapsed">
           <TextBlock x:Name="UpdateStatusText" FontSize="12.5" Foreground="{StaticResource PinkSub}"
                      VerticalAlignment="Center" Margin="0,0,8,0"/>
-          <Button x:Name="CheckUpdateBtn" Content="檢查更新" Style="{StaticResource GhostButton}"/>
-          <Button x:Name="RestartUpdateBtn" Content="立即重啟更新" Style="{StaticResource PinkButton}"
+          <Button x:Name="CheckUpdateBtn" Content="Check for Updates" Style="{StaticResource GhostButton}"/>
+          <Button x:Name="RestartUpdateBtn" Content="Restart to Update" Style="{StaticResource PinkButton}"
                   Visibility="Collapsed"/>
         </StackPanel>
       </StackPanel>
@@ -42,7 +42,7 @@
           <RowDefinition Height="Auto"/>
           <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
-        <TextBlock Grid.Row="0" Text="更新紀錄（ChangeLog）" FontWeight="SemiBold"
+        <TextBlock Grid.Row="0" Text="Change Log" FontWeight="SemiBold"
                    Foreground="{StaticResource PinkText}" Margin="0,0,0,6"/>
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
           <TextBox x:Name="ChangeLogBox" IsReadOnly="True" BorderThickness="0" Background="Transparent"

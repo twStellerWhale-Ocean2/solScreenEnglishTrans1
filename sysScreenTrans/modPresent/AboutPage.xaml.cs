@@ -18,7 +18,7 @@ public partial class AboutPage : UserControl
     {
         InitializeComponent();
         var ver = Assembly.GetExecutingAssembly().GetName().Version;
-        VersionText.Text = "版本 v" + (ver is null ? "?" : $"{ver.Major}.{ver.Minor}.{ver.Build}");
+        VersionText.Text = "Version v" + (ver is null ? "?" : $"{ver.Major}.{ver.Minor}.{ver.Build}");
         ChangeLogBox.Text = LoadChangeLog(); // 更新紀錄（Issue #79）
 
         _updates = updates;
@@ -44,14 +44,14 @@ public partial class AboutPage : UserControl
             using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("CHANGELOG.md");
             if (s is null)
             {
-                return "（找不到更新紀錄）";
+                return "(No change log found)";
             }
             using var r = new StreamReader(s);
             return r.ReadToEnd();
         }
         catch
         {
-            return "（無法載入更新紀錄）";
+            return "(Couldn't load change log)";
         }
     }
 

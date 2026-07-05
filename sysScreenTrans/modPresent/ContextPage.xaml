@@ -19,7 +19,7 @@
         <ListBox x:Name="List" BorderThickness="0" Background="Transparent" Margin="4"
                  HorizontalContentAlignment="Stretch"/>
       </Border>
-      <Button Grid.Row="1" x:Name="AddBtn" Content="＋ 新增情境" Style="{StaticResource PinkButton}" Margin="0,6,0,0"/>
+      <Button Grid.Row="1" x:Name="AddBtn" Content="＋ New Context" Style="{StaticResource PinkButton}" Margin="0,6,0,0"/>
     </Grid>
 
     <GridSplitter Grid.Column="1" Style="{StaticResource ColSplitter}"/>
@@ -40,10 +40,10 @@
             <RowDefinition Height="Auto"/>  <!-- 動作鈕 -->
           </Grid.RowDefinitions>
 
-          <TextBlock Grid.Row="0" Text="名稱" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Grid.Row="0" Text="Name" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
           <TextBox Grid.Row="1" x:Name="NameBox" Padding="6" Margin="0,4,0,10"/>
 
-          <TextBlock Grid.Row="2" Text="情境描述（查詢時作為參考注入）" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Grid.Row="2" Text="Context description (injected as reference for queries)" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
           <TextBox Grid.Row="3" x:Name="DescBox" Padding="6" Margin="0,4,0,6" TextWrapping="Wrap"
                    AcceptsReturn="True" MinHeight="80" VerticalAlignment="Stretch"
                    VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto"/>
@@ -52,17 +52,17 @@
           <Border Grid.Row="4" x:Name="ImageDropCard" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8" AllowDrop="True">
             <StackPanel>
               <Image x:Name="Preview" MaxHeight="150" HorizontalAlignment="Left" Stretch="Uniform" Margin="0,0,0,6"/>
-              <TextBlock x:Name="NoImageHint" Text="（尚無圖片；可貼上、上傳，或直接把圖片檔拖放到此）"
+              <TextBlock x:Name="NoImageHint" Text="(No image yet; paste, upload, or drag an image file here)"
                          Foreground="#9A6A82" FontSize="12" TextWrapping="Wrap"/>
               <Grid Margin="0,6,0,0">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="*"/>
                   <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
-                <Button x:Name="PasteBtn" Grid.Column="0" Content="貼上剪貼簿圖片" Style="{StaticResource GhostButton}" Margin="0,0,3,0"/>
-                <Button x:Name="UploadBtn" Grid.Column="1" Content="上傳檔案" Style="{StaticResource GhostButton}" Margin="3,0,0,0"/>
+                <Button x:Name="PasteBtn" Grid.Column="0" Content="Paste from Clipboard" Style="{StaticResource GhostButton}" Margin="0,0,3,0"/>
+                <Button x:Name="UploadBtn" Grid.Column="1" Content="Upload File" Style="{StaticResource GhostButton}" Margin="3,0,0,0"/>
               </Grid>
-              <Button x:Name="DescribeBtn" Content="🔎 以圖片自動解釋" Style="{StaticResource PinkButton}"
+              <Button x:Name="DescribeBtn" Content="🔎 Auto-explain from Image" Style="{StaticResource PinkButton}"
                       HorizontalAlignment="Stretch" Margin="0,6,0,0"/>
             </StackPanel>
           </Border>
@@ -70,8 +70,8 @@
           <!-- 配色規則（Issue #69）：各色一格描述；台詞符合哪格即用該色、都不符合＝白 -->
           <Border Grid.Row="5" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8">
             <StackPanel>
-              <TextBlock Text="配色規則（加入筆記時的底色）" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-              <TextBlock Text="台詞符合哪一格描述就套該色；都不符合＝白色。留空該色即不啟用。"
+              <TextBlock Text="Color rules (note background)" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+              <TextBlock Text="If a line matches a box's description, use that color; none matches = white. Leave a color blank to disable it."
                          FontSize="11.5" Foreground="#9A6A82" Margin="0,2,0,6" TextWrapping="Wrap"/>
               <StackPanel x:Name="ColorRulesPanel"/>
             </StackPanel>
@@ -80,13 +80,13 @@
           <TextBlock Grid.Row="6" x:Name="StatusLine" Foreground="#2E7D46" FontSize="12" Margin="0,0,0,8"/>
 
           <WrapPanel Grid.Row="7">
-            <Button x:Name="ActiveBtn" Content="設為使用中" Style="{StaticResource PinkButton}" Margin="0,0,8,0"/>
-            <Button x:Name="SaveBtn" Content="儲存" Style="{StaticResource GhostButton}" Margin="0,0,8,0"/>
-            <Button x:Name="DeleteBtn" Content="刪除" Foreground="#B23B3B" Style="{StaticResource GhostButton}"/>
+            <Button x:Name="ActiveBtn" Content="Set Active" Style="{StaticResource PinkButton}" Margin="0,0,8,0"/>
+            <Button x:Name="SaveBtn" Content="Save" Style="{StaticResource GhostButton}" Margin="0,0,8,0"/>
+            <Button x:Name="DeleteBtn" Content="Delete" Foreground="#B23B3B" Style="{StaticResource GhostButton}"/>
           </WrapPanel>
         </Grid>
       </ScrollViewer>
-      <TextBlock x:Name="EmptyHint" Text="尚無情境。按「＋ 新增情境」建立；可輸入文字，或貼上／上傳遊戲畫面由 AI 自動解釋。"
+      <TextBlock x:Name="EmptyHint" Text="No contexts yet. Click “+ New Context” to create one; type text, or paste/upload a game screenshot for AI to auto-explain."
                  Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="320"
                  TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
     </Grid>
