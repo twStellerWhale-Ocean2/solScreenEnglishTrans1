@@ -35,9 +35,9 @@
   </Window.Resources>
 
   <Grid>
-    <!-- logo 背景浮水印（極淡、不擋操作） -->
-    <Image Source="pack://application:,,,/assets/icon.png" Opacity="0.05" Stretch="Uniform"
-           IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="80"/>
+    <!-- logo 背景浮水印（Issue #71：提高不透明度、放大，讓小女孩明顯一點；仍不擋操作） -->
+    <Image Source="pack://application:,,,/assets/icon.png" Opacity="0.14" Stretch="Uniform"
+           IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40"/>
 
     <Grid>
       <Grid.RowDefinitions>

@@ -8,7 +8,8 @@
     <SolidColorBrush x:Key="PinkAccent" Color="#F4C2D0"/>
     <SolidColorBrush x:Key="PinkText" Color="#6D3A4D"/>
     <SolidColorBrush x:Key="PinkSub" Color="#8A5A6D"/>
-    <SolidColorBrush x:Key="CardBg" Color="#F2FFFFFF"/>
+    <!-- 卡片半透明白（Issue #71：降不透明度，讓底層小女孩浮水印透出、控制項不再白色不透明） -->
+    <SolidColorBrush x:Key="CardBg" Color="#B8FFFFFF"/>
 
     <!-- 卡片外框（半透明白，讓底層粉底/logo 透出些許） -->
     <Style x:Key="Card" TargetType="Border">
@@ -67,7 +68,7 @@
       </Setter>
     </Style>
 
-    <!-- 次要按鈕（白底粉框） -->
+    <!-- 次要按鈕（半透明白底粉框；Issue #71 改半透明，讓浮水印透出） -->
     <Style x:Key="GhostButton" TargetType="Button">
       <Setter Property="Cursor" Value="Hand"/>
       <Setter Property="Foreground" Value="{StaticResource PinkSub}"/>
@@ -75,13 +76,13 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="bg" CornerRadius="8" Background="#FFFFFF"
+            <Border x:Name="bg" CornerRadius="8" Background="#C8FFFFFF"
                     BorderBrush="{StaticResource PinkAccent}" BorderThickness="1" Padding="12,5">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="bg" Property="Background" Value="#FFF0F5"/>
+                <Setter TargetName="bg" Property="Background" Value="#E6FFF0F5"/>
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
