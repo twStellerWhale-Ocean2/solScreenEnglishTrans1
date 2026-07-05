@@ -31,12 +31,12 @@ namespace ScreenTrans.Present;
 public partial class ContextPage : UserControl
 {
     private readonly ContextStore _store;
-    private readonly Func<byte[], Task<string>> _describe;
+    private readonly Func<byte[], Task<ImageContext>> _describe;
     private ContextsData _data = new();
     private ContextItem? _selected;
     private byte[]? _pending; // 剛貼上/上傳、尚未儲存之圖片
 
-    public ContextPage(ContextStore store, Func<byte[], Task<string>> describeAsync)
+    public ContextPage(ContextStore store, Func<byte[], Task<ImageContext>> describeAsync)
     {
         InitializeComponent();
         _store = store;
@@ -144,7 +144,7 @@ public partial class ContextPage : UserControl
 
     private void OnAdd(object? sender, RoutedEventArgs e)
     {
-        var created = ContextStore.Add(_data, "新情境");
+        var created = ContextStore.Add(_data, ContextStore.DefaultName);
         _store.Save(_data);
         BuildList();
         Editor.Visibility = Visibility.Visible;
@@ -244,9 +244,19 @@ public partial class ContextPage : UserControl
         StatusLine.Text = "AI 解釋中…";
         try
         {
-            var desc = await _describe(bytes);
+            var result = await _describe(bytes);
+            var desc = result.Description;
             DescBox.Text = string.IsNullOrWhiteSpace(DescBox.Text) ? desc : DescBox.Text.TrimEnd() + "\n" + desc;
-            StatusLine.Text = "已產生描述，可手動補充後「儲存」。";
+            // #53：名稱尚未填（空白或仍為預設佔位）且可辨識出作品名 → 自動填入；已鍵入實際名稱則不覆寫
+            var filledName = false;
+            if (ContextStore.ShouldAutoFillName(NameBox.Text) && !string.IsNullOrWhiteSpace(result.Name))
+            {
+                NameBox.Text = result.Name.Trim();
+                filledName = true;
+            }
+            StatusLine.Text = filledName
+                ? $"已辨識「{result.Name.Trim()}」並填入名稱與描述，可手動補充後「儲存」。"
+                : "已產生描述，可手動補充後「儲存」。";
         }
         catch (Exception ex)
         {

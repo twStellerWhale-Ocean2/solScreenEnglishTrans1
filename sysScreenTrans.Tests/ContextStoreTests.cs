@@ -24,6 +24,28 @@ public class ContextStoreTests
         Assert.False(b.IsActive);
     }
 
+    // ---- #53：圖片自動填名判斷 ----
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("新情境")]     // 預設佔位符視為「尚未填」
+    [InlineData("  新情境 ")]  // 前後空白亦視為佔位
+    public void ShouldAutoFillName_TrueWhenBlankOrPlaceholder(string? current)
+    {
+        Assert.True(ContextStore.ShouldAutoFillName(current));
+    }
+
+    [Theory]
+    [InlineData("薩爾達傳說")]
+    [InlineData("我的遊戲")]
+    [InlineData("新情境備註")] // 含佔位但非等於＝使用者已鍵入實名
+    public void ShouldAutoFillName_FalseWhenUserNamed(string current)
+    {
+        Assert.False(ContextStore.ShouldAutoFillName(current));
+    }
+
     [Fact]
     public void SetActive_MakesSingleActive()
     {

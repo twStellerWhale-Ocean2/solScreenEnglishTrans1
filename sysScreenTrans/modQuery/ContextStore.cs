@@ -102,9 +102,19 @@ public sealed class ContextStore
 
     // ---- 純函式（可單元測試，不觸檔案） ----
 
+    /// <summary>新增情境之預設名稱（佔位符；#53 視為「名稱尚未填」、可被圖片自動辨識之作品名覆寫）。</summary>
+    public const string DefaultName = "新情境";
+
+    /// <summary>
+    /// 圖片自動解釋時是否可自動填入辨識到的作品名（#53）：目前名稱為空白或仍為預設佔位符 <see cref="DefaultName"/>
+    /// ＝「尚未填」可填；使用者已鍵入實際名稱（非空白且非佔位）則不覆寫。純函式、可單元測試。
+    /// </summary>
+    public static bool ShouldAutoFillName(string? current) =>
+        string.IsNullOrWhiteSpace(current) || current.Trim() == DefaultName;
+
     public static ContextItem Add(ContextsData d, string name)
     {
-        var item = new ContextItem { Name = string.IsNullOrWhiteSpace(name) ? "新情境" : name.Trim() };
+        var item = new ContextItem { Name = string.IsNullOrWhiteSpace(name) ? DefaultName : name.Trim() };
         if (d.Items.Count == 0)
         {
             item.IsActive = true; // 首則預設使用中

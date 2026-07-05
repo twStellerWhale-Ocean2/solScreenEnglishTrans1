@@ -55,10 +55,11 @@ public sealed class QueryService
     }
 
     /// <summary>
-    /// 以 vision 描述畫面之應用主題／情境（[modQuery模組] 圖片解釋契約，spec#9）：回一兩句繁中純文字
-    /// （非三欄 schema），供情境圖片**自動解釋**。沿用金鑰/重試/降級；僅在使用者加入圖片情境時呼叫、非每次查詢。
+    /// 以 vision 解釋畫面之具名作品與情境（[modQuery模組] 圖片解釋契約，spec#9／#53）：structured output
+    /// 一次回 <see cref="ImageContext"/>（name＝可辨識之作品名、否則空；description＝一兩句繁中情境描述），
+    /// 供情境分頁「以圖片自動解釋」同時取名稱與描述。沿用金鑰/重試/降級；僅在使用者加入圖片情境時呼叫、非每次查詢。
     /// </summary>
-    public async Task<string> DescribeImageAsync(byte[] pngBytes, CancellationToken ct = default)
+    public async Task<ImageContext> DescribeImageAsync(byte[] pngBytes, CancellationToken ct = default)
     {
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(key))
@@ -67,7 +68,7 @@ public sealed class QueryService
         }
         var dataUrl = "data:image/png;base64," + Convert.ToBase64String(pngBytes);
         var json = await RunWithRetryAsync(c => SendOnceAsync(BuildDescribePayload(dataUrl), key, c), ct);
-        return ExtractContent(json);
+        return ParseImageContext(ExtractContent(json)); // ExtractContent 取 message.content（JSON 字串），再解析名稱＋描述
     }
 
     /// <summary>對 <paramref name="attempt"/> 執行有限次數指數退避重試：暫時性錯誤重試、永久性錯誤直接上拋。</summary>
@@ -165,9 +166,9 @@ public sealed class QueryService
             + context.Trim() + "」";
     }
 
-    /// <summary>圖片情境解釋提示（spec#9）：回一兩句繁中主題/情境描述、供翻譯參考。</summary>
+    /// <summary>圖片情境解釋提示（spec#9／#53）：回具名作品名（可辨識才填、否則空）＋一兩句繁中情境描述。</summary>
     private const string DescribePrompt =
-        "用一到兩句繁體中文描述這個畫面的應用主題或情境（例如遊戲類型、專業領域或內容性質），供之後的英文翻譯作為參考。只回描述文字本身，不要多餘說明或前綴。";
+        "辨識這個畫面出自哪個具名作品並描述其情境，回傳 JSON：name＝作品的專有名稱（如遊戲名、影集名、電影名、應用程式名；僅在能明確辨識時填寫、不要臆測，無法辨識時回空字串）、description＝用一到兩句繁體中文描述此畫面的應用主題或情境（例如遊戲類型、專業領域或內容性質），供之後的英文翻譯作為參考。";
 
     private object BuildDescribePayload(string dataUrl) => new
     {
@@ -181,6 +182,26 @@ public sealed class QueryService
                 {
                     new { type = "text", text = DescribePrompt },
                     new { type = "image_url", image_url = new { url = dataUrl } },
+                },
+            },
+        },
+        response_format = new
+        {
+            type = "json_schema",
+            json_schema = new
+            {
+                name = "image_context",
+                strict = true,
+                schema = new
+                {
+                    type = "object",
+                    properties = new
+                    {
+                        name = new { type = "string" },
+                        description = new { type = "string" },
+                    },
+                    required = new[] { "name", "description" },
+                    additionalProperties = false,
                 },
             },
         },
@@ -280,6 +301,30 @@ public sealed class QueryService
         catch (Exception ex)
         {
             throw new QueryException("圖片解釋回應解析失敗：" + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// 解析圖片解釋之 structured content（{name, description}）為 <see cref="ImageContext"/>（#53；internal 供單元測試）。
+    /// 容錯：若 content 非預期 JSON（模型偶未遵循 schema），退為 name 空、description＝整段文字，仍可用於情境描述。
+    /// </summary>
+    internal static ImageContext ParseImageContext(string content)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(content);
+            var r = doc.RootElement;
+            var name = r.TryGetProperty("name", out var n) ? (n.GetString() ?? "") : "";
+            var desc = r.TryGetProperty("description", out var d) ? (d.GetString() ?? "") : "";
+            if (string.IsNullOrWhiteSpace(desc)) // 無描述欄位視為非結構化回應，退整段為描述
+            {
+                return new ImageContext("", content.Trim());
+            }
+            return new ImageContext(name.Trim(), desc.Trim());
+        }
+        catch (JsonException)
+        {
+            return new ImageContext("", content.Trim()); // 非 JSON：整段當描述、名稱留空（不自動填名）
         }
     }
 
