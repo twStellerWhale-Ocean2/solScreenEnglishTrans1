@@ -24,19 +24,32 @@
 
     <GridSplitter Grid.Column="1" Style="{StaticResource ColSplitter}"/>
 
-    <!-- 右：編輯區 -->
+    <!-- 右：編輯區（Issue #73：描述框隨空間加高、動作鈕釘底與左欄鈕對齊；空間不足時捲動） -->
     <Grid Grid.Column="2" Margin="6,8,10,10">
-      <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="4,0,4,0">
-        <StackPanel x:Name="Editor">
-          <TextBlock Text="名稱" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-          <TextBox x:Name="NameBox" Padding="6" Margin="0,4,0,10"/>
+      <ScrollViewer x:Name="EditorScroll" VerticalScrollBarVisibility="Auto" Padding="4,0,4,0">
+        <!-- MinHeight 綁 ViewportHeight：空間足→Grid 撐滿、描述框(*)成長、鈕釘底；不足→依內容捲動、描述框回 MinHeight -->
+        <Grid x:Name="Editor" MinHeight="{Binding ViewportHeight, ElementName=EditorScroll}">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>  <!-- 名稱 label -->
+            <RowDefinition Height="Auto"/>  <!-- NameBox -->
+            <RowDefinition Height="Auto"/>  <!-- 描述 label -->
+            <RowDefinition Height="*"/>     <!-- DescBox 成長 -->
+            <RowDefinition Height="Auto"/>  <!-- 圖片卡 -->
+            <RowDefinition Height="Auto"/>  <!-- 配色規則 -->
+            <RowDefinition Height="Auto"/>  <!-- 狀態列 -->
+            <RowDefinition Height="Auto"/>  <!-- 動作鈕 -->
+          </Grid.RowDefinitions>
 
-          <TextBlock Text="情境描述（查詢時作為參考注入）" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-          <TextBox x:Name="DescBox" Padding="6" Margin="0,4,0,6" TextWrapping="Wrap"
-                   AcceptsReturn="True" MinHeight="80" MaxHeight="150" VerticalScrollBarVisibility="Auto"/>
+          <TextBlock Grid.Row="0" Text="名稱" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBox Grid.Row="1" x:Name="NameBox" Padding="6" Margin="0,4,0,10"/>
+
+          <TextBlock Grid.Row="2" Text="情境描述（查詢時作為參考注入）" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBox Grid.Row="3" x:Name="DescBox" Padding="6" Margin="0,4,0,6" TextWrapping="Wrap"
+                   AcceptsReturn="True" MinHeight="80" VerticalAlignment="Stretch"
+                   VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto"/>
 
           <!-- 圖片卡：支援拖放圖片檔（Issue #69）；貼上/上傳鈕各半填滿、自動解釋鈕獨立一列填滿 -->
-          <Border x:Name="ImageDropCard" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8" AllowDrop="True">
+          <Border Grid.Row="4" x:Name="ImageDropCard" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8" AllowDrop="True">
             <StackPanel>
               <Image x:Name="Preview" MaxHeight="150" HorizontalAlignment="Left" Stretch="Uniform" Margin="0,0,0,6"/>
               <TextBlock x:Name="NoImageHint" Text="（尚無圖片；可貼上、上傳，或直接把圖片檔拖放到此）"
@@ -55,7 +68,7 @@
           </Border>
 
           <!-- 配色規則（Issue #69）：各色一格描述；台詞符合哪格即用該色、都不符合＝白 -->
-          <Border Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8">
+          <Border Grid.Row="5" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8">
             <StackPanel>
               <TextBlock Text="配色規則（加入筆記時的底色）" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
               <TextBlock Text="台詞符合哪一格描述就套該色；都不符合＝白色。留空該色即不啟用。"
@@ -64,14 +77,14 @@
             </StackPanel>
           </Border>
 
-          <TextBlock x:Name="StatusLine" Foreground="#2E7D46" FontSize="12" Margin="0,0,0,8"/>
+          <TextBlock Grid.Row="6" x:Name="StatusLine" Foreground="#2E7D46" FontSize="12" Margin="0,0,0,8"/>
 
-          <WrapPanel>
-            <Button x:Name="ActiveBtn" Content="設為使用中" Style="{StaticResource PinkButton}" Margin="0,0,8,6"/>
-            <Button x:Name="SaveBtn" Content="儲存" Style="{StaticResource GhostButton}" Margin="0,0,8,6"/>
-            <Button x:Name="DeleteBtn" Content="刪除" Foreground="#B23B3B" Style="{StaticResource GhostButton}" Margin="0,0,0,6"/>
+          <WrapPanel Grid.Row="7">
+            <Button x:Name="ActiveBtn" Content="設為使用中" Style="{StaticResource PinkButton}" Margin="0,0,8,0"/>
+            <Button x:Name="SaveBtn" Content="儲存" Style="{StaticResource GhostButton}" Margin="0,0,8,0"/>
+            <Button x:Name="DeleteBtn" Content="刪除" Foreground="#B23B3B" Style="{StaticResource GhostButton}"/>
           </WrapPanel>
-        </StackPanel>
+        </Grid>
       </ScrollViewer>
       <TextBlock x:Name="EmptyHint" Text="尚無情境。按「＋ 新增情境」建立；可輸入文字，或貼上／上傳遊戲畫面由 AI 自動解釋。"
                  Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="320"

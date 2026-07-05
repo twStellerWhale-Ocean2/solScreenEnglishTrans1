@@ -8,8 +8,10 @@
     <SolidColorBrush x:Key="PinkAccent" Color="#F4C2D0"/>
     <SolidColorBrush x:Key="PinkText" Color="#6D3A4D"/>
     <SolidColorBrush x:Key="PinkSub" Color="#8A5A6D"/>
-    <!-- 卡片半透明白（Issue #71：降不透明度，讓底層小女孩浮水印透出、控制項不再白色不透明） -->
-    <SolidColorBrush x:Key="CardBg" Color="#B8FFFFFF"/>
+    <!-- 卡片半透明白（Issue #71→#73：白色 30%，讓底層小女孩浮水印明顯透出） -->
+    <SolidColorBrush x:Key="CardBg" Color="#4DFFFFFF"/>
+    <!-- 白色控制項統一半透明白（30%），供輸入框等套用（Issue #73） -->
+    <SolidColorBrush x:Key="ControlWhite" Color="#4DFFFFFF"/>
 
     <!-- 卡片外框（半透明白，讓底層粉底/logo 透出些許） -->
     <Style x:Key="Card" TargetType="Border">
@@ -41,6 +43,17 @@
           </ControlTemplate>
         </Setter.Value>
       </Setter>
+    </Style>
+
+    <!-- 白色輸入控制項統一半透明白 30%（Issue #73）：文字/密碼/下拉框底色透出浮水印；深字對比仍足 -->
+    <Style TargetType="TextBox">
+      <Setter Property="Background" Value="{StaticResource ControlWhite}"/>
+    </Style>
+    <Style TargetType="PasswordBox">
+      <Setter Property="Background" Value="{StaticResource ControlWhite}"/>
+    </Style>
+    <Style TargetType="ComboBox">
+      <Setter Property="Background" Value="{StaticResource ControlWhite}"/>
     </Style>
 
     <!-- 左右欄分隔拖拉條（Issue #58：各分頁左側欄寬可拖拉調整）：預設細粉條、滑過加深、游標左右箭 -->
@@ -76,13 +89,13 @@
       <Setter Property="Template">
         <Setter.Value>
           <ControlTemplate TargetType="Button">
-            <Border x:Name="bg" CornerRadius="8" Background="#C8FFFFFF"
+            <Border x:Name="bg" CornerRadius="8" Background="#4DFFFFFF"
                     BorderBrush="{StaticResource PinkAccent}" BorderThickness="1" Padding="12,5">
               <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Border>
             <ControlTemplate.Triggers>
               <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="bg" Property="Background" Value="#E6FFF0F5"/>
+                <Setter TargetName="bg" Property="Background" Value="#80FFF0F5"/>
               </Trigger>
             </ControlTemplate.Triggers>
           </ControlTemplate>
