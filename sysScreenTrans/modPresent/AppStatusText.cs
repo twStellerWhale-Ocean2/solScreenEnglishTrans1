@@ -20,6 +20,9 @@ public static class AppStatusText
     /// <summary>新版下載就緒（底部狀態列與關於分頁共用，Issue #51）。</summary>
     public static string UpdateReady(string version) => $"新版 v{version} 已就緒，重新啟動後套用";
 
+    /// <summary>新版就緒時之主視窗標題（OS 標題列＝工作列按鈕同步可見；USR 回饋）。</summary>
+    public static string TitleUpdateReady(string version) => $"ScreenTrans — 新版 v{version} 已就緒";
+
     /// <summary>手動檢查更新：已是最新（關於分頁）。</summary>
     public const string UpdateUpToDate = "已是最新版本";
 

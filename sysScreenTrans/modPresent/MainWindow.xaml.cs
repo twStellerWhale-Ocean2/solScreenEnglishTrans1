@@ -61,9 +61,13 @@ public partial class MainWindow : Window
         HotkeyText.Text = AppStatusText.HotkeyLine(hotkeyDisplay);
     }
 
-    /// <summary>新版已靜默下載就緒 → 底部狀態列顯示提示（Issue #51；重啟後套用）。</summary>
+    /// <summary>
+    /// 新版已靜默下載就緒 → 底部狀態列顯示提示，並於 OS 標題列標示（工作列按鈕同步可見；
+    /// Issue #51＋USR 回饋；重啟後套用、新進程標題自然回復）。
+    /// </summary>
     public void ShowUpdateReady(string version)
     {
+        Title = AppStatusText.TitleUpdateReady(version);
         UpdateText.Text = AppStatusText.UpdateReady(version);
         UpdateSeparator.Visibility = Visibility.Visible;
         UpdateText.Visibility = Visibility.Visible;

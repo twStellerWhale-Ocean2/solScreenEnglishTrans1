@@ -42,6 +42,13 @@ public class AppStatusTextTests
     }
 
     [Fact]
+    public void TitleUpdateReady_EmbedsVersion_AfterAppName()
+    {
+        // USR 回饋：主視窗標題（OS 標題列＝工作列按鈕）於「ScreenTrans」後標示新版就緒
+        Assert.Equal("ScreenTrans — 新版 v0.15.2 已就緒", AppStatusText.TitleUpdateReady("0.15.2"));
+    }
+
+    [Fact]
     public void UpdateCheckStrings_DistinguishFailureFromUpToDate()
     {
         // 手動檢查失敗（離線）不得與「已是最新版本」同文——不誤報最新（Issue #51）
