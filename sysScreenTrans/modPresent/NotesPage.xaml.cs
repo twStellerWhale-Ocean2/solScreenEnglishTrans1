@@ -465,7 +465,7 @@ public partial class NotesPage : UserControl
             Text = "≡",
             FontSize = 16,
             Foreground = Brush("#C77D9A"),
-            Cursor = Cursors.SizeNS,
+            Cursor = Cursors.SizeAll, // 四向移動：可上下排序亦可拖入左樹資料夾（Issue #46）
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(2, 0, 8, 0),
             ToolTip = "拖曳排序／拖到左側資料夾移動",
