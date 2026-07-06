@@ -127,28 +127,31 @@ public class AppConfigTests
     }
 
     [Fact]
-    public void SaveLoad_Roundtrips_HotkeyPoint()
+    public void Load_LegacyHotkeyPoint_IgnoredGracefully()
     {
-        // 直接點選擷取快捷鍵綁定往返（Issue #86）
+        // Issue #90 移除第二熱鍵：舊 appsettings 仍含 paramHotkeyPoint → 忽略該鍵、不報錯（向後相容）
         var path = TempPath();
+        File.WriteAllText(path,
+            "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\"," +
+            "\"paramHotkey\":\"Ctrl+Shift+F\",\"paramHotkeyPoint\":\"Ctrl+Shift+A\"}");
         try
         {
-            new AppConfig("gpt-4o-mini", 15, "", 2, "Alt+Q", 200, "", "Ctrl+Shift+A").Save(path);
-            Assert.Contains("paramHotkeyPoint", File.ReadAllText(path));
-            Assert.Equal("Ctrl+Shift+A", AppConfig.Load(path).HotkeyPoint);
+            var cfg = AppConfig.Load(path);
+            Assert.Equal("gpt-4o", cfg.Model);
+            Assert.Equal("Ctrl+Shift+F", cfg.Hotkey);
         }
         finally { File.Delete(path); }
     }
 
     [Fact]
-    public void Load_MissingHotkeyPoint_DefaultsToAltA()
+    public void Save_DoesNotWrite_HotkeyPointKey()
     {
-        // 舊 appsettings 無 paramHotkeyPoint → 預設 Alt+A（向後相容，Issue #86）
+        // Issue #90：不再寫出 paramHotkeyPoint
         var path = TempPath();
-        File.WriteAllText(path, "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\"}");
         try
         {
-            Assert.Equal("Alt+A", AppConfig.Load(path).HotkeyPoint);
+            new AppConfig("gpt-4o-mini", 15, "").Save(path);
+            Assert.DoesNotContain("paramHotkeyPoint", File.ReadAllText(path));
         }
         finally { File.Delete(path); }
     }

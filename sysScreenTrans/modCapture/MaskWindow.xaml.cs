@@ -15,6 +15,7 @@ public partial class MaskWindow : Window
 {
     private Point _start;
     private bool _dragging;
+    private FrozenDesktop? _frozen; // 凍結畫格快照（Issue #90）
 
     /// <summary>選取完成之截圖結果；取消或空選為 null。</summary>
     public CaptureResult? Result { get; private set; }
@@ -22,6 +23,14 @@ public partial class MaskWindow : Window
     public MaskWindow()
     {
         InitializeComponent();
+        // 喚起當下截取整個虛擬桌面為凍結畫格（Issue #90）：於遮罩顯示前擷取（不含遮罩自身），
+        // 之後以其為不透明背景、畫面靜止，選區/雙擊皆自快照取得、點擊不干擾背後遊戲。
+        _frozen = ScreenCapture.CaptureVirtualDesktop();
+        if (_frozen is not null)
+        {
+            BgImage.Source = _frozen.ToImageSource();
+        }
+        Closed += (_, _) => _frozen?.Dispose();
         // 覆蓋整個虛擬桌面（DIU；跨多螢幕）
         Left = SystemParameters.VirtualScreenLeft;
         Top = SystemParameters.VirtualScreenTop;
@@ -97,11 +106,8 @@ public partial class MaskWindow : Window
             return;
         }
 
-        // 遮罩先隱藏、等一個 render cycle 讓它從畫面移除，再截圖（避免截到遮罩自身）；
-        // 用 Close() 結束 modal，不設 DialogResult（Hide 後設 DialogResult 會拋例外）。
-        Hide();
-        Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
-        Result = ScreenCapture.Capture(px, py, pw, ph);
+        // 自凍結快照裁切選區（Issue #90）：不必先隱藏遮罩再截（截的是快照、非實時螢幕）。
+        Result = _frozen?.CropToResult(px, py, pw, ph);
         Close();
     }
 
@@ -115,19 +121,9 @@ public partial class MaskWindow : Window
         ReleaseMouseCapture();
         SelRect.Visibility = Visibility.Collapsed;
 
-        var tl = RootCanvas.PointToScreen(new Point(0, 0));
-        var br = RootCanvas.PointToScreen(new Point(Width, Height));
-        int px = (int)Math.Round(tl.X);
-        int py = (int)Math.Round(tl.Y);
-        int pw = (int)Math.Round(br.X - tl.X);
-        int ph = (int)Math.Round(br.Y - tl.Y);
+        // 於凍結快照之游標處畫紅標、交查詢層依標記辨識該句（Issue #54／#90）；座標為 physical px。
         var cur = RootCanvas.PointToScreen(p);
-        int mx = (int)Math.Round(cur.X) - px;
-        int my = (int)Math.Round(cur.Y) - py;
-
-        Hide();
-        Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
-        Result = ScreenCapture.CaptureWithMarker(px, py, pw, ph, mx, my);
+        Result = _frozen?.MarkToResult((int)Math.Round(cur.X), (int)Math.Round(cur.Y));
         Close();
     }
 

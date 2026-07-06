@@ -10,20 +10,12 @@
         <StackPanel>
           <TextBlock Text="Hotkeys" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
 
-          <TextBlock Text="Invoke — dark overlay (drag to select, or double-click to point)"
-                     FontSize="12" Foreground="{StaticResource PinkSub}" Margin="0,6,0,0"/>
+          <TextBlock Text="Hotkey — freezes the screen, then drag to select or double-click a line"
+                     FontSize="12" Foreground="{StaticResource PinkSub}" Margin="0,6,0,0" TextWrapping="Wrap"/>
           <StackPanel Orientation="Horizontal" Margin="0,2,0,4" VerticalAlignment="Center">
             <TextBlock x:Name="HotkeyStatus" MinWidth="150" VerticalAlignment="Center"
                        Foreground="{StaticResource PinkText}" FontWeight="SemiBold"/>
             <Button x:Name="ChangeHotkeyBtn" Content="Change" Style="{StaticResource GhostButton}" Margin="10,0,0,0"/>
-          </StackPanel>
-
-          <TextBlock Text="Point capture — grab full screen and mark cursor → AI (no overlay, no double-click)"
-                     FontSize="12" Foreground="{StaticResource PinkSub}" Margin="0,6,0,0" TextWrapping="Wrap"/>
-          <StackPanel Orientation="Horizontal" Margin="0,2,0,4" VerticalAlignment="Center">
-            <TextBlock x:Name="HotkeyPointStatus" MinWidth="150" VerticalAlignment="Center"
-                       Foreground="{StaticResource PinkText}" FontWeight="SemiBold"/>
-            <Button x:Name="ChangePointHotkeyBtn" Content="Change" Style="{StaticResource GhostButton}" Margin="10,0,0,0"/>
           </StackPanel>
 
           <TextBlock x:Name="HotkeyHint"

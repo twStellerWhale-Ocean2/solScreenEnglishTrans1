@@ -8,17 +8,13 @@ namespace ScreenTrans;
 /// <param name="Hotkey">喚起快捷鍵綁定（序列化字串，如 <c>Alt+L</c>／<c>Ctrl+Shift+F</c>／<c>Mouse:Middle</c>）。</param>
 /// <param name="HistoryMax">查詢歷史保留筆數上限（非正值套用預設 200）。</param>
 /// <param name="Context">應用情境提示（自然語言，選填；非空時查詢注入為參考情境，spec#8）。</param>
-/// <param name="HotkeyPoint">直接點選擷取快捷鍵綁定（Issue #86；按下即截全圖＋游標標記交 AI，不經遮罩、不需雙擊）。</param>
-public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200, string Context = "", string HotkeyPoint = "Alt+A")
+public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200, string Context = "")
 {
     /// <summary>查詢逾時秒數安全下限／預設（缺欄、解析失敗或非正值皆退回此值）。</summary>
     private const int DefaultTimeoutSec = 15;
 
     /// <summary>喚起快捷鍵預設綁定（沿用原硬編碼 Alt+L）。</summary>
     public const string DefaultHotkey = "Alt+L";
-
-    /// <summary>直接點選擷取快捷鍵預設綁定（Issue #86）。</summary>
-    public const string DefaultHotkeyPoint = "Alt+A";
 
     /// <summary>查詢歷史保留筆數預設／下限（缺欄或非正值皆退回此值）。</summary>
     public const int DefaultHistoryMax = 200;
@@ -70,8 +66,7 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
                 r.TryGetProperty("paramQueryMaxRetries", out var n) ? n.GetInt32() : 2,
                 r.TryGetProperty("paramHotkey", out var h) ? h.GetString() ?? DefaultHotkey : DefaultHotkey,
                 historyMax > 0 ? historyMax : DefaultHistoryMax, // 非正上限套用預設，免歷史被清空或無界成長
-                r.TryGetProperty("paramContextHint", out var cx) ? cx.GetString() ?? "" : "", // 應用情境提示（選填）
-                r.TryGetProperty("paramHotkeyPoint", out var hp) ? hp.GetString() ?? DefaultHotkeyPoint : DefaultHotkeyPoint); // 直接點選擷取鍵（#86）
+                r.TryGetProperty("paramContextHint", out var cx) ? cx.GetString() ?? "" : ""); // 應用情境提示（選填）；Issue #90 起舊 paramHotkeyPoint 忽略不讀
         }
         catch
         {
@@ -96,7 +91,6 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
             paramHotkey = Hotkey,
             paramHistoryMax = HistoryMax,
             paramContextHint = Context,
-            paramHotkeyPoint = HotkeyPoint,
         };
         File.WriteAllText(path, JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
     }
