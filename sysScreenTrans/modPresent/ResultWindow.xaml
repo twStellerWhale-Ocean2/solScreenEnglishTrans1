@@ -50,12 +50,16 @@
           <CheckBox x:Name="AutoAddChk" Content="Auto-add to Notes" Margin="14,0,0,0"
                     VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="13"/>
         </StackPanel>
-        <!-- #55：加入至哪個資料夾＋底色（此列兼作「設定預設」與「臨時調整」；智能配色下自動預選 AI 建議色） -->
-        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-          <TextBlock Text="Add to" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="0,0,6,0"/>
-          <ComboBox x:Name="FolderCombo" MinWidth="118" MaxWidth="180" FontSize="12.5" VerticalAlignment="Center"/>
-          <TextBlock Text="Color" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="14,0,6,0"/>
-          <StackPanel x:Name="SwatchRow" Orientation="Horizontal" VerticalAlignment="Center"/>
+        <!-- #55/#93：拆為上下兩列——上＝底色色塊、下＝加入至資料夾（兼「設定預設」與「臨時調整」；智能配色下自動預選 AI 建議色） -->
+        <StackPanel Margin="0,8,0,0">
+          <StackPanel Orientation="Horizontal">
+            <TextBlock Text="Color" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="0,0,6,0"/>
+            <StackPanel x:Name="SwatchRow" Orientation="Horizontal" VerticalAlignment="Center"/>
+          </StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+            <TextBlock Text="Add to" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="0,0,6,0"/>
+            <ComboBox x:Name="FolderCombo" MinWidth="118" MaxWidth="180" FontSize="12.5" VerticalAlignment="Center"/>
+          </StackPanel>
         </StackPanel>
       </StackPanel>
     </Grid>
