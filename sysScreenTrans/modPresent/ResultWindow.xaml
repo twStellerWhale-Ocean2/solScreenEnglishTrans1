@@ -3,12 +3,12 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Query Result"
         Icon="pack://application:,,,/assets/app.ico"
-        WindowStyle="SingleBorderWindow" ResizeMode="CanResize"
+        WindowStyle="SingleBorderWindow" ResizeMode="CanResizeWithGrip"
         ShowInTaskbar="True" Topmost="True"
         Background="{StaticResource PinkBg}"
         Width="560" Height="400" MinWidth="320" MinHeight="220"
         WindowStartupLocation="CenterScreen">
-  <!-- Issue #59：改標準表單——標準標題列（OS 字型/標題）＋標準邊框拖拉縮放（ResizeMode=CanResize）＋
+  <!-- Issue #59：改標準表單——標準標題列（OS 字型/標題）＋標準邊框拖拉縮放＋右下角縮放握把（ResizeMode=CanResizeWithGrip，#97）＋
        ShowInTaskbar=True（失焦後仍有工作列按鈕可尋、不再像被隱藏）。移除原自訂 WindowStyle=None 卡片、
        自訂標題列/關閉鈕/縮放握把（改由 OS 標準 chrome 提供）。字型比照主視窗（系統預設）。 -->
   <Grid>
