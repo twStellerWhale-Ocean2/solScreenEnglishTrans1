@@ -64,6 +64,12 @@ public partial class NotesPage : UserControl
 
     private readonly NotesStore _store;
     private readonly Func<ISpeechService?> _speech;
+    private readonly Func<IPronunciationAssessor?> _assessor;   // 發音評分（spec#10）
+    private readonly Func<IAudioRecorder> _recorderFactory;     // 麥克風錄音工廠（spec#10）
+    private readonly Func<int> _threshold;                      // 發音及格門檻（設定頁可調）
+    private IAudioRecorder? _recording;                         // 按住期間之錄音器（同時至多一個）
+    private bool _practiceBusy;                                 // 評分中守衛：不重入
+    private System.Windows.Threading.DispatcherTimer? _maxRecTimer; // 錄音上限守衛
     private NotesData _data;
 
     public event Action<NoteEntry>? ViewRequested;
@@ -75,17 +81,21 @@ public partial class NotesPage : UserControl
     private TreeViewItem? _dropHighlight;   // 目前拖曳滑過之目標夾（高亮回饋，Issue #38）
     private InsertionAdorner? _insertLine;  // 條目拖曳之插入位置指示線（Issue #38）
 
-    public NotesPage(NotesStore store, Func<ISpeechService?> speechProvider)
+    public NotesPage(NotesStore store, Func<ISpeechService?> speechProvider,
+        Func<IPronunciationAssessor?> assessorProvider, Func<IAudioRecorder> recorderFactory, Func<int> passThreshold)
     {
         InitializeComponent();
         _store = store;
         _speech = speechProvider;
+        _assessor = assessorProvider;
+        _recorderFactory = recorderFactory;
+        _threshold = passThreshold;
         _data = _store.LoadEnsured();
 
         NewFolderBtn.Click += (_, _) => CreateFolder(parent: null); // 一律建頂層；子資料夾走節點右鍵選單（檔案總管慣例）
         SortAscBtn.Click += (_, _) => SortEntries(ascending: true);   // 順向 A→Z（Issue #52）
         SortDescBtn.Click += (_, _) => SortEntries(ascending: false); // 反向 Z→A
-        ClearEntriesBtn.Click += (_, _) => OnClearEntries();
+        ClearPracticeBtn.Click += (_, _) => OnClearPractice();
         FolderTree.SelectedItemChanged += OnFolderSelected;
         FolderTree.PreviewMouseLeftButtonUp += (_, _) => _pressItem = null; // 放開即清，防殘留按壓被後續拖曳劫持
         FolderTree.KeyDown += OnTreeKeyDown;                // F2＝更名、Del＝刪除（檔案總管慣例）
@@ -226,7 +236,7 @@ public partial class NotesPage : UserControl
         var f = Selected;
         bool any = f is not null && f.Entries.Count > 0;
         EmptyHint.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
-        ClearEntriesBtn.IsEnabled = any;
+        ClearPracticeBtn.IsEnabled = any;
         SortAscBtn.IsEnabled = any;   // 空夾無可排序（Issue #52）
         SortDescBtn.IsEnabled = any;
         if (f is null)
@@ -259,21 +269,22 @@ public partial class NotesPage : UserControl
         RenderFolder();
     }
 
-    /// <summary>右欄[清除全部]：清空選取夾內全部條目（確認對話載明夾名筆數；子夾不動）。</summary>
-    private void OnClearEntries()
+    /// <summary>右欄[Clear Practice]：清空選取夾內全部筆記之發音練習紀錄（燈泡歸零；不刪筆記，spec#10）。</summary>
+    private void OnClearPractice()
     {
         var f = Selected;
         if (f is null || f.Entries.Count == 0)
         {
             return;
         }
-        if (MessageBox.Show($"Clear all {f.Entries.Count} notes in folder “{f.Name}”? This cannot be undone (subfolders are not affected).",
-                "Clear All", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
+        if (MessageBox.Show($"Clear pronunciation-practice records for all {f.Entries.Count} notes in “{f.Name}”? The notes themselves are kept — only the bulbs are reset to off.",
+                "Clear Practice", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
         {
             return;
         }
-        NotesStore.ClearEntries(_data, f.Id);
-        Persist();
+        NotesStore.ResetFolderPractice(_data, f.Id);
+        _store.Save(_data);
+        RenderFolder(); // 僅重繪目前夾條目（燈泡歸零），不需重建整棵樹
     }
 
     // ---- 資料夾操作（頂部[建立資料夾]＋右鍵選單／F2／Del，原地更名如檔案總管） ----
@@ -467,6 +478,7 @@ public partial class NotesPage : UserControl
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 行尾播音鈕（Issue #56）
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 行尾發音練習燈泡鈕（spec#10）
 
         var handle = new TextBlock
         {
@@ -514,6 +526,35 @@ public partial class NotesPage : UserControl
         Grid.SetColumn(playBtn, 2);
         grid.Children.Add(playBtn);
 
+        // 行尾發音練習燈泡鈕（spec#10）：按住錄音（轉紅）／放開送 AI 評分（忙碌態、不重入）、達門檻點亮；
+        // 放開後 toast 明示分數與門檻或各失敗態訊息。Button 自處理指標事件、e.Handled 阻冒泡（不觸發播音/雙擊檢視/拖曳）。
+        var bulb = new TextBlock
+        {
+            Text = "", // Segoe MDL2 Assets：Lightbulb（讀作燈泡而非狀態點）
+            FontFamily = new FontFamily("Segoe MDL2 Assets"),
+            FontSize = 15,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var bulbBtn = new Button
+        {
+            Content = bulb,
+            Background = Brushes.Transparent,
+            BorderThickness = new Thickness(0),
+            Padding = new Thickness(6, 2, 6, 2),
+            Cursor = Cursors.Hand,
+            VerticalAlignment = VerticalAlignment.Center,
+            ToolTip = entry.PracticeScore >= 0
+                ? $"Last score {entry.PracticeScore} · hold to record, release to check pronunciation"
+                : "Hold to record, release to check pronunciation",
+            Tag = entry,
+        };
+        SetBulb(bulbBtn, recording: false, lit: PracticeLit(entry), busy: false);
+        bulbBtn.PreviewMouseLeftButtonDown += OnBulbDown;
+        bulbBtn.PreviewMouseLeftButtonUp += OnBulbUp;
+        bulbBtn.LostMouseCapture += OnBulbLostCapture; // 擷取被搶走（alt-tab／他處彈窗）亦收束錄音、不卡在上限
+        Grid.SetColumn(bulbBtn, 3);
+        grid.Children.Add(bulbBtn);
+
         card.Child = grid;
         card.Tag = entry;
         card.ContextMenu = MakeEntryMenu(entry);
@@ -526,6 +567,138 @@ public partial class NotesPage : UserControl
             }
         };
         return card;
+    }
+
+    /// <summary>該筆是否「通過」（分數達目前及格門檻）＝燈泡點亮。</summary>
+    private bool PracticeLit(NoteEntry e) => e.PracticeScore >= _threshold();
+
+    /// <summary>依狀態設定燈泡外觀：錄音中＝紅、評分中＝藍、通過＝金、否則＝灰框空心。</summary>
+    private static void SetBulb(Button btn, bool recording, bool lit, bool busy)
+    {
+        if (btn.Content is not TextBlock el)
+        {
+            return;
+        }
+        el.Foreground = recording ? Brush("#D64545")
+            : busy ? Brush("#6AA0E8")
+            : lit ? Brush("#F5C518")
+            : Brush("#C9B8C0");
+    }
+
+    /// <summary>按住燈泡＝開始錄音（spec#10）；無麥克風／未授權／忙碌各自處理。e.Handled 阻冒泡。</summary>
+    private void OnBulbDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true; // 不冒泡至卡片（不觸發雙擊檢視、不啟動拖曳）
+        if (_practiceBusy || _recording is not null || sender is not Button btn || btn.Tag is not NoteEntry entry)
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(entry.Original))
+        {
+            ToastNotifier.Show("Nothing to practice");
+            return;
+        }
+        var rec = _recorderFactory();
+        var start = rec.Start();
+        if (start != RecordStart.Ok)
+        {
+            (rec as IDisposable)?.Dispose();
+            ToastNotifier.Show(start switch
+            {
+                RecordStart.NoDevice => "No microphone found",
+                RecordStart.PermissionDenied => "Allow microphone access in Windows Privacy settings",
+                _ => "Could not start recording",
+            });
+            return;
+        }
+        _recording = rec;
+        btn.CaptureMouse(); // 放開若移出按鈕仍能收到 up
+        SetBulb(btn, recording: true, lit: false, busy: false);
+        _maxRecTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(NaudioRecorder.MaxRecordMs) };
+        _maxRecTimer.Tick += (_, _) => FinishRecording(btn, entry);
+        _maxRecTimer.Start();
+    }
+
+    /// <summary>放開燈泡＝停止錄音並送評分（spec#10）。</summary>
+    private void OnBulbUp(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is Button btn && btn.Tag is NoteEntry entry)
+        {
+            FinishRecording(btn, entry); // 擷取於 FinishRecording 內釋放
+        }
+    }
+
+    /// <summary>擷取意外遺失（alt-tab／他處彈窗奪焦）→ 視同放開、收束錄音，避免卡在錄音態直到上限（spec#10）。</summary>
+    private void OnBulbLostCapture(object sender, MouseEventArgs e)
+    {
+        if (_recording is not null && sender is Button btn && btn.Tag is NoteEntry entry)
+        {
+            FinishRecording(btn, entry);
+        }
+    }
+
+    /// <summary>結束錄音 → 送 AI 評分 → 更新燈泡與分數、toast 明示分數/門檻或失敗訊息（spec#10）。太短/無音/失敗各自降級。</summary>
+    private async void FinishRecording(Button btn, NoteEntry entry)
+    {
+        _maxRecTimer?.Stop();
+        _maxRecTimer = null;
+        var rec = _recording;
+        if (rec is null)
+        {
+            return; // 已結束（上限守衛與放開競態時只跑一次）
+        }
+        _recording = null;
+        if (btn.IsMouseCaptured) { btn.ReleaseMouseCapture(); }
+        var wav = rec.Stop(out var tooShort);
+        (rec as IDisposable)?.Dispose();
+        SetBulb(btn, recording: false, lit: PracticeLit(entry), busy: false);
+        if (wav is null)
+        {
+            if (tooShort)
+            {
+                ToastNotifier.Show("Recording too short");
+            }
+            return;
+        }
+        var assessor = _assessor();
+        if (assessor is null)
+        {
+            ToastNotifier.Show("Set your OpenAI key to score pronunciation");
+            return;
+        }
+        _practiceBusy = true;
+        SetBulb(btn, recording: false, lit: false, busy: true);
+        try
+        {
+            var result = await assessor.AssessAsync(wav, entry.Original);
+            var threshold = _threshold();
+            NotesStore.SetPracticeScore(_data, entry.Id, result.Score);
+            _store.Save(_data);
+            var lit = result.Score >= threshold;
+            SetBulb(btn, recording: false, lit: lit, busy: false);
+            var head = lit
+                ? $"Pronunciation {result.Score} / {threshold}  ✓ passed"
+                : $"Pronunciation {result.Score} / {threshold} — try again";
+            ToastNotifier.Show(string.IsNullOrWhiteSpace(result.Note) ? head : head + "\n" + result.Note);
+        }
+        catch (QueryException ex)
+        {
+            SetBulb(btn, recording: false, lit: PracticeLit(entry), busy: false);
+            var offline = ex.Message.Contains("Network", StringComparison.OrdinalIgnoreCase)
+                          || ex.Message.Contains("timed out", StringComparison.OrdinalIgnoreCase);
+            ToastNotifier.Show(offline ? "No network — pronunciation scoring needs a connection" : "Scoring failed: " + ex.Message);
+        }
+        catch (Exception)
+        {
+            // 非預期例外（含 async void）→ 復原並提示，不使 UI 執行緒崩潰
+            SetBulb(btn, recording: false, lit: PracticeLit(entry), busy: false);
+            ToastNotifier.Show("Scoring failed, please try again");
+        }
+        finally
+        {
+            _practiceBusy = false;
+        }
     }
 
     private ContextMenu MakeEntryMenu(NoteEntry entry)

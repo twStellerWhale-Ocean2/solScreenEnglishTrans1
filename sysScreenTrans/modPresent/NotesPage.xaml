@@ -36,7 +36,8 @@
                 ToolTip="Sort entries in this folder A→Z by original text" Margin="0,0,6,0"/>
         <Button x:Name="SortDescBtn" Content="Sort Z→A" Style="{StaticResource GhostButton}"
                 ToolTip="Sort entries in this folder Z→A by original text" Margin="0,0,6,0"/>
-        <Button x:Name="ClearEntriesBtn" Content="Clear All"
+        <Button x:Name="ClearPracticeBtn" Content="Clear Practice"
+                ToolTip="Reset every pronunciation-practice bulb in this folder to off (notes are kept)"
                 Foreground="#8A2B2B" Style="{StaticResource GhostButton}"/>
       </StackPanel>
       <Grid Grid.Row="1">

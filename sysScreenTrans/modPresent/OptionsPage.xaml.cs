@@ -51,6 +51,9 @@ public partial class OptionsPage : UserControl
         LostKeyboardFocus += (_, _) => StopListening();
         SaveBtn.Click += OnSave;
         TestBtn.Click += OnTest;
+        // 發音及格門檻：滑桿↔數值框雙向同步（spec#10）
+        PronThresholdSlider.ValueChanged += (_, e) => PronThresholdBox.Text = ((int)e.NewValue).ToString();
+        PronThresholdBox.LostFocus += (_, _) => SyncThresholdFromBox();
 
         SetConfig(current);
     }
@@ -63,6 +66,9 @@ public partial class OptionsPage : UserControl
         KeyStatus.Text = string.IsNullOrWhiteSpace(key) ? "Status: ○ Not set" : "Status: ● Set";
         SelectByTag(VoiceBox, c.Voice ?? DefaultVoiceTag);
         QueryModelBox.Text = c.Model;
+        PronThresholdSlider.Value = c.PronPassThreshold; // ValueChanged 同步數值框
+        PronThresholdBox.Text = c.PronPassThreshold.ToString();
+        PronModelBox.Text = c.PronModel;
         _hotkey = HotKeyBinding.Parse(c.Hotkey);
         UpdateHotkeyStatus();
     }
@@ -184,7 +190,16 @@ public partial class OptionsPage : UserControl
         Config.MaxRetries,
         _hotkey.Serialize(),
         Config.HistoryMax,   // 保留（#13）
-        Config.Context);     // 保留情境（由情境分頁管理，本頁不重置）
+        Config.Context,      // 保留情境（由情境分頁管理，本頁不重置）
+        (int)PronThresholdSlider.Value, // 發音及格門檻（spec#10）
+        string.IsNullOrWhiteSpace(PronModelBox.Text) ? AppConfig.DefaultPronModel : PronModelBox.Text.Trim());
+
+    /// <summary>數值框 → 滑桿同步（鉗制 0–100；空/非數字回門檻預設）。</summary>
+    private void SyncThresholdFromBox()
+    {
+        var v = int.TryParse(PronThresholdBox.Text?.Trim(), out var n) ? Math.Clamp(n, 0, 100) : AppConfig.DefaultPronThreshold;
+        PronThresholdSlider.Value = v; // ValueChanged 會把數值框回寫為整數
+    }
 
     private void ApplyKeyIfProvided()
     {

@@ -2,6 +2,26 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [0.29.0] - 2026-07-06
+
+Issue #95 增量：我的筆記新增發音練習燈泡（清空全部改為清空練習紀錄）。
+
+### 新增
+- **筆記發音練習（spec#10）**：「我的筆記」卡片播音鈕旁新增**燈泡鈕**——按住錄音、放開送 AI 評分，
+  唸出的分數達「選項」分頁設定的**及格門檻**（預設 80）即點亮燈泡並記錄分數（隨 `notes.json` 留存、重啟保留）；
+  放開後以 toast 明示分數（如「Pronunciation 88 / 80 ✓」），無麥克風／OS 隱私未授權／錄音太短／評分失敗
+  各自明確提示、燈泡不誤亮；評分中呈忙碌態、同時至多一個練習。
+- **發音評分（[techItem發音評分]）**：`IPronunciationAssessor`／`PronunciationService`——以 OpenAI 音訊輸入模型
+  （`paramPronModel`，預設 `gpt-4o-mini-audio-preview`）評分，沿用既有 `OPENAI_API_KEY`（環境變數、不落地）
+  與查詢層之逾時／有限次重試／降級。錄音經 NAudio 擷取（16kHz 單聲道）、僅存記憶體、不落地。
+- **選項頁「發音練習」區塊**：可調及格門檻（0–100，滑桿＋數值輸入）與評分模型（`paramPronPassThreshold`／
+  `paramPronModel`，隨 appsettings 保存、相容舊檔；門檻改動即時依新值重判燈泡）。
+
+### 變更
+- **右欄頂「Clear All」改為「Clear Practice」**：由「清除全部筆記」改為「**清空該夾練習紀錄**」（所有燈泡歸零、
+  不刪筆記）；批次刪除筆記改由整夾刪除（`Del`）承接、逐筆刪除走右鍵。`NoteEntry` 新增 `PracticeScore` 欄
+  （-1＝未練，舊 `notes.json` 相容）。
+
 ## [0.28.1] - 2026-07-06
 
 Issue #93 增量：查詢結果底部「加入至/底色」列拆兩行、底色在上。

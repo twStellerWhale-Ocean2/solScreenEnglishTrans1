@@ -273,6 +273,42 @@ public sealed class NotesStore
         return false;
     }
 
+    /// <summary>
+    /// 設定條目發音練習分數（spec#10）：跨全樹依 Id 尋得後以 record <c>with</c> 換置 <see cref="NoteEntry.PracticeScore"/>；
+    /// 找不到條目回 false。分數 -1＝未練；燈泡是否點亮由呈現層以「分數 ≥ 及格門檻」判定。
+    /// </summary>
+    public static bool SetPracticeScore(NotesData d, string entryId, int score)
+    {
+        foreach (var f in AllFolders(d))
+        {
+            var i = f.Entries.FindIndex(e => e.Id == entryId);
+            if (i >= 0)
+            {
+                f.Entries[i] = f.Entries[i] with { PracticeScore = score };
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// 清空指定資料夾之發音練習紀錄（spec#10）：該夾所有條目 <see cref="NoteEntry.PracticeScore"/> 歸 -1
+    /// （燈泡全滅），子夾與他夾不動。取代原「清除全部（刪筆記）」之 UI 入口——本法**不刪筆記、只重置練習**。
+    /// 找不到夾即無為。純函式、可單元測試。
+    /// </summary>
+    public static void ResetFolderPractice(NotesData d, string folderId)
+    {
+        var f = FindFolder(d, folderId);
+        if (f is null)
+        {
+            return;
+        }
+        for (var i = 0; i < f.Entries.Count; i++)
+        {
+            f.Entries[i] = f.Entries[i] with { PracticeScore = -1 };
+        }
+    }
+
     /// <summary>新增頂層資料夾。</summary>
     public static NoteFolder AddFolder(NotesData d, string name)
     {

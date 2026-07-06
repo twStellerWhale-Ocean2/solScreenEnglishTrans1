@@ -371,4 +371,70 @@ public class AppConfigTests
         }
         finally { File.Delete(path); }
     }
+
+    // ---- 發音練習組態（spec#10）----
+
+    [Fact]
+    public void Load_MissingPronKeys_DefaultsToThreshold80AndAudioModel()
+    {
+        // 舊 appsettings 無發音鍵 → 門檻預設 80、模型預設音訊模型（向後相容）
+        var path = TempPath();
+        File.WriteAllText(path, "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\"}");
+        try
+        {
+            var cfg = AppConfig.Load(path);
+            Assert.Equal(80, cfg.PronPassThreshold);
+            Assert.Equal("gpt-4o-mini-audio-preview", cfg.PronModel);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData(-5)]
+    [InlineData(101)]
+    [InlineData(999)]
+    public void Load_OutOfRangePronThreshold_AppliesDefault(int bad)
+    {
+        var path = TempPath();
+        File.WriteAllText(path,
+            "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\",\"paramPronPassThreshold\":" + bad + "}");
+        try
+        {
+            Assert.Equal(80, AppConfig.Load(path).PronPassThreshold);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(100)]
+    [InlineData(65)]
+    public void Load_InRangePronThreshold_KeptAsIs(int v)
+    {
+        var path = TempPath();
+        File.WriteAllText(path,
+            "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\",\"paramPronPassThreshold\":" + v + "}");
+        try
+        {
+            Assert.Equal(v, AppConfig.Load(path).PronPassThreshold);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void SaveLoad_Roundtrips_PronThresholdAndModel()
+    {
+        var path = TempPath();
+        try
+        {
+            new AppConfig("gpt-4o-mini", 15, "", 2, "Alt+L", 200, "", 65, "gpt-4o-audio-preview").Save(path);
+            var json = File.ReadAllText(path);
+            Assert.Contains("paramPronPassThreshold", json);
+            Assert.Contains("paramPronModel", json);
+            var cfg = AppConfig.Load(path);
+            Assert.Equal(65, cfg.PronPassThreshold);
+            Assert.Equal("gpt-4o-audio-preview", cfg.PronModel);
+        }
+        finally { File.Delete(path); }
+    }
 }

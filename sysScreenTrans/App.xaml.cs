@@ -27,6 +27,7 @@ public partial class App : System.Windows.Application
     private HotKeyService? _hotkey;
     private HotkeyListenGuard? _listenGuard; // 指定快捷鍵監聽期間暫停/恢復全域熱鍵（Issue #89）
     private ISpeechService? _speech;
+    private IPronunciationAssessor? _assessor;   // 發音評分（spec#10；金鑰於呼叫時讀、隨設定重建）
     private AppConfig _config = new("gpt-4o-mini", 15, "");
     private bool _busy;
     private ResultWindow? _result; // 目前開啟中的結果視窗；下一次查詢取代前一個
@@ -80,7 +81,9 @@ public partial class App : System.Windows.Application
         _tray.DoubleClick += (_, _) => OpenMain(MainTab.Notes);
 
         // 分頁（UserControl）＋統一主視窗
-        _notesPage = new NotesPage(_notesStore, () => _speech);
+        _assessor = new PronunciationService(_config.PronModel, _config.TimeoutSec, _config.MaxRetries); // 發音評分（spec#10）
+        _notesPage = new NotesPage(_notesStore, () => _speech,
+            () => _assessor, () => new NaudioRecorder(), () => _config.PronPassThreshold);
         _notesPage.ViewRequested += entry => ShowDetail(entry.ToResult());
         _historyPage = new HistoryPage(_historyStore, () => _speech);
         _historyPage.ViewRequested += entry => ShowDetail(entry.ToResult());
@@ -298,6 +301,8 @@ public partial class App : System.Windows.Application
         CloseResult();
         (_speech as IDisposable)?.Dispose();
         _speech = new SpeechService(_config.Voice);
+        _assessor = new PronunciationService(_config.PronModel, _config.TimeoutSec, _config.MaxRetries); // 隨模型/逾時重建（spec#10）
+        _notesPage?.Reload(); // 門檻改動 → 依新門檻重判燈泡點亮（intTest#36）
         RegisterHotkeyOrWarn();
         var keyReady = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
         if (_tray is not null)

@@ -8,7 +8,7 @@ namespace ScreenTrans;
 /// <param name="Hotkey">喚起快捷鍵綁定（序列化字串，如 <c>Alt+L</c>／<c>Ctrl+Shift+F</c>／<c>Mouse:Middle</c>）。</param>
 /// <param name="HistoryMax">查詢歷史保留筆數上限（非正值套用預設 200）。</param>
 /// <param name="Context">應用情境提示（自然語言，選填；非空時查詢注入為參考情境，spec#8）。</param>
-public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200, string Context = "")
+public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200, string Context = "", int PronPassThreshold = 80, string PronModel = "gpt-4o-mini-audio-preview")
 {
     /// <summary>查詢逾時秒數安全下限／預設（缺欄、解析失敗或非正值皆退回此值）。</summary>
     private const int DefaultTimeoutSec = 15;
@@ -18,6 +18,12 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
 
     /// <summary>查詢歷史保留筆數預設／下限（缺欄或非正值皆退回此值）。</summary>
     public const int DefaultHistoryMax = 200;
+
+    /// <summary>發音練習及格門檻預設（0–100；spec#10）。</summary>
+    public const int DefaultPronThreshold = 80;
+
+    /// <summary>發音評分模型預設（須支援音訊輸入；spec#10）。</summary>
+    public const string DefaultPronModel = "gpt-4o-mini-audio-preview";
 
     /// <summary>
     /// 設定檔正式路徑（Issue #51 遷居）：%APPDATA%\ScreenTrans\appsettings.json，與筆記/歷史/情境
@@ -59,6 +65,7 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
             var r = doc.RootElement;
             var timeoutSec = r.TryGetProperty("paramQueryTimeoutSec", out var t) ? t.GetInt32() : DefaultTimeoutSec;
             var historyMax = r.TryGetProperty("paramHistoryMax", out var hm) ? hm.GetInt32() : DefaultHistoryMax;
+            var pronThreshold = r.TryGetProperty("paramPronPassThreshold", out var pt) ? pt.GetInt32() : DefaultPronThreshold;
             return new AppConfig(
                 r.TryGetProperty("paramModel", out var m) ? m.GetString() ?? "gpt-4o-mini" : "gpt-4o-mini",
                 timeoutSec > 0 ? timeoutSec : DefaultTimeoutSec, // 非正值即刻取消會使查詢永遠逾時，套用安全下限
@@ -66,7 +73,9 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
                 r.TryGetProperty("paramQueryMaxRetries", out var n) ? n.GetInt32() : 2,
                 r.TryGetProperty("paramHotkey", out var h) ? h.GetString() ?? DefaultHotkey : DefaultHotkey,
                 historyMax > 0 ? historyMax : DefaultHistoryMax, // 非正上限套用預設，免歷史被清空或無界成長
-                r.TryGetProperty("paramContextHint", out var cx) ? cx.GetString() ?? "" : ""); // 應用情境提示（選填）；Issue #90 起舊 paramHotkeyPoint 忽略不讀
+                r.TryGetProperty("paramContextHint", out var cx) ? cx.GetString() ?? "" : "", // 應用情境提示（選填）；Issue #90 起舊 paramHotkeyPoint 忽略不讀
+                pronThreshold is >= 0 and <= 100 ? pronThreshold : DefaultPronThreshold, // 發音及格門檻（spec#10；界外套預設）
+                r.TryGetProperty("paramPronModel", out var pm) ? pm.GetString() ?? DefaultPronModel : DefaultPronModel); // 發音評分模型（spec#10）
         }
         catch
         {
@@ -91,6 +100,8 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
             paramHotkey = Hotkey,
             paramHistoryMax = HistoryMax,
             paramContextHint = Context,
+            paramPronPassThreshold = PronPassThreshold,
+            paramPronModel = PronModel,
         };
         File.WriteAllText(path, JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
     }

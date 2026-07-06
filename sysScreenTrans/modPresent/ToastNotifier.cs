@@ -29,7 +29,7 @@ public static class ToastNotifier
             Background = new SolidColorBrush(Color.FromRgb(0x32, 0x32, 0x32)),
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(16, 10, 16, 10),
-            Child = new TextBlock { Text = message, Foreground = Brushes.White, FontSize = 14 },
+            Child = new TextBlock { Text = message, Foreground = Brushes.White, FontSize = 14, TextWrapping = System.Windows.TextWrapping.Wrap, MaxWidth = 360 },
         };
 
         var win = new Window

@@ -58,6 +58,16 @@
 | 自動更新 | 啟動時背景檢查新版並靜默下載；就緒後底部狀態列提示、主視窗「關於」分頁可「立即重啟更新」；未按者結束程式後下次啟動即為新版。「關於」分頁亦可手動「檢查更新」 |
 | 移除 | 結束程式後於「設定 → 應用程式」解除安裝（Portable 版刪除資料夾）＋刪除環境變數；個人資料（筆記/歷史/情境/設定，`%APPDATA%\ScreenTrans`）視需要自行刪除 |
 
+## 發音練習畫面（v0.29.0）
+
+「我的筆記」每張卡片播音鈕旁有**發音練習燈泡鈕**：按住錄音、放開送 AI 評分，分數達門檻即點亮。下圖「Press any key to continue」已練習通過（金色亮燈），其餘未達門檻或未練（灰框）；右上「Clear Practice」把該夾燈泡全歸零（不刪筆記）。
+
+![我的筆記——發音練習燈泡（金＝通過、灰＝未過/未練）與 Clear Practice](docs/manual-assets/notes-practice.png)
+
+「選項」分頁的「Pronunciation practice」可調**及格門檻**（0–100，滑桿＋數值，預設 80）與**評分模型**（音訊模型）；錄音上傳 OpenAI 評分、不留存本機。
+
+![選項——發音練習及格門檻與評分模型](docs/manual-assets/options-practice.png)
+
 ## 選用設定（appsettings.json）
 
 `%APPDATA%\ScreenTrans\appsettings.json` 可調整（皆有預設值、可不理會；由「選項」分頁儲存時自動建立。舊版存於 exe 旁者，首次啟動會自動搬移）：

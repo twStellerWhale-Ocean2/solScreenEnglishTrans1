@@ -30,6 +30,8 @@
   <ItemGroup>
     <!-- TTS：Windows 內建語音合成（SAPI）[techItem語音合成] -->
     <PackageReference Include="System.Speech" Version="9.0.0" />
+    <!-- 麥克風錄音（發音練習 spec#10）[techItem發音評分 之錄音端]：NAudio WaveInEvent（MIT） -->
+    <PackageReference Include="NAudio" Version="2.2.1" />
     <!-- 安裝式散佈＋自動更新（Issue #51）：GitHub Release 為更新源、差量升級 -->
     <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>
