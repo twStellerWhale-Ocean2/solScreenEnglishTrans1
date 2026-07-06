@@ -130,12 +130,18 @@ public sealed class PronunciationService : IPronunciationAssessor
         return json;
     }
 
-    /// <summary>評分提示（要求回 score 0–100＋一句繁中建議）。internal 供單元測試。</summary>
+    /// <summary>
+    /// 評分提示（spec#10）：**先判定音訊是否含對目標句之真正朗讀**——無朗讀（靜音／只有背景雜訊／與目標無關）
+    /// 一律 score=0＋note「未偵測到朗讀」；有朗讀才評 0–100。區分「沒唸→0」與「唸得爛→低分（非 0）」以免偽陰性。
+    /// internal 供單元測試。
+    /// </summary>
     internal const string BasePrompt =
-        "你是英語發音評分器。使用者朗讀下列目標英文句，請評估其發音正確度。"
-        + "只輸出一個 JSON 物件、不要 markdown 圍欄、不要任何多餘文字，格式為 {\"score\": 整數0到100, \"note\": \"一句簡短繁體中文改進建議\"}"
-        + "（score：100＝接近母語者、80 左右＝大致正確可懂、40 以下＝明顯不符或聽不出目標句）。"
-        + "只依聽到的語音評分，不因背景雜訊過度扣分。目標英文句：";
+        "你是英語發音評分器。使用者應朗讀下列目標英文句，請評估其發音正確度。"
+        + "請先判斷音訊中是否有『針對該目標句的真人朗讀』："
+        + "若為靜音、只有背景雜訊、或與目標句無關的聲音（沒有真正朗讀該句），一律 score=0、note 註明「未偵測到朗讀」；"
+        + "若確實有人朗讀該句，才依發音正確度給分——100＝接近母語者、80 左右＝大致正確可懂、40 以下＝明顯不準但仍聽得出在唸該句；"
+        + "唸得不標準但確有朗讀者給對應低分（不可因發音差就當成沒朗讀、亦不可因背景雜訊而過度扣分）。"
+        + "只輸出一個 JSON 物件、不要 markdown 圍欄、不要任何多餘文字，格式為 {\"score\": 整數0到100, \"note\": \"一句簡短繁體中文建議\"}。目標英文句：";
 
     /// <summary>組裝評分 payload（input_audio＋structured output）。internal 供單元測試。</summary>
     internal object BuildPayload(string audioB64, string targetText) => new

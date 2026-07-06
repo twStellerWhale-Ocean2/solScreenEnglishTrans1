@@ -101,4 +101,35 @@ public class PronunciationServiceTests
         var json = JsonSerializer.Serialize(svc.BuildPayload("QQ==", "hi"));
         Assert.Contains(PronunciationService.DefaultModel, json);
     }
+
+    [Fact]
+    public void BasePrompt_InstructsZeroWhenNoGenuineSpeech()
+    {
+        var p = PronunciationService.BasePrompt;
+        Assert.Contains("score=0", p);                       // 無朗讀→0
+        Assert.Contains("未偵測到朗讀", p);                    // 無朗讀之 note
+        Assert.Contains("靜音", p);                           // 明列靜音情境
+        Assert.Contains("背景雜訊", p);                       // 明列雜訊情境
+        Assert.Contains("不可因發音差就當成沒朗讀", p);         // 區分「沒唸→0」vs「唸得爛→低分」，避免偽陰性
+        // 舊寬容句（無「無朗讀防呆」）已移除、不再單獨存在
+        Assert.DoesNotContain("只依聽到的語音評分，不因背景雜訊過度扣分", p);
+    }
+
+    [Fact]
+    public void BuildPayload_CarriesNoSpeechGuardInPrompt()
+    {
+        var svc = new PronunciationService("gpt-audio-mini", 15, 2);
+        var json = JsonSerializer.Serialize(svc.BuildPayload("QUJD", "Hello world"));
+        // 提示中之無朗讀防呆隨 payload 送出（CJK 於序列化會被 \uXXXX 逸出，故以 ASCII 片段驗）
+        Assert.Contains("score=0", json);
+    }
+
+    [Fact]
+    public void Parse_ZeroScoreWithNoSpeechNote()
+    {
+        var r = PronunciationService.Parse(Wrap("{\"score\":0,\"note\":\"未偵測到朗讀\"}"));
+        Assert.Equal(0, r.Score);
+        Assert.Equal("未偵測到朗讀", r.Note);
+        Assert.False(r.IsPass(80)); // 0 分不通過
+    }
 }

@@ -552,8 +552,8 @@ public partial class NotesPage : UserControl
         return card;
     }
 
-    // 麥克風圓鈕配色（閒置／錄音中轉紅）
-    private const string MicFg = "#8A5A6D", MicBg = "#F3EEF1", MicBorder = "#DDCBD5";
+    // 麥克風圓鈕配色（閒置＝與播音同款藍／錄音中轉紅）
+    private const string MicFg = "#2F6FED", MicBg = "#EAF1FE", MicBorder = "#CFE0FB";
     private const string MicRecFg = "#D64545", MicRecBg = "#FCE4E4", MicRecBorder = "#D64545";
 
     /// <summary>一張筆記卡之發音練習元件繫結（麥克風鈕＋成績框＋條目）；供指標事件回查對應成績框。</summary>
