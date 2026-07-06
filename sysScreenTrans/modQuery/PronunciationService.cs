@@ -30,7 +30,7 @@ public interface IPronunciationAssessor
 public sealed class PronunciationService : IPronunciationAssessor
 {
     /// <summary>預設發音評分模型（須支援音訊輸入）。</summary>
-    public const string DefaultModel = "gpt-4o-mini-audio-preview";
+    public const string DefaultModel = "gpt-audio-mini";
 
     private readonly string _model;
     private readonly int _timeoutSec;
@@ -132,8 +132,9 @@ public sealed class PronunciationService : IPronunciationAssessor
 
     /// <summary>評分提示（要求回 score 0–100＋一句繁中建議）。internal 供單元測試。</summary>
     internal const string BasePrompt =
-        "你是英語發音評分器。使用者朗讀下列目標英文句，請評估其發音正確度並回傳 JSON：score＝0 到 100 的整數"
-        + "（100＝接近母語者、80 左右＝大致正確可懂、40 以下＝明顯不符或聽不出目標句）；note＝一句簡短繁體中文改進建議。"
+        "你是英語發音評分器。使用者朗讀下列目標英文句，請評估其發音正確度。"
+        + "只輸出一個 JSON 物件、不要 markdown 圍欄、不要任何多餘文字，格式為 {\"score\": 整數0到100, \"note\": \"一句簡短繁體中文改進建議\"}"
+        + "（score：100＝接近母語者、80 左右＝大致正確可懂、40 以下＝明顯不符或聽不出目標句）。"
         + "只依聽到的語音評分，不因背景雜訊過度扣分。目標英文句：";
 
     /// <summary>組裝評分 payload（input_audio＋structured output）。internal 供單元測試。</summary>
@@ -152,27 +153,7 @@ public sealed class PronunciationService : IPronunciationAssessor
                 },
             },
         },
-        response_format = new
-        {
-            type = "json_schema",
-            json_schema = new
-            {
-                name = "pronunciation_score",
-                strict = true,
-                schema = new
-                {
-                    type = "object",
-                    properties = new
-                    {
-                        score = new { type = "integer" },
-                        note = new { type = "string" },
-                    },
-                    required = new[] { "score", "note" },
-                    additionalProperties = false,
-                },
-            },
-        },
-    };
+    }; // 註：gpt-audio-* 音訊模型不支援 response_format(json_schema/json_object)，改以提示要求 JSON、Parse 穩健解析
 
     /// <summary>解析 OpenAI 回應為發音分數（internal 供單元測試）。分數鉗制於 0–100；缺欄/非 JSON 走 QueryException。</summary>
     internal static PronunciationResult Parse(string apiJson)
@@ -189,7 +170,7 @@ public sealed class PronunciationService : IPronunciationAssessor
             {
                 throw new QueryException("Scoring response was empty.");
             }
-            using var inner = JsonDocument.Parse(content);
+            using var inner = JsonDocument.Parse(ExtractJsonObject(content));
             var r = inner.RootElement;
             if (!r.TryGetProperty("score", out var s))
             {
@@ -209,6 +190,25 @@ public sealed class PronunciationService : IPronunciationAssessor
         {
             throw new QueryException("Failed to parse scoring response (malformed): " + ex.Message);
         }
+    }
+
+    /// <summary>
+    /// 自模型回應取出 JSON 物件字串（internal 供單元測試）：音訊模型無 structured output，容忍 markdown
+    /// 圍欄（```json … ```）與前後贅字——取第一個 <c>{</c> 至最後一個 <c>}</c>。
+    /// </summary>
+    internal static string ExtractJsonObject(string content)
+    {
+        var s = (content ?? "").Trim();
+        if (s.StartsWith("```"))
+        {
+            var nl = s.IndexOf('\n');
+            if (nl >= 0) { s = s[(nl + 1)..]; }
+            if (s.EndsWith("```")) { s = s[..^3]; }
+            s = s.Trim();
+        }
+        var start = s.IndexOf('{');
+        var end = s.LastIndexOf('}');
+        return start >= 0 && end > start ? s[start..(end + 1)] : s;
     }
 
     private static string Truncate(string s, int n) => s.Length <= n ? s : s[..n] + "…";

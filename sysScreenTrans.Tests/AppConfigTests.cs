@@ -384,7 +384,7 @@ public class AppConfigTests
         {
             var cfg = AppConfig.Load(path);
             Assert.Equal(80, cfg.PronPassThreshold);
-            Assert.Equal("gpt-4o-mini-audio-preview", cfg.PronModel);
+            Assert.Equal("gpt-audio-mini", cfg.PronModel);
         }
         finally { File.Delete(path); }
     }
