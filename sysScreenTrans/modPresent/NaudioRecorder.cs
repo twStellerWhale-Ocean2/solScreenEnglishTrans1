@@ -21,6 +21,8 @@ public sealed class NaudioRecorder : IAudioRecorder, IDisposable
     private const int Bits = 16;
     private const int Channels = 1;
     private const int MaxBytes = SampleRate * (Bits / 8) * Channels * MaxRecordMs / 1000;
+    /// <summary>音量正規化增益：一般說話 RMS 偏低，乘此倍率使音量條有明顯高度；上限夾限至 1。</summary>
+    private const double LevelGain = 4.0;
 
     private WaveInEvent? _wave;
     private MemoryStream? _pcm;
@@ -28,6 +30,8 @@ public sealed class NaudioRecorder : IAudioRecorder, IDisposable
     private readonly object _lock = new();
 
     public bool IsRecording { get; private set; }
+
+    public event Action<double>? LevelChanged;
 
     public RecordStart Start()
     {
@@ -64,13 +68,45 @@ public sealed class NaudioRecorder : IAudioRecorder, IDisposable
     {
         lock (_lock)
         {
-            if (_pcm is null || _pcm.Length >= MaxBytes)
+            if (_pcm is null)
             {
-                return; // 逾緩衝上限即不再追加（軟上限）
+                return; // 已停止（放開後不再回報）
             }
-            var take = Math.Min(e.BytesRecorded, MaxBytes - (int)_pcm.Length);
-            _pcm.Write(e.Buffer, 0, take);
+            if (_pcm.Length < MaxBytes)
+            {
+                var take = Math.Min(e.BytesRecorded, MaxBytes - (int)_pcm.Length);
+                _pcm.Write(e.Buffer, 0, take);
+            }
+            // 逾緩衝上限即不再追加（軟上限），但音量仍持續回報使音量條保持反應
         }
+        // 於鎖外引發，避免訂閱端回呼與錄音鎖互鎖；本緩衝之音量與 _pcm 無關、可獨立計算
+        LevelChanged?.Invoke(ComputeLevel(e.Buffer, e.BytesRecorded));
+    }
+
+    /// <summary>
+    /// 由 16-bit 小端 PCM 緩衝算出即時音量（0–1，純函式、可單元測試、不依賴 NAudio）：RMS 正規化後乘語音
+    /// 增益 <see cref="LevelGain"/> 並夾限，使一般說話音量能填出明顯高度、又不過度飽和。空／過短緩衝回 0。
+    /// </summary>
+    public static double ComputeLevel(byte[]? buffer, int bytes)
+    {
+        if (buffer is null || bytes < 2)
+        {
+            return 0;
+        }
+        var count = Math.Min(bytes, buffer.Length);
+        int n = count / 2;
+        if (n == 0)
+        {
+            return 0;
+        }
+        long sumSq = 0;
+        for (int i = 0; i + 1 < count; i += 2)
+        {
+            short s = (short)(buffer[i] | (buffer[i + 1] << 8));
+            sumSq += (long)s * s;
+        }
+        double rms = Math.Sqrt((double)sumSq / n) / 32768.0;
+        return Math.Clamp(rms * LevelGain, 0.0, 1.0);
     }
 
     public byte[]? Stop(out bool tooShort)

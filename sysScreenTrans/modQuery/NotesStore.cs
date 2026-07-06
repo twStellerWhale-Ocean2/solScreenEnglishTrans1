@@ -274,8 +274,9 @@ public sealed class NotesStore
     }
 
     /// <summary>
-    /// 設定條目發音練習分數（spec#10）：跨全樹依 Id 尋得後以 record <c>with</c> 換置 <see cref="NoteEntry.PracticeScore"/>；
-    /// 找不到條目回 false。分數 -1＝未練；燈泡是否點亮由呈現層以「分數 ≥ 及格門檻」判定。
+    /// 記錄一次發音練習分數並保留**最佳分**（spec#10）：跨全樹依 Id 尋得後，將 <see cref="NoteEntry.PracticeScore"/>
+    /// 更新為既有值與本次 <paramref name="score"/> 之較大者（取 Max；既有 -1＝未練，故首次即採本次分）。找不到條目回 false。
+    /// 成績框顯示此最佳分、是否達標由呈現層以「最佳分 ≥ 及格門檻」判定；曾達標即恆綠，直到 <see cref="ResetFolderPractice"/> 歸零。
     /// </summary>
     public static bool SetPracticeScore(NotesData d, string entryId, int score)
     {
@@ -284,7 +285,8 @@ public sealed class NotesStore
             var i = f.Entries.FindIndex(e => e.Id == entryId);
             if (i >= 0)
             {
-                f.Entries[i] = f.Entries[i] with { PracticeScore = score };
+                var best = Math.Max(f.Entries[i].PracticeScore, score);
+                f.Entries[i] = f.Entries[i] with { PracticeScore = best };
                 return true;
             }
         }
@@ -293,7 +295,7 @@ public sealed class NotesStore
 
     /// <summary>
     /// 清空指定資料夾之發音練習紀錄（spec#10）：該夾所有條目 <see cref="NoteEntry.PracticeScore"/> 歸 -1
-    /// （燈泡全滅），子夾與他夾不動。取代原「清除全部（刪筆記）」之 UI 入口——本法**不刪筆記、只重置練習**。
+    /// （成績框全回未練灰「—」），子夾與他夾不動。取代原「清除全部（刪筆記）」之 UI 入口——本法**不刪筆記、只重置練習**。
     /// 找不到夾即無為。純函式、可單元測試。
     /// </summary>
     public static void ResetFolderPractice(NotesData d, string folderId)

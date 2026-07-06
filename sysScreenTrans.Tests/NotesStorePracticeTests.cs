@@ -33,6 +33,24 @@ public class NotesStorePracticeTests
     }
 
     [Fact]
+    public void SetPracticeScore_KeepsBest_HigherWinsLowerIgnored()
+    {
+        var d = new NotesData();
+        NotesStore.AddTo(d, E("hello"));
+        var id = d.Folders[0].Entries[0].Id;
+
+        Assert.True(NotesStore.SetPracticeScore(d, id, 60)); // 首次：-1 → 60
+        Assert.Equal(60, Score(d, id));
+        NotesStore.SetPracticeScore(d, id, 85);              // 更高分 → 更新最佳
+        Assert.Equal(85, Score(d, id));
+        NotesStore.SetPracticeScore(d, id, 40);              // 更低分 → 保留最佳（取 Max）
+        Assert.Equal(85, Score(d, id));
+    }
+
+    private static int Score(NotesData d, string id) =>
+        NotesStore.AllFolders(d).SelectMany(f => f.Entries).First(e => e.Id == id).PracticeScore;
+
+    [Fact]
     public void SetPracticeScore_UnknownId_ReturnsFalse()
     {
         var d = new NotesData();

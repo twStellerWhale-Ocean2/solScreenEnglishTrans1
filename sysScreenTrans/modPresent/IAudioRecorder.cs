@@ -25,6 +25,12 @@ public interface IAudioRecorder
     /// <summary>目前是否錄音中。</summary>
     bool IsRecording { get; }
 
+    /// <summary>
+    /// 錄音期間即時音量回報（0–1，spec#10 成績框藍色音量條）：每個擷取緩衝算出一次、由背景執行緒引發，
+    /// 訂閱端須自行 marshal 回 UI 執行緒更新。非錄音態不引發。
+    /// </summary>
+    event Action<double>? LevelChanged;
+
     /// <summary>開始擷取；回 <see cref="RecordStart.Ok"/> 或無法開始之原因。</summary>
     RecordStart Start();
 
