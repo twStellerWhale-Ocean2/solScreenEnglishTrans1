@@ -5,8 +5,8 @@ namespace ScreenTrans.Query;
 /// <summary>
 /// 單筆我的筆記（[modQuery模組] 我的筆記儲存契約，spec#7）：唯一 Id＋加入時間＋三欄結果＋底色
 /// （<see cref="Color"/>，hex 字串、空＝預設白，Issue #44；舊檔缺欄位由建構子預設值相容）。
-/// 去重以 <see cref="Key"/>（英文原文正規化：去頭尾空白、大小寫折疊）為準；金鑰不入筆記。發音練習分數
-/// <see cref="PracticeScore"/>（-1＝未練、≥設定門檻＝燈泡點亮，spec#10；舊檔缺欄位由建構子預設 -1 相容）。
+/// 去重以 <see cref="Key"/>（英文原文正規化：去頭尾空白、大小寫折疊）為準；金鑰不入筆記。發音練習**最佳分**
+/// <see cref="PracticeScore"/>（-1＝未練、≥設定門檻＝成績框綠底＋✓，spec#10；取歷來最大、舊檔缺欄位由建構子預設 -1 相容）。
 /// </summary>
 public sealed record NoteEntry(string Id, DateTimeOffset AddedAt, string Original, string Phonetic, string Translation, string Color = "", int PracticeScore = -1)
 {

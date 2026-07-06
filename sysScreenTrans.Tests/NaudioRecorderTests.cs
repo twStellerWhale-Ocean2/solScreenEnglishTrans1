@@ -45,4 +45,60 @@ public class NaudioRecorderTests
         Assert.Equal(44100 * 2 * 16 / 8, BitConverter.ToInt32(wav, 28)); // ByteRate
         Assert.Equal((short)(2 * 16 / 8), BitConverter.ToInt16(wav, 32)); // BlockAlign
     }
+
+    // ---- 即時音量純函式（RMS→0–1，成績框藍色音量條，spec#10）：不需麥克風裝置 ----
+
+    [Fact]
+    public void ComputeLevel_Silence_IsZero()
+    {
+        var buf = new byte[320]; // 全零 PCM ＝ 靜音
+        Assert.Equal(0, NaudioRecorder.ComputeLevel(buf, buf.Length));
+    }
+
+    [Fact]
+    public void ComputeLevel_EmptyOrTinyBuffer_IsZero()
+    {
+        Assert.Equal(0, NaudioRecorder.ComputeLevel(Array.Empty<byte>(), 0));
+        Assert.Equal(0, NaudioRecorder.ComputeLevel(null, 0));
+        Assert.Equal(0, NaudioRecorder.ComputeLevel(new byte[1], 1)); // 不足一個 16-bit 取樣
+    }
+
+    [Fact]
+    public void ComputeLevel_LouderInput_YieldsHigherLevel_AndStaysInRange()
+    {
+        var quiet = Pcm16(1000, 160);
+        var loud = Pcm16(8000, 160);
+        var lq = NaudioRecorder.ComputeLevel(quiet, quiet.Length);
+        var ll = NaudioRecorder.ComputeLevel(loud, loud.Length);
+        Assert.True(ll > lq);
+        Assert.InRange(lq, 0, 1);
+        Assert.InRange(ll, 0, 1);
+    }
+
+    [Fact]
+    public void ComputeLevel_FullScale_ClampsToOne()
+    {
+        var max = Pcm16(short.MaxValue, 160); // RMS≈滿刻度 → ×增益後夾限至 1
+        Assert.Equal(1.0, NaudioRecorder.ComputeLevel(max, max.Length));
+    }
+
+    [Fact]
+    public void ComputeLevel_HonorsByteCount_IgnoresTail()
+    {
+        var buf = Pcm16(8000, 160);              // 前段高振幅
+        Assert.Equal(0, NaudioRecorder.ComputeLevel(new byte[buf.Length], 0)); // bytes=0 → 0
+        Assert.True(NaudioRecorder.ComputeLevel(buf, 4) > 0); // 只算前兩個取樣仍有音量
+    }
+
+    // 產生固定振幅之 16-bit 小端 PCM（samples 個取樣）
+    private static byte[] Pcm16(short amp, int samples)
+    {
+        var b = new byte[samples * 2];
+        for (var i = 0; i < samples; i++)
+        {
+            b[i * 2] = (byte)(amp & 0xFF);
+            b[i * 2 + 1] = (byte)((amp >> 8) & 0xFF);
+        }
+        return b;
+    }
 }

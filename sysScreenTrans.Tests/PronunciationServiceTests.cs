@@ -67,16 +67,31 @@ public class PronunciationServiceTests
     }
 
     [Fact]
-    public void BuildPayload_HasAudioModelTargetAndSchema()
+    public void BuildPayload_HasAudioModelAndTarget_NoStructuredOutput()
     {
-        var svc = new PronunciationService("gpt-4o-mini-audio-preview", 15, 2);
+        var svc = new PronunciationService("gpt-audio-mini", 15, 2);
         var json = JsonSerializer.Serialize(svc.BuildPayload("QUJD", "Hello world"));
         Assert.Contains("input_audio", json);
         Assert.Contains("QUJD", json);                    // base64 audio embedded
-        Assert.Contains("gpt-4o-mini-audio-preview", json);
+        Assert.Contains("gpt-audio-mini", json);
         Assert.Contains("Hello world", json);             // target text in prompt
-        Assert.Contains("json_schema", json);             // structured output
-        Assert.Contains("pronunciation_score", json);
+        // gpt-audio-* 音訊模型不支援 structured outputs → payload 不得含 response_format
+        Assert.DoesNotContain("json_schema", json);
+        Assert.DoesNotContain("response_format", json);
+    }
+
+    [Fact]
+    public void Parse_ToleratesMarkdownFences()
+    {
+        var r = PronunciationService.Parse(Wrap("```json\n{\"score\": 91, \"note\": \"great\"}\n```"));
+        Assert.Equal(91, r.Score);
+        Assert.Equal("great", r.Note);
+    }
+
+    [Fact]
+    public void Parse_ExtractsJsonFromSurroundingText()
+    {
+        Assert.Equal(77, PronunciationService.Parse(Wrap("Here is your score: {\"score\":77,\"note\":\"ok\"} thanks")).Score);
     }
 
     [Fact]

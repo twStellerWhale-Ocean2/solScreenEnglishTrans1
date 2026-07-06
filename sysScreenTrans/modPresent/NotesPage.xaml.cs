@@ -68,6 +68,8 @@ public partial class NotesPage : UserControl
     private readonly Func<IAudioRecorder> _recorderFactory;     // 麥克風錄音工廠（spec#10）
     private readonly Func<int> _threshold;                      // 發音及格門檻（設定頁可調）
     private IAudioRecorder? _recording;                         // 按住期間之錄音器（同時至多一個）
+    private PracticeCell? _activeCell;                          // 錄音中之卡片繫結（供樹重建時收束、釋放擷取）
+    private Action<double>? _levelHandler;                      // 錄音期間即時音量訂閱（收束時退訂）
     private bool _practiceBusy;                                 // 評分中守衛：不重入
     private System.Windows.Threading.DispatcherTimer? _maxRecTimer; // 錄音上限守衛
     private NotesData _data;
@@ -232,6 +234,7 @@ public partial class NotesPage : UserControl
 
     private void RenderFolder()
     {
+        CancelActivePractice(); // 重建卡片前收束進行中的錄音，免舊卡卸離後錄音器/計時器外洩、麥克風卡紅（§5 #1）
         EntryPanel.Children.Clear();
         var f = Selected;
         bool any = f is not null && f.Entries.Count > 0;
@@ -269,7 +272,7 @@ public partial class NotesPage : UserControl
         RenderFolder();
     }
 
-    /// <summary>右欄[Clear Practice]：清空選取夾內全部筆記之發音練習紀錄（燈泡歸零；不刪筆記，spec#10）。</summary>
+    /// <summary>右欄[Clear Practice]：清空選取夾內全部筆記之發音練習紀錄（成績框回未練；不刪筆記，spec#10）。</summary>
     private void OnClearPractice()
     {
         var f = Selected;
@@ -277,14 +280,14 @@ public partial class NotesPage : UserControl
         {
             return;
         }
-        if (MessageBox.Show($"Clear pronunciation-practice records for all {f.Entries.Count} notes in “{f.Name}”? The notes themselves are kept — only the bulbs are reset to off.",
+        if (MessageBox.Show($"Clear pronunciation-practice records for all {f.Entries.Count} notes in “{f.Name}”? The notes themselves are kept — only the score boxes are reset.",
                 "Clear Practice", MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
         {
             return;
         }
         NotesStore.ResetFolderPractice(_data, f.Id);
         _store.Save(_data);
-        RenderFolder(); // 僅重繪目前夾條目（燈泡歸零），不需重建整棵樹
+        RenderFolder(); // 僅重繪目前夾條目（成績框回未練），不需重建整棵樹
     }
 
     // ---- 資料夾操作（頂部[建立資料夾]＋右鍵選單／F2／Del，原地更名如檔案總管） ----
@@ -478,7 +481,8 @@ public partial class NotesPage : UserControl
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 行尾播音鈕（Issue #56）
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 行尾發音練習燈泡鈕（spec#10）
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 行尾麥克風錄音鈕（spec#10）
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 行尾發音成績框（spec#10）
 
         var handle = new TextBlock
         {
@@ -508,52 +512,31 @@ public partial class NotesPage : UserControl
         grid.Children.Add(text);
 
         // 行尾播音鈕（Issue #56）：最高頻動作一鍵可達，其餘（檢視/底色/刪除）仍走右鍵選單。
-        // Button 自行處理點擊、不冒泡至卡片（故單擊播音不觸發雙擊檢視、不啟動拖曳）。
-        var playBtn = new Button
-        {
-            Content = "", // Segoe MDL2 Assets：Play
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 13,
-            Foreground = Brush("#2F6FED"),
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Padding = new Thickness(6, 2, 6, 2),
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = "Play",
-        };
+        // 圓鈕（RoundIcon）明示可按；Click 自處理、不冒泡至卡片（單擊播音不觸發雙擊檢視、不啟動拖曳）。
+        var playBtn = RoundButton("", "Play", fg: "#2F6FED", bg: "#EAF1FE", border: "#CFE0FB"); // MDL2 Play
         playBtn.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
         Grid.SetColumn(playBtn, 2);
         grid.Children.Add(playBtn);
 
-        // 行尾發音練習燈泡鈕（spec#10）：按住錄音（轉紅）／放開送 AI 評分（忙碌態、不重入）、達門檻點亮；
-        // 放開後 toast 明示分數與門檻或各失敗態訊息。Button 自處理指標事件、e.Handled 阻冒泡（不觸發播音/雙擊檢視/拖曳）。
-        var bulb = new TextBlock
-        {
-            Text = "", // Segoe MDL2 Assets：Lightbulb（讀作燈泡而非狀態點）
-            FontFamily = new FontFamily("Segoe MDL2 Assets"),
-            FontSize = 15,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        var bulbBtn = new Button
-        {
-            Content = bulb,
-            Background = Brushes.Transparent,
-            BorderThickness = new Thickness(0),
-            Padding = new Thickness(6, 2, 6, 2),
-            Cursor = Cursors.Hand,
-            VerticalAlignment = VerticalAlignment.Center,
-            ToolTip = entry.PracticeScore >= 0
-                ? $"Last score {entry.PracticeScore} · hold to record, release to check pronunciation"
-                : "Hold to record, release to check pronunciation",
-            Tag = entry,
-        };
-        SetBulb(bulbBtn, recording: false, lit: PracticeLit(entry), busy: false);
-        bulbBtn.PreviewMouseLeftButtonDown += OnBulbDown;
-        bulbBtn.PreviewMouseLeftButtonUp += OnBulbUp;
-        bulbBtn.LostMouseCapture += OnBulbLostCapture; // 擷取被搶走（alt-tab／他處彈窗）亦收束錄音、不卡在上限
-        Grid.SetColumn(bulbBtn, 3);
-        grid.Children.Add(bulbBtn);
+        // 行尾發音練習＝麥克風圓鈕（動作）＋成績框（狀態），取代舊燈泡（spec#10）。
+        // 麥克風：按住錄音（轉紅）／放開送 AI 評分；成績框：未練/最佳分(<門檻紅框、≥門檻綠底✓)/錄音音量條/評分 spinner/得分閃分。
+        // 指標事件由麥克風 Button 自處理、e.Handled 阻冒泡（不觸發播音/雙擊檢視/拖曳）。
+        var scoreBox = new PracticeScoreBox();
+        scoreBox.SetThreshold(_threshold());
+        scoreBox.ShowBest(entry.PracticeScore);
+
+        var micBtn = RoundButton("", // MDL2 Microphone
+            "Hold to record, release to check pronunciation", fg: MicFg, bg: MicBg, border: MicBorder);
+        var cell = new PracticeCell { Entry = entry, Mic = micBtn, Box = scoreBox };
+        micBtn.Tag = cell;
+        micBtn.PreviewMouseLeftButtonDown += OnMicDown;
+        micBtn.PreviewMouseLeftButtonUp += OnMicUp;
+        micBtn.LostMouseCapture += OnMicLostCapture; // 擷取被搶走（alt-tab／他處彈窗）亦收束錄音、不卡在上限
+        Grid.SetColumn(micBtn, 3);
+        grid.Children.Add(micBtn);
+
+        Grid.SetColumn(scoreBox, 4);
+        grid.Children.Add(scoreBox);
 
         card.Child = grid;
         card.Tag = entry;
@@ -569,31 +552,61 @@ public partial class NotesPage : UserControl
         return card;
     }
 
-    /// <summary>該筆是否「通過」（分數達目前及格門檻）＝燈泡點亮。</summary>
-    private bool PracticeLit(NoteEntry e) => e.PracticeScore >= _threshold();
+    // 麥克風圓鈕配色（閒置／錄音中轉紅）
+    private const string MicFg = "#8A5A6D", MicBg = "#F3EEF1", MicBorder = "#DDCBD5";
+    private const string MicRecFg = "#D64545", MicRecBg = "#FCE4E4", MicRecBorder = "#D64545";
 
-    /// <summary>依狀態設定燈泡外觀：錄音中＝紅、評分中＝藍、通過＝金、否則＝灰框空心。</summary>
-    private static void SetBulb(Button btn, bool recording, bool lit, bool busy)
+    /// <summary>一張筆記卡之發音練習元件繫結（麥克風鈕＋成績框＋條目）；供指標事件回查對應成績框。</summary>
+    private sealed class PracticeCell
     {
-        if (btn.Content is not TextBlock el)
-        {
-            return;
-        }
-        el.Foreground = recording ? Brush("#D64545")
-            : busy ? Brush("#6AA0E8")
-            : lit ? Brush("#F5C518")
-            : Brush("#C9B8C0");
+        public required NoteEntry Entry { get; init; }
+        public required Button Mic { get; init; }
+        public required PracticeScoreBox Box { get; init; }
     }
 
-    /// <summary>按住燈泡＝開始錄音（spec#10）；無麥克風／未授權／忙碌各自處理。e.Handled 阻冒泡。</summary>
-    private void OnBulbDown(object sender, MouseButtonEventArgs e)
+    /// <summary>建立卡片行尾圓形圖示鈕（RoundIcon 樣式；播音／麥克風同款、明示可按）。</summary>
+    private Button RoundButton(string glyph, string tooltip, string fg, string bg, string border) => new()
+    {
+        Style = (System.Windows.Style)FindResource("RoundIcon"),
+        Content = glyph,
+        Foreground = Brush(fg),
+        Background = Brush(bg),
+        BorderBrush = Brush(border),
+        Margin = new Thickness(1, 0, 1, 0),
+        ToolTip = tooltip,
+    };
+
+    /// <summary>依錄音態設定麥克風圓鈕外觀（錄音中轉紅）。</summary>
+    private static void SetMic(Button mic, bool recording)
+    {
+        mic.Foreground = Brush(recording ? MicRecFg : MicFg);
+        mic.Background = Brush(recording ? MicRecBg : MicBg);
+        mic.BorderBrush = Brush(recording ? MicRecBorder : MicBorder);
+    }
+
+    /// <summary>目前 _data 中該條目之最佳分（-1＝未練）；用於評分後回落與失敗復原。</summary>
+    private int CurrentScore(string entryId)
+    {
+        foreach (var f in NotesStore.AllFolders(_data))
+        {
+            var e = f.Entries.FirstOrDefault(x => x.Id == entryId);
+            if (e is not null)
+            {
+                return e.PracticeScore;
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>按住麥克風＝開始錄音（spec#10）；無麥克風／未授權／忙碌各自處理。e.Handled 阻冒泡。錄音期間即時音量→成績框音量條。</summary>
+    private void OnMicDown(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true; // 不冒泡至卡片（不觸發雙擊檢視、不啟動拖曳）
-        if (_practiceBusy || _recording is not null || sender is not Button btn || btn.Tag is not NoteEntry entry)
+        if (_practiceBusy || _recording is not null || sender is not Button btn || btn.Tag is not PracticeCell cell)
         {
             return;
         }
-        if (string.IsNullOrWhiteSpace(entry.Original))
+        if (string.IsNullOrWhiteSpace(cell.Entry.Original))
         {
             ToastNotifier.Show("Nothing to practice");
             return;
@@ -612,34 +625,38 @@ public partial class NotesPage : UserControl
             return;
         }
         _recording = rec;
+        _levelHandler = v => Dispatcher.BeginInvoke(new Action(() => cell.Box.SetLevel(v)));
+        rec.LevelChanged += _levelHandler; // 即時音量→藍色音量條（marshal 回 UI 執行緒）
         btn.CaptureMouse(); // 放開若移出按鈕仍能收到 up
-        SetBulb(btn, recording: true, lit: false, busy: false);
+        SetMic(btn, recording: true);
+        cell.Box.ShowRecording();
+        _activeCell = cell; // 記錄進行中之卡片，供樹重建時收束（§5 #1）
         _maxRecTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(NaudioRecorder.MaxRecordMs) };
-        _maxRecTimer.Tick += (_, _) => FinishRecording(btn, entry);
+        _maxRecTimer.Tick += (_, _) => FinishRecording(cell);
         _maxRecTimer.Start();
     }
 
-    /// <summary>放開燈泡＝停止錄音並送評分（spec#10）。</summary>
-    private void OnBulbUp(object sender, MouseButtonEventArgs e)
+    /// <summary>放開麥克風＝停止錄音並送評分（spec#10）。</summary>
+    private void OnMicUp(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
-        if (sender is Button btn && btn.Tag is NoteEntry entry)
+        if (sender is Button btn && btn.Tag is PracticeCell cell)
         {
-            FinishRecording(btn, entry); // 擷取於 FinishRecording 內釋放
+            FinishRecording(cell); // 擷取於 FinishRecording 內釋放
         }
     }
 
     /// <summary>擷取意外遺失（alt-tab／他處彈窗奪焦）→ 視同放開、收束錄音，避免卡在錄音態直到上限（spec#10）。</summary>
-    private void OnBulbLostCapture(object sender, MouseEventArgs e)
+    private void OnMicLostCapture(object sender, MouseEventArgs e)
     {
-        if (_recording is not null && sender is Button btn && btn.Tag is NoteEntry entry)
+        if (_recording is not null && sender is Button btn && btn.Tag is PracticeCell cell)
         {
-            FinishRecording(btn, entry);
+            FinishRecording(cell);
         }
     }
 
-    /// <summary>結束錄音 → 送 AI 評分 → 更新燈泡與分數、toast 明示分數/門檻或失敗訊息（spec#10）。太短/無音/失敗各自降級。</summary>
-    private async void FinishRecording(Button btn, NoteEntry entry)
+    /// <summary>結束錄音 → 送 AI 評分 → 成績框閃該次分再回落最佳分、toast 明示分數/門檻或失敗訊息（spec#10）。太短/無音/失敗各自降級回前態。</summary>
+    private async void FinishRecording(PracticeCell cell)
     {
         _maxRecTimer?.Stop();
         _maxRecTimer = null;
@@ -649,12 +666,19 @@ public partial class NotesPage : UserControl
             return; // 已結束（上限守衛與放開競態時只跑一次）
         }
         _recording = null;
-        if (btn.IsMouseCaptured) { btn.ReleaseMouseCapture(); }
+        _activeCell = null;
+        if (_levelHandler is not null)
+        {
+            rec.LevelChanged -= _levelHandler; // 退訂即時音量
+            _levelHandler = null;
+        }
+        if (cell.Mic.IsMouseCaptured) { cell.Mic.ReleaseMouseCapture(); }
         var wav = rec.Stop(out var tooShort);
         (rec as IDisposable)?.Dispose();
-        SetBulb(btn, recording: false, lit: PracticeLit(entry), busy: false);
+        SetMic(cell.Mic, recording: false);
         if (wav is null)
         {
+            RestoreBox(cell); // 太短/無音 → 成績框回前態（含 <MinRecordMs 之放開）
             if (tooShort)
             {
                 ToastNotifier.Show("Recording too short");
@@ -664,27 +688,35 @@ public partial class NotesPage : UserControl
         var assessor = _assessor();
         if (assessor is null)
         {
+            RestoreBox(cell);
             ToastNotifier.Show("Set your OpenAI key to score pronunciation");
             return;
         }
         _practiceBusy = true;
-        SetBulb(btn, recording: false, lit: false, busy: true);
+        cell.Box.ShowScoring(); // 評分中 spinner 轉圈
         try
         {
-            var result = await assessor.AssessAsync(wav, entry.Original);
+            var result = await assessor.AssessAsync(wav, cell.Entry.Original);
             var threshold = _threshold();
-            NotesStore.SetPracticeScore(_data, entry.Id, result.Score);
+            NotesStore.SetPracticeScore(_data, cell.Entry.Id, result.Score); // 取最佳分
             _store.Save(_data);
-            var lit = result.Score >= threshold;
-            SetBulb(btn, recording: false, lit: lit, busy: false);
-            var head = lit
+            if (IsBoxLive(cell.Box))
+            {
+                cell.Box.FlashScore(result.Score, CurrentScore(cell.Entry.Id)); // 閃這次分 → 回落最佳分
+            }
+            else
+            {
+                RenderFolder(); // 樹於評分間被重建（§5 #1）→ 以最新最佳分重繪目前夾
+            }
+            var passed = result.Score >= threshold;
+            var head = passed
                 ? $"Pronunciation {result.Score} / {threshold}  ✓ passed"
                 : $"Pronunciation {result.Score} / {threshold} — try again";
             ToastNotifier.Show(string.IsNullOrWhiteSpace(result.Note) ? head : head + "\n" + result.Note);
         }
         catch (QueryException ex)
         {
-            SetBulb(btn, recording: false, lit: PracticeLit(entry), busy: false);
+            RestoreBox(cell);
             var offline = ex.Message.Contains("Network", StringComparison.OrdinalIgnoreCase)
                           || ex.Message.Contains("timed out", StringComparison.OrdinalIgnoreCase);
             ToastNotifier.Show(offline ? "No network — pronunciation scoring needs a connection" : "Scoring failed: " + ex.Message);
@@ -692,7 +724,7 @@ public partial class NotesPage : UserControl
         catch (Exception)
         {
             // 非預期例外（含 async void）→ 復原並提示，不使 UI 執行緒崩潰
-            SetBulb(btn, recording: false, lit: PracticeLit(entry), busy: false);
+            RestoreBox(cell);
             ToastNotifier.Show("Scoring failed, please try again");
         }
         finally
@@ -700,6 +732,47 @@ public partial class NotesPage : UserControl
             _practiceBusy = false;
         }
     }
+
+    /// <summary>
+    /// 中止進行中的錄音（樹將重建時呼叫，§5 #1）：停上限計時器、退訂即時音量、停並棄置錄音器、釋放滑鼠擷取、
+    /// 麥克風復位。評分中之 <c>await</c> 無法中止，但其分數以條目 Id 寫回仍正確；此處只確保錄音硬體與計時器不外洩、
+    /// 麥克風不卡在紅色。無進行中錄音時為無為。
+    /// </summary>
+    private void CancelActivePractice()
+    {
+        _maxRecTimer?.Stop();
+        _maxRecTimer = null;
+        var rec = _recording;
+        if (rec is not null)
+        {
+            _recording = null;
+            if (_levelHandler is not null)
+            {
+                rec.LevelChanged -= _levelHandler;
+                _levelHandler = null;
+            }
+            try { rec.Stop(out _); } catch { /* 停止失敗不致命 */ }
+            (rec as IDisposable)?.Dispose();
+        }
+        if (_activeCell is not null)
+        {
+            if (_activeCell.Mic.IsMouseCaptured) { _activeCell.Mic.ReleaseMouseCapture(); }
+            SetMic(_activeCell.Mic, recording: false);
+            _activeCell = null;
+        }
+    }
+
+    /// <summary>成績框仍在畫面上（未因樹重建而卸離）才回前態；已卸離則跳過，重建之新框已反映正確狀態。</summary>
+    private void RestoreBox(PracticeCell cell)
+    {
+        if (IsBoxLive(cell.Box))
+        {
+            cell.Box.ShowBest(CurrentScore(cell.Entry.Id));
+        }
+    }
+
+    /// <summary>成績框是否仍連於呈現中的視覺樹（樹重建後舊框卸離 → 回 false）。</summary>
+    private static bool IsBoxLive(PracticeScoreBox box) => System.Windows.PresentationSource.FromVisual(box) is not null;
 
     private ContextMenu MakeEntryMenu(NoteEntry entry)
     {

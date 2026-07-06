@@ -302,7 +302,7 @@ public partial class App : System.Windows.Application
         (_speech as IDisposable)?.Dispose();
         _speech = new SpeechService(_config.Voice);
         _assessor = new PronunciationService(_config.PronModel, _config.TimeoutSec, _config.MaxRetries); // 隨模型/逾時重建（spec#10）
-        _notesPage?.Reload(); // 門檻改動 → 依新門檻重判燈泡點亮（intTest#36）
+        _notesPage?.Reload(); // 門檻改動 → 重建卡片、依新門檻重繪成績框達標色（intTest#36）
         RegisterHotkeyOrWarn();
         var keyReady = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
         if (_tray is not null)

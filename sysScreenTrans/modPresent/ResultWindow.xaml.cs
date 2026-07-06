@@ -287,7 +287,7 @@ public partial class ResultWindow : Window
         // 三區不加欄目標示（Issue #40）：字級/色彩/字體本身分層、一望即知。
         BodyPanel.Children.Add(WordifiedOriginal(r.Original));
         BodyPanel.Children.Add(Value(r.Phonetic, "#9A6A82", 24, bold: false, font: "Georgia", topMargin: 6));
-        BodyPanel.Children.Add(PlayRow("▶ Play sentence",
+        BodyPanel.Children.Add(PlayRow("▶ Play",
             () => _speech?.Speak(r.Original, "en-US", stopPrevious: true),
             AutoPlaySettings.English, v => AutoPlaySettings.English = v));
 
@@ -296,7 +296,7 @@ public partial class ResultWindow : Window
 
         // 中文組：中譯 ＋ 中文播放/自動
         BodyPanel.Children.Add(Value(r.Translation, "#3A2C33", 26, bold: false));
-        BodyPanel.Children.Add(PlayRow("▶ Play Chinese",
+        BodyPanel.Children.Add(PlayRow("▶ Play",
             () => _speech?.Speak(r.Translation, "zh-TW", stopPrevious: true),
             AutoPlaySettings.Chinese, v => AutoPlaySettings.Chinese = v));
 

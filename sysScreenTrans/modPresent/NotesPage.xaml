@@ -1,6 +1,35 @@
 <UserControl x:Class="ScreenTrans.Present.NotesPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <UserControl.Resources>
+    <!-- 卡片行尾圓形圖示鈕（spec#10）：播音／麥克風同款圓鈕，明示可按；顏色由實體 Background/BorderBrush/Foreground 指定。 -->
+    <Style x:Key="RoundIcon" TargetType="Button">
+      <Setter Property="Width" Value="27"/>
+      <Setter Property="Height" Value="27"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="13.5"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Opacity" Value="0.82"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </UserControl.Resources>
   <Grid>
     <!-- 左側欄寬可拖拉調整（Issue #58）：GridSplitter 於中間 Auto 欄 -->
     <Grid.ColumnDefinitions>
@@ -28,6 +57,7 @@
     <Grid Grid.Column="2" Margin="4,8,10,10">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
       <!-- 條目工具列（Issue #52 排序鈕於[清除全部]左側；均右對齊比照歷史分頁） -->
@@ -37,10 +67,16 @@
         <Button x:Name="SortDescBtn" Content="Sort Z→A" Style="{StaticResource GhostButton}"
                 ToolTip="Sort entries in this folder Z→A by original text" Margin="0,0,6,0"/>
         <Button x:Name="ClearPracticeBtn" Content="Clear Practice"
-                ToolTip="Reset every pronunciation-practice bulb in this folder to off (notes are kept)"
+                ToolTip="Reset every pronunciation-practice score box in this folder (notes are kept)"
                 Foreground="#8A2B2B" Style="{StaticResource GhostButton}"/>
       </StackPanel>
-      <Grid Grid.Row="1">
+      <!-- 發音練習操作提示（spec#10；自成一列、全寬置左，不與排序鈕重疊） -->
+      <TextBlock Grid.Row="1" HorizontalAlignment="Left" Foreground="#8A5A6D" FontSize="11.5"
+                 Margin="2,0,0,6" TextTrimming="CharacterEllipsis"
+                 ToolTip="Play reads the sentence; press and hold the mic to record your voice, then release to score. The box shows your best.">
+        Play&#160;&#9654;&#160;&#183;&#160;hold&#160;the&#160;mic&#160;to&#160;record&#160;&#183;&#160;score box = your best
+      </TextBlock>
+      <Grid Grid.Row="2">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,0,4,0">
           <StackPanel x:Name="EntryPanel"/>
         </ScrollViewer>
