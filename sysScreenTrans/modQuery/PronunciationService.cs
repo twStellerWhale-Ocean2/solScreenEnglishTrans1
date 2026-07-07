@@ -30,7 +30,7 @@ public interface IPronunciationAssessor
 public sealed class PronunciationService : IPronunciationAssessor
 {
     /// <summary>預設發音評分模型（須支援音訊輸入）。</summary>
-    public const string DefaultModel = "gpt-audio-mini";
+    public const string DefaultModel = "gpt-audio-1.5";
 
     private readonly string _model;
     private readonly int _timeoutSec;
@@ -56,7 +56,15 @@ public sealed class PronunciationService : IPronunciationAssessor
             throw new QueryException("No audio to score.");
         }
         var b64 = Convert.ToBase64String(wavBytes);
-        var json = await RunWithRetryAsync(c => SendOnceAsync(BuildPayload(b64, targetText), key, c), ct);
+        string json;
+        try
+        {
+            json = await RunWithRetryAsync(c => SendOnceAsync(BuildPayload(b64, targetText, structured: true), key, c), ct);
+        }
+        catch (QueryException ex) when (StructuredOutputUnsupported(ex.Message))
+        {
+            json = await RunWithRetryAsync(c => SendOnceAsync(BuildPayload(b64, targetText, structured: false), key, c), ct);
+        }
         return Parse(json);
     }
 
@@ -131,35 +139,67 @@ public sealed class PronunciationService : IPronunciationAssessor
     }
 
     /// <summary>
-    /// 評分提示（spec#10）：**先判定音訊是否含對目標句之真正朗讀**——無朗讀（靜音／只有背景雜訊／與目標無關）
-    /// 一律 score=0＋note「未偵測到朗讀」；有朗讀才評 0–100。區分「沒唸→0」與「唸得爛→低分（非 0）」以免偽陰性。
+    /// 評分提示（spec#10）：先排除明確無朗讀（靜音／只有雜訊／非人聲／完全無關音訊）才給 0；
+    /// 只要可辨識為真人嘗試朗讀目標句或其片段，就依可懂度給非零分，避免口音、童聲或收音品質造成全 0 偽陰性。
     /// internal 供單元測試。
     /// </summary>
     internal const string BasePrompt =
         "你是英語發音評分器。使用者應朗讀下列目標英文句，請評估其發音正確度。"
-        + "請先判斷音訊中是否有『針對該目標句的真人朗讀』："
-        + "若為靜音、只有背景雜訊、或與目標句無關的聲音（沒有真正朗讀該句），一律 score=0、note 註明「未偵測到朗讀」；"
-        + "若確實有人朗讀該句，才依發音正確度給分——100＝接近母語者、80 左右＝大致正確可懂、40 以下＝明顯不準但仍聽得出在唸該句；"
-        + "唸得不標準但確有朗讀者給對應低分（不可因發音差就當成沒朗讀、亦不可因背景雜訊而過度扣分）。"
+        + "先判斷音訊是否明確沒有真人朗讀：只有在靜音、只有背景雜訊、非人聲、或完全與目標句無關的音訊時，才給 score=0 並在 note 註明「未偵測到朗讀」。"
+        + "若音訊中可聽見真人嘗試朗讀目標英文句、其中一部分、或明顯在模仿該句，即使是兒童聲音、口音很重、發音不準、斷句、漏字、音量小、收音品質差或有背景雜訊，也不可判為未朗讀、不可給 0 分；請依可懂度給 15–100 分。"
+        + "評分尺度：100＝接近母語者且清楚自然；80 左右＝大致正確可懂；50–70＝可辨識但有多處音或節奏問題；15–45＝很不準、只聽得出少量目標詞或片段但確有朗讀嘗試。"
+        + "請避免過度嚴格；本功能用於兒童練習，目標是區分沒有朗讀與有嘗試朗讀，而不是專業音素鑑定。"
         + "只輸出一個 JSON 物件、不要 markdown 圍欄、不要任何多餘文字，格式為 {\"score\": 整數0到100, \"note\": \"一句簡短繁體中文建議\"}。目標英文句：";
 
-    /// <summary>組裝評分 payload（input_audio＋structured output）。internal 供單元測試。</summary>
-    internal object BuildPayload(string audioB64, string targetText) => new
+    private static bool StructuredOutputUnsupported(string message)
+        => message.Contains("response_format", StringComparison.OrdinalIgnoreCase)
+           || message.Contains("json_schema", StringComparison.OrdinalIgnoreCase)
+           || message.Contains("schema", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>組裝評分 payload（input_audio＋JSON schema structured output）。internal 供單元測試。</summary>
+    internal object BuildPayload(string audioB64, string targetText, bool structured = true)
     {
-        model = _model,
-        messages = new object[]
+        var payload = new Dictionary<string, object?>
         {
-            new
+            ["model"] = _model,
+            ["messages"] = new object[]
             {
-                role = "user",
-                content = new object[]
+                new
                 {
-                    new { type = "text", text = BasePrompt + "「" + (targetText ?? "").Trim() + "」" },
-                    new { type = "input_audio", input_audio = new { data = audioB64, format = "wav" } },
+                    role = "user",
+                    content = new object[]
+                    {
+                        new { type = "text", text = BasePrompt + "「" + (targetText ?? "").Trim() + "」" },
+                        new { type = "input_audio", input_audio = new { data = audioB64, format = "wav" } },
+                    },
                 },
             },
-        },
-    }; // 註：gpt-audio-* 音訊模型不支援 response_format(json_schema/json_object)，改以提示要求 JSON、Parse 穩健解析
+        };
+        if (structured)
+        {
+            payload["response_format"] = new
+            {
+                type = "json_schema",
+                json_schema = new
+                {
+                    name = "pronunciation_score",
+                    strict = true,
+                    schema = new
+                    {
+                        type = "object",
+                        properties = new
+                        {
+                            score = new { type = "integer", minimum = 0, maximum = 100 },
+                            note = new { type = "string" },
+                        },
+                        required = new[] { "score", "note" },
+                        additionalProperties = false,
+                    },
+                },
+            };
+        }
+        return payload;
+    }
 
     /// <summary>解析 OpenAI 回應為發音分數（internal 供單元測試）。分數鉗制於 0–100；缺欄/非 JSON 走 QueryException。</summary>
     internal static PronunciationResult Parse(string apiJson)
@@ -167,16 +207,26 @@ public sealed class PronunciationService : IPronunciationAssessor
         try
         {
             using var doc = JsonDocument.Parse(apiJson);
-            var content = doc.RootElement
-                .GetProperty("choices")[0]
-                .GetProperty("message")
-                .GetProperty("content")
-                .GetString();
+            var message = doc.RootElement.GetProperty("choices")[0].GetProperty("message");
+            if (message.TryGetProperty("refusal", out var refusal) && !string.IsNullOrWhiteSpace(refusal.GetString()))
+            {
+                throw new QueryException("Scoring request was refused.");
+            }
+            var content = MessageContentText(message);
             if (string.IsNullOrWhiteSpace(content))
             {
                 throw new QueryException("Scoring response was empty.");
             }
-            using var inner = JsonDocument.Parse(ExtractJsonObject(content));
+            var extracted = ExtractJsonObject(content);
+            if (!extracted.TrimStart().StartsWith("{"))
+            {
+                if (LooksLikeNoSpeech(content))
+                {
+                    return new PronunciationResult(0, "未偵測到朗讀");
+                }
+                throw new QueryException("Malformed scoring response: no JSON object.");
+            }
+            using var inner = JsonDocument.Parse(extracted);
             var r = inner.RootElement;
             if (!r.TryGetProperty("score", out var s))
             {
@@ -215,6 +265,46 @@ public sealed class PronunciationService : IPronunciationAssessor
         var start = s.IndexOf('{');
         var end = s.LastIndexOf('}');
         return start >= 0 && end > start ? s[start..(end + 1)] : s;
+    }
+
+    private static string? MessageContentText(JsonElement message)
+    {
+        if (!message.TryGetProperty("content", out var content))
+        {
+            return null;
+        }
+        if (content.ValueKind == JsonValueKind.String)
+        {
+            return content.GetString();
+        }
+        if (content.ValueKind == JsonValueKind.Array)
+        {
+            var parts = new List<string>();
+            foreach (var item in content.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.Object
+                    && item.TryGetProperty("text", out var text)
+                    && text.ValueKind == JsonValueKind.String)
+                {
+                    parts.Add(text.GetString() ?? "");
+                }
+            }
+            return string.Join("\n", parts);
+        }
+        return content.GetRawText();
+    }
+
+    private static bool LooksLikeNoSpeech(string content)
+    {
+        var s = content ?? "";
+        return s.Contains("未偵測", StringComparison.OrdinalIgnoreCase)
+               || s.Contains("沒有偵測", StringComparison.OrdinalIgnoreCase)
+               || s.Contains("沒有朗讀", StringComparison.OrdinalIgnoreCase)
+               || s.Contains("no speech", StringComparison.OrdinalIgnoreCase)
+               || s.Contains("no voice", StringComparison.OrdinalIgnoreCase)
+               || s.Contains("no audio", StringComparison.OrdinalIgnoreCase)
+               || s.Contains("silence", StringComparison.OrdinalIgnoreCase)
+               || s.Contains("silent", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string Truncate(string s, int n) => s.Length <= n ? s : s[..n] + "…";

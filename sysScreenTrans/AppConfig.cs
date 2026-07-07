@@ -8,7 +8,7 @@ namespace ScreenTrans;
 /// <param name="Hotkey">喚起快捷鍵綁定（序列化字串，如 <c>Alt+L</c>／<c>Ctrl+Shift+F</c>／<c>Mouse:Middle</c>）。</param>
 /// <param name="HistoryMax">查詢歷史保留筆數上限（非正值套用預設 200）。</param>
 /// <param name="Context">應用情境提示（自然語言，選填；非空時查詢注入為參考情境，spec#8）。</param>
-public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200, string Context = "", int PronPassThreshold = 80, string PronModel = "gpt-audio-mini")
+public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200, string Context = "", int PronPassThreshold = 80, string PronModel = "gpt-audio-1.5")
 {
     /// <summary>查詢逾時秒數安全下限／預設（缺欄、解析失敗或非正值皆退回此值）。</summary>
     private const int DefaultTimeoutSec = 15;
@@ -23,7 +23,7 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
     public const int DefaultPronThreshold = 80;
 
     /// <summary>發音評分模型預設（須支援音訊輸入；spec#10）。</summary>
-    public const string DefaultPronModel = "gpt-audio-mini";
+    public const string DefaultPronModel = "gpt-audio-1.5";
 
     /// <summary>
     /// 設定檔正式路徑（Issue #51 遷居）：%APPDATA%\ScreenTrans\appsettings.json，與筆記/歷史/情境
@@ -75,7 +75,7 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
                 historyMax > 0 ? historyMax : DefaultHistoryMax, // 非正上限套用預設，免歷史被清空或無界成長
                 r.TryGetProperty("paramContextHint", out var cx) ? cx.GetString() ?? "" : "", // 應用情境提示（選填）；Issue #90 起舊 paramHotkeyPoint 忽略不讀
                 pronThreshold is >= 0 and <= 100 ? pronThreshold : DefaultPronThreshold, // 發音及格門檻（spec#10；界外套預設）
-                r.TryGetProperty("paramPronModel", out var pm) ? pm.GetString() ?? DefaultPronModel : DefaultPronModel); // 發音評分模型（spec#10）
+                NormalizePronModel(r.TryGetProperty("paramPronModel", out var pm) ? pm.GetString() : null)); // 發音評分模型（spec#10）
         }
         catch
         {
@@ -104,5 +104,14 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
             paramPronModel = PronModel,
         };
         File.WriteAllText(path, JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    /// <summary>發音模型讀取邊界：舊預設 gpt-audio-mini 未在目前官方音訊指南列為範例模型，遷移至官方音訊模型。</summary>
+    public static string NormalizePronModel(string? model)
+    {
+        var m = (model ?? "").Trim();
+        return string.IsNullOrWhiteSpace(m) || string.Equals(m, "gpt-audio-mini", StringComparison.OrdinalIgnoreCase)
+            ? DefaultPronModel
+            : m;
     }
 }

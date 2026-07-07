@@ -68,7 +68,7 @@
 
 ![發音練習結果的 Windows 系統通知（標題含練習句、內文含分數/門檻/建議；進通知中心可回看）](docs/manual-assets/notes-notification.png)
 
-「選項」分頁的「Pronunciation practice」可調**及格門檻**（0–100，滑桿＋數值，預設 80）與**評分模型**（`gpt-audio-mini`）；錄音上傳 OpenAI 評分、不留存本機。
+「選項」分頁的「Pronunciation practice」可調**及格門檻**（0–100，滑桿＋數值，預設 80）與**評分模型**（`gpt-audio-1.5`）；錄音上傳 OpenAI 評分、不留存本機。
 
 ![選項——發音練習及格門檻與評分模型](docs/manual-assets/options-practice.png)
 
@@ -86,7 +86,7 @@
 | `paramContextHint` | （空） | #14 遺留單一情境；#36 起由「情境」分頁之命名情境清單取代，此欄若有值會在首次啟動**遷移**為一則「預設情境」。日常改用「情境」分頁 |
 | `paramHistoryMax` | `200` | 查詢歷史保留筆數上限；超過時自動汰除最舊；填 `0` 或負值時套用預設 `200` |
 | `paramPronPassThreshold` | `80` | 發音練習及格門檻（0–100）；唸出的分數達到此值，該筆筆記成績框才轉綠通過。建議由「選項」分頁調整 |
-| `paramPronModel` | `gpt-audio-mini` | 發音評分使用的 OpenAI 音訊模型（`gpt-audio` 系列、須支援語音輸入）；沿用同一把 `OPENAI_API_KEY`，不另設金鑰 |
+| `paramPronModel` | `gpt-audio-1.5` | 發音評分使用的 OpenAI 音訊模型（`gpt-audio` 系列、須支援語音輸入）；沿用同一把 `OPENAI_API_KEY`，不另設金鑰 |
 
 ## 成功判定
 

@@ -23,6 +23,10 @@ public sealed class NaudioRecorder : IAudioRecorder, IDisposable
     private const int MaxBytes = SampleRate * (Bits / 8) * Channels * MaxRecordMs / 1000;
     /// <summary>音量正規化增益：一般說話 RMS 偏低，乘此倍率使音量條有明顯高度；上限夾限至 1。</summary>
     private const double LevelGain = 4.0;
+    /// <summary>低於此 RMS 視為沒有可評分語音輸入，避免把靜音 WAV 送到 AI 後變成格式錯誤。</summary>
+    private const double MinAudibleRms = 0.003;
+    /// <summary>低於此 peak 視為沒有可評分語音輸入；搭配 RMS 防止單一小雜訊誤判。</summary>
+    private const double MinAudiblePeak = 0.015;
 
     private WaveInEvent? _wave;
     private MemoryStream? _pcm;
@@ -128,8 +132,40 @@ public sealed class NaudioRecorder : IAudioRecorder, IDisposable
                 tooShort = true;
                 return null;
             }
+            if (!HasAudibleInput(pcm, pcm.Length))
+            {
+                tooShort = false;
+                return null;
+            }
             return WrapWav(pcm, SampleRate, Bits, Channels);
         }
+    }
+
+    /// <summary>判斷 PCM 是否含足夠可評分音訊；全零/極低音量視為沒有音訊輸入，不送 AI。</summary>
+    public static bool HasAudibleInput(byte[]? buffer, int bytes)
+    {
+        if (buffer is null || bytes < 2)
+        {
+            return false;
+        }
+        var count = Math.Min(bytes, buffer.Length);
+        int n = count / 2;
+        if (n == 0)
+        {
+            return false;
+        }
+        long sumSq = 0;
+        int peak = 0;
+        for (int i = 0; i + 1 < count; i += 2)
+        {
+            short s = (short)(buffer[i] | (buffer[i + 1] << 8));
+            var abs = Math.Abs((int)s);
+            if (abs > peak) { peak = abs; }
+            sumSq += (long)s * s;
+        }
+        double rms = Math.Sqrt((double)sumSq / n) / 32768.0;
+        double peakNorm = peak / 32768.0;
+        return rms >= MinAudibleRms && peakNorm >= MinAudiblePeak;
     }
 
     /// <summary>把原始 PCM 包成標準 44-byte header 之 WAV（純函式、可單元測試、不依賴 NAudio）。</summary>

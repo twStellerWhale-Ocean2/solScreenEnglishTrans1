@@ -67,15 +67,26 @@ public class PronunciationServiceTests
     }
 
     [Fact]
-    public void BuildPayload_HasAudioModelAndTarget_NoStructuredOutput()
+    public void BuildPayload_HasAudioModelTargetAndStructuredOutput()
     {
-        var svc = new PronunciationService("gpt-audio-mini", 15, 2);
+        var svc = new PronunciationService("gpt-audio-1.5", 15, 2);
         var json = JsonSerializer.Serialize(svc.BuildPayload("QUJD", "Hello world"));
         Assert.Contains("input_audio", json);
         Assert.Contains("QUJD", json);                    // base64 audio embedded
-        Assert.Contains("gpt-audio-mini", json);
+        Assert.Contains("gpt-audio-1.5", json);
         Assert.Contains("Hello world", json);             // target text in prompt
-        // gpt-audio-* 音訊模型不支援 structured outputs → payload 不得含 response_format
+        Assert.Contains("json_schema", json);
+        Assert.Contains("response_format", json);
+        Assert.Contains("pronunciation_score", json);
+        Assert.Contains("additionalProperties", json);
+    }
+
+    [Fact]
+    public void BuildPayload_FallbackCanOmitStructuredOutput()
+    {
+        var svc = new PronunciationService("gpt-audio-1.5", 15, 2);
+        var json = JsonSerializer.Serialize(svc.BuildPayload("QUJD", "Hello world", structured: false));
+        Assert.Contains("input_audio", json);
         Assert.DoesNotContain("json_schema", json);
         Assert.DoesNotContain("response_format", json);
     }
@@ -95,6 +106,37 @@ public class PronunciationServiceTests
     }
 
     [Fact]
+    public void Parse_ContentArrayTextParts_Parsed()
+    {
+        var api = JsonSerializer.Serialize(new
+        {
+            choices = new[]
+            {
+                new
+                {
+                    message = new
+                    {
+                        content = new object[] { new { type = "text", text = "{\"score\":68,\"note\":\"keep practicing\"}" } },
+                    },
+                },
+            },
+        });
+        var r = PronunciationService.Parse(api);
+        Assert.Equal(68, r.Score);
+        Assert.Equal("keep practicing", r.Note);
+    }
+
+    [Fact]
+    public void Parse_Refusal_ThrowsQueryException()
+    {
+        var api = JsonSerializer.Serialize(new
+        {
+            choices = new[] { new { message = new { refusal = "cannot comply", content = "" } } },
+        });
+        Assert.Throws<QueryException>(() => PronunciationService.Parse(api));
+    }
+
+    [Fact]
     public void Ctor_BlankModel_FallsBackToDefault()
     {
         var svc = new PronunciationService("", 15);
@@ -103,22 +145,24 @@ public class PronunciationServiceTests
     }
 
     [Fact]
-    public void BasePrompt_InstructsZeroWhenNoGenuineSpeech()
+    public void BasePrompt_OnlyUsesZeroForClearNoSpeech()
     {
         var p = PronunciationService.BasePrompt;
-        Assert.Contains("score=0", p);                       // 無朗讀→0
-        Assert.Contains("未偵測到朗讀", p);                    // 無朗讀之 note
-        Assert.Contains("靜音", p);                           // 明列靜音情境
-        Assert.Contains("背景雜訊", p);                       // 明列雜訊情境
-        Assert.Contains("不可因發音差就當成沒朗讀", p);         // 區分「沒唸→0」vs「唸得爛→低分」，避免偽陰性
-        // 舊寬容句（無「無朗讀防呆」）已移除、不再單獨存在
-        Assert.DoesNotContain("只依聽到的語音評分，不因背景雜訊過度扣分", p);
+        Assert.Contains("score=0", p);                        // 明確無朗讀→0
+        Assert.Contains("未偵測到朗讀", p);                     // 無朗讀之 note
+        Assert.Contains("只有在靜音", p);                       // 0 分條件必須收窄
+        Assert.Contains("完全與目標句無關", p);                 // 無關音訊才算未朗讀
+        Assert.Contains("不可給 0 分", p);                      // 確有朗讀嘗試時避免全 0
+        Assert.Contains("兒童聲音", p);                         // 童聲不能被誤判為沒朗讀
+        Assert.Contains("口音很重", p);                         // 口音不能被誤判為沒朗讀
+        Assert.Contains("15–100 分", p);                        // 有朗讀嘗試須給非零區間
+        Assert.Contains("避免過度嚴格", p);                     // 防止回到全 0 的提示形態
     }
 
     [Fact]
     public void BuildPayload_CarriesNoSpeechGuardInPrompt()
     {
-        var svc = new PronunciationService("gpt-audio-mini", 15, 2);
+        var svc = new PronunciationService("gpt-audio-1.5", 15, 2);
         var json = JsonSerializer.Serialize(svc.BuildPayload("QUJD", "Hello world"));
         // 提示中之無朗讀防呆隨 payload 送出（CJK 於序列化會被 \uXXXX 逸出，故以 ASCII 片段驗）
         Assert.Contains("score=0", json);
@@ -131,5 +175,16 @@ public class PronunciationServiceTests
         Assert.Equal(0, r.Score);
         Assert.Equal("未偵測到朗讀", r.Note);
         Assert.False(r.IsPass(80)); // 0 分不通過
+    }
+
+    [Theory]
+    [InlineData("No speech was detected in the audio.")]
+    [InlineData("The recording appears to be silent.")]
+    [InlineData("未偵測到朗讀。")]
+    public void Parse_NoSpeechFreeText_ReturnsZeroInsteadOfUnreadable(string content)
+    {
+        var r = PronunciationService.Parse(Wrap(content));
+        Assert.Equal(0, r.Score);
+        Assert.Equal("未偵測到朗讀", r.Note);
     }
 }

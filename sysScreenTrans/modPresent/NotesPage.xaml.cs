@@ -686,6 +686,10 @@ public partial class NotesPage : UserControl
             {
                 NotifyFail(cell, "Recording too short");
             }
+            else
+            {
+                NotifyFail(cell, "No audio to score.");
+            }
             return;
         }
         var assessor = _assessor();

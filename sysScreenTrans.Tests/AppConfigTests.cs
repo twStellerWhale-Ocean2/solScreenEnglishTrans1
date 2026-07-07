@@ -384,7 +384,7 @@ public class AppConfigTests
         {
             var cfg = AppConfig.Load(path);
             Assert.Equal(80, cfg.PronPassThreshold);
-            Assert.Equal("gpt-audio-mini", cfg.PronModel);
+            Assert.Equal("gpt-audio-1.5", cfg.PronModel);
         }
         finally { File.Delete(path); }
     }
@@ -434,6 +434,19 @@ public class AppConfigTests
             var cfg = AppConfig.Load(path);
             Assert.Equal(65, cfg.PronPassThreshold);
             Assert.Equal("gpt-4o-audio-preview", cfg.PronModel);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void Load_LegacyPronAudioMini_MigratesToCurrentAudioModel()
+    {
+        var path = TempPath();
+        File.WriteAllText(path,
+            "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\",\"paramPronModel\":\"gpt-audio-mini\"}");
+        try
+        {
+            Assert.Equal("gpt-audio-1.5", AppConfig.Load(path).PronModel);
         }
         finally { File.Delete(path); }
     }

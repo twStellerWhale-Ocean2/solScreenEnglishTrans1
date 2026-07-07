@@ -60,4 +60,20 @@ public class PronNotifyTests
         var (title2, _) = PronNotify.Failure("   ", "No microphone found");
         Assert.Equal("Pronunciation practice", title2);
     }
+
+    [Theory]
+    [InlineData("Scoring failed: 0xE8 device failed", "Scoring failed. Please try again.")]
+    [InlineData("Pronunciation scoring failed after 2 retries: API transient error 503", "Network or scoring service is busy. Please try again.")]
+    [InlineData("OPENAI_API_KEY environment variable is not set; cannot score pronunciation.", "Set your OpenAI key to score pronunciation")]
+    [InlineData("API responded 401: invalid api key", "OpenAI key was rejected. Check your API key.")]
+    [InlineData("API responded 400: model does not support input_audio", "Scoring model is not available. Check the pronunciation model setting.")]
+    [InlineData("Failed to parse scoring response (malformed): missing score", "Scoring service returned an unreadable result. Please try again.")]
+    [InlineData("No audio to score.", "No audio was recorded. Hold the mic and speak clearly.")]
+    public void Failure_NormalizesTechnicalMessages(string raw, string expected)
+    {
+        var (_, body) = PronNotify.Failure("hello", raw);
+        Assert.Equal(expected, body);
+        Assert.DoesNotContain("0x", body);
+        Assert.DoesNotContain("API responded", body);
+    }
 }

@@ -90,6 +90,20 @@ public class NaudioRecorderTests
         Assert.True(NaudioRecorder.ComputeLevel(buf, 4) > 0); // 只算前兩個取樣仍有音量
     }
 
+    [Fact]
+    public void HasAudibleInput_SilenceOrTinyNoise_IsFalse()
+    {
+        Assert.False(NaudioRecorder.HasAudibleInput(new byte[320], 320));
+        Assert.False(NaudioRecorder.HasAudibleInput(Pcm16(20, 160), 320));
+    }
+
+    [Fact]
+    public void HasAudibleInput_SpeechLikeAmplitude_IsTrue()
+    {
+        var pcm = Pcm16(3000, 160);
+        Assert.True(NaudioRecorder.HasAudibleInput(pcm, pcm.Length));
+    }
+
     // 產生固定振幅之 16-bit 小端 PCM（samples 個取樣）
     private static byte[] Pcm16(short amp, int samples)
     {
