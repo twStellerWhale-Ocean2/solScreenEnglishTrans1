@@ -576,6 +576,7 @@ public partial class NotesPage : UserControl
         card.Child = grid;
         card.Tag = entry;
         card.ContextMenu = MakeEntryMenu(entry);
+        card.ToolTip = "Double-click to view; right-click for color / delete"; // View 項移除後之可發現性提示（#106 §G）
         card.MouseLeftButtonDown += (_, e) =>
         {
             if (e.ClickCount == 2) // 雙擊＝檢視（Windows 清單慣例）
@@ -823,27 +824,22 @@ public partial class NotesPage : UserControl
         _notify.Show(title, body);
     }
 
+    /// <summary>
+    /// 條目右鍵選單（Issue #106 收斂為單層）：色塊選項平鋪（No Color＋粉彩盤、目前色打勾）＋分隔線＋ Delete。
+    /// 播音走行尾鈕、檢視走雙擊，不再入選單（原 ▶ Play／View／Color ▸ 子選單制廢止）。
+    /// </summary>
     private ContextMenu MakeEntryMenu(NoteEntry entry)
     {
         var menu = new ContextMenu();
-        var play = new MenuItem { Header = "▶ Play", Foreground = Brush("#2F6FED") };
-        play.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
-        var view = new MenuItem { Header = "View" };
-        view.Click += (_, _) => ViewRequested?.Invoke(entry);
-
-        var color = new MenuItem { Header = "Color" };
-        color.Items.Add(ColorItem(entry, "None", ""));
+        menu.Items.Add(ColorItem(entry, "No Color", ""));
         foreach (var (name, hex) in NoteColors.Palette) // 集中色盤（Issue #55）
         {
-            color.Items.Add(ColorItem(entry, name, hex));
+            menu.Items.Add(ColorItem(entry, name, hex));
         }
 
         var delete = new MenuItem { Header = "Delete", Foreground = Brush("#B23B3B") };
         delete.Click += (_, _) => { NotesStore.RemoveEntry(_data, entry.Id); Persist(); };
 
-        menu.Items.Add(play);
-        menu.Items.Add(view);
-        menu.Items.Add(color);
         menu.Items.Add(new Separator());
         menu.Items.Add(delete);
         return menu;
