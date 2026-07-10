@@ -93,6 +93,10 @@
           <CheckBox x:Name="EntryBoldChk" Content="Bold" Margin="0,10,0,0" Foreground="{StaticResource PinkText}"/>
           <CheckBox x:Name="EntryWrapChk" Content="Wrap long text (otherwise show one line with …)"
                     Margin="0,6,0,0" Foreground="{StaticResource PinkText}"/>
+          <CheckBox x:Name="PassedTransparentChk" Content="Passed cards go transparent (show mascot behind)"
+                    Margin="0,6,0,0" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="When off, a passed practice card keeps its solid colour instead of turning transparent."
+                     FontSize="12" Foreground="{StaticResource PinkSub}" Margin="24,2,0,0" TextWrapping="Wrap"/>
         </StackPanel>
       </Border>
 

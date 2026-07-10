@@ -15,20 +15,38 @@ namespace ScreenTrans.Present;
 /// </summary>
 public static class NoteCardBrush
 {
-    /// <summary>外框加深係數（#118 定本）：白 ×0.80＝`#CCCCCC` 精確、十色 ΔL*≈15–20「略加深」。</summary>
-    public const double DarkenFactor = 0.80;
+    /// <summary>外框明度係數（#123：#118 之 0.80「識別性太淺」→ 0.62 更明顯；白 ×0.62＝`#9E9E9E`）。</summary>
+    public const double DarkenFactor = 0.62;
 
-    /// <summary>暗色計算（純函式可測）：各通道 ×0.80、截斷取整。</summary>
-    public static (byte R, byte G, byte B) Darken(byte r, byte g, byte b) =>
-        ((byte)(r * DarkenFactor), (byte)(g * DarkenFactor), (byte)(b * DarkenFactor));
+    /// <summary>外框飽和度加乘（#123 回饋：粉彩底色偏灰→先拉高飽和再加深，色框更鮮明；白/灰無彩不受影響）。</summary>
+    public const double SaturationBoost = 1.6;
+
+    /// <summary>
+    /// 框色計算（純函式可測）：先以各通道相對灰軸（三通道均值）拉高飽和（×<see cref="SaturationBoost"/>）、
+    /// 再乘明度係數（×<see cref="DarkenFactor"/>）加深；截斷取整、鉗制 0–255。無彩（灰階）拉飽和為無作用、僅加深。
+    /// </summary>
+    public static (byte R, byte G, byte B) BorderRgb(byte r, byte g, byte b)
+    {
+        var mean = (r + g + b) / 3.0;
+        return (Chan(r, mean), Chan(g, mean), Chan(b, mean));
+    }
+
+    private static byte Chan(byte c, double mean)
+    {
+        var v = (mean + (c - mean) * SaturationBoost) * DarkenFactor;
+        return (byte)Math.Clamp((int)v, 0, 255);
+    }
 
     private static readonly Dictionary<string, Brush> BaseCache = new(StringComparer.OrdinalIgnoreCase);
     private static readonly Dictionary<string, Brush> BorderCache = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>卡片底刷：通過＝Transparent（透浮水印）、未通過＝素色。無效/空 hex 退白。</summary>
-    public static Brush For(string? colorHex, bool passed)
+    /// <summary>
+    /// 卡片底刷：通過且 <paramref name="passedTransparent"/>＝Transparent（透浮水印）、否則素色。無效/空 hex 退白。
+    /// <paramref name="passedTransparent"/>（#123 選項頁可關）為 false 時，通過卡維持素底、不透明。
+    /// </summary>
+    public static Brush For(string? colorHex, bool passed, bool passedTransparent = true)
     {
-        if (passed)
+        if (passed && passedTransparent)
         {
             return Brushes.Transparent; // 系統刷已 Frozen；非 null、卡片仍可點選/拖曳命中
         }
@@ -51,7 +69,7 @@ public static class NoteCardBrush
         {
             return cached;
         }
-        var (dr, dg, db) = Darken(color.R, color.G, color.B);
+        var (dr, dg, db) = BorderRgb(color.R, color.G, color.B);
         var brush = new SolidColorBrush(Color.FromRgb(dr, dg, db));
         brush.Freeze();
         BorderCache[key] = brush;

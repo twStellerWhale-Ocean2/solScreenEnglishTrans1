@@ -16,11 +16,15 @@ public static class EntryDisplaySettings
     /// <summary>原文是否自動換行（true＝Wrap 完整顯示；false＝單行 CharacterEllipsis 省略）。</summary>
     public static bool Wrap { get; set; }
 
+    /// <summary>發音通過之筆記卡是否透明底透浮水印（#123 選項頁可關；預設 true＝維持 #118）。</summary>
+    public static bool PassedCardTransparent { get; set; } = true;
+
     /// <summary>自 AppConfig 同步（啟動與設定儲存後由 App 呼叫）。</summary>
     public static void SyncFrom(AppConfig c)
     {
         FontSize = c.EntryFontSize is >= 8 and <= 48 ? c.EntryFontSize : AppConfig.DefaultEntryFontSize;
         Bold = c.EntryBold;
         Wrap = c.EntryWrap;
+        PassedCardTransparent = c.PassedCardTransparent;
     }
 }

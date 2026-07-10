@@ -8,7 +8,7 @@ namespace ScreenTrans;
 /// <param name="Hotkey">喚起快捷鍵綁定（序列化字串，如 <c>Alt+L</c>／<c>Ctrl+Shift+F</c>／<c>Mouse:Middle</c>）。</param>
 /// <param name="HistoryMax">查詢歷史保留筆數上限（非正值套用預設 200）。</param>
 /// <param name="Context">應用情境提示（自然語言，選填；非空時查詢注入為參考情境，spec#8）。</param>
-public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200, string Context = "", int PronPassThreshold = 80, string PronModel = "gpt-audio-1.5", double EntryFontSize = 18, bool EntryBold = true, bool EntryWrap = false, double ResultFontSize = 28, bool ResultHideOnBlur = false)
+public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200, string Context = "", int PronPassThreshold = 80, string PronModel = "gpt-audio-1.5", double EntryFontSize = 18, bool EntryBold = true, bool EntryWrap = false, double ResultFontSize = 28, bool ResultHideOnBlur = false, bool PassedCardTransparent = true)
 {
     /// <summary>筆記/歷史條目原文字級預設（#複查：選項頁「條目顯示」可調；缺欄或超界回此值）。</summary>
     public const double DefaultEntryFontSize = 18;
@@ -88,7 +88,8 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
                 r.TryGetProperty("paramEntryBold", out var eb) && eb.ValueKind == JsonValueKind.False ? false : true, // 條目粗體（缺欄預設 true）
                 r.TryGetProperty("paramEntryWrap", out var ew) && ew.ValueKind == JsonValueKind.True, // 條目自動換行（缺欄預設 false）
                 resultFont, // 查詢結果視窗基準字級（#複查）
-                r.TryGetProperty("paramResultHideOnBlur", out var hb) && hb.ValueKind == JsonValueKind.True); // 查詢視窗失焦自動隱藏（缺欄預設 false，維持 #105）
+                r.TryGetProperty("paramResultHideOnBlur", out var hb) && hb.ValueKind == JsonValueKind.True, // 查詢視窗失焦自動隱藏（缺欄預設 false，維持 #105）
+                r.TryGetProperty("paramPassedCardTransparent", out var pc) && pc.ValueKind == JsonValueKind.False ? false : true); // 過關卡透明底（#123；缺欄預設 true，維持 #118）
         }
         catch
         {
@@ -120,6 +121,7 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
             paramEntryWrap = EntryWrap,
             paramResultFontSize = ResultFontSize, // #複查：查詢結果視窗基準字級
             paramResultHideOnBlur = ResultHideOnBlur, // #複查：查詢視窗失焦自動隱藏
+            paramPassedCardTransparent = PassedCardTransparent, // #123：過關卡透明底可選
         };
         File.WriteAllText(path, JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
     }

@@ -17,7 +17,7 @@ public static class NoteColors
         ("Blue", "#E1EFFB"),
         ("Green", "#E4F5E9"),
         ("Yellow", "#FBF3D9"),
-        ("Gray", "#E9E9E9"),
+        ("Gray", "#DCE0E3"),
         ("Violet", "#EEDBFF"),
         ("Sky", "#B4EBFF"),
         ("Mint", "#B8EDDE"),

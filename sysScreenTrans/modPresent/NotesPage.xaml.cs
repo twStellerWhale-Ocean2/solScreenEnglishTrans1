@@ -495,7 +495,7 @@ public partial class NotesPage : UserControl
         {
             // #111→#118：通過卡透明底（透浮水印；導出態＝最佳分≥門檻）、未過素色；
             // 未選框＝底色×0.80 加深（#118、色彩身份延伸）——底刷/框刷單一來源 NoteCardBrush
-            Background = NoteCardBrush.For(entry.Color, entry.PracticeScore >= _threshold()),
+            Background = NoteCardBrush.For(entry.Color, entry.PracticeScore >= _threshold(), EntryDisplaySettings.PassedCardTransparent),
             BorderBrush = NoteCardBrush.BorderFor(entry.Color),
             BorderThickness = new Thickness(2), // #110：框厚恆定 2px（選取只換色不跳版）
             CornerRadius = new CornerRadius(8),
@@ -542,20 +542,11 @@ public partial class NotesPage : UserControl
         Grid.SetColumn(text, 1);
         grid.Children.Add(text);
 
-        // 登記時間 inline 靠右（Issue #104；#複查：比照歷史條目由「原文下小字」改為單行 inline，省空間）
+        // 登記時間靠右欄（Issue #104；#123：兩頁統一、日期縮小、改兩行 date/time 省寬——共用 EntryTimeCell）
         // AddedAt == default（極舊資料無值）不顯示、不佔位
         if (entry.AddedAt != default)
         {
-            var local = entry.AddedAt.ToLocalTime();
-            var time = new TextBlock
-            {
-                Text = local.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture),
-                FontSize = 12,
-                Foreground = Brush("#9A6A82"), // 比照歷史條目時刻色
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(8, 0, 0, 0),
-                ToolTip = local.ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture),
-            };
+            var time = EntryTimeCell.Build(entry.AddedAt.ToLocalTime());
             Grid.SetColumn(time, 2);
             grid.Children.Add(time);
         }
@@ -761,7 +752,7 @@ public partial class NotesPage : UserControl
             {
                 cell.Box.FlashScore(result.Score, CurrentScore(cell.Entry.Id)); // 閃這次分 → 回落最佳分
                 // #111→#118：達標當下就地點亮（底改透明透浮水印）——判定用 store 現值（cell.Entry 為 record 舊值快照，誤用即首次通過漏亮）
-                cell.Card.Background = NoteCardBrush.For(cell.Entry.Color, CurrentScore(cell.Entry.Id) >= threshold);
+                cell.Card.Background = NoteCardBrush.For(cell.Entry.Color, CurrentScore(cell.Entry.Id) >= threshold, EntryDisplaySettings.PassedCardTransparent);
             }
             else
             {

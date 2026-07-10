@@ -166,14 +166,8 @@ public partial class HistoryPage : UserControl
         Grid.SetColumn(text, 0);
         grid.Children.Add(text);
 
-        var time = new TextBlock
-        {
-            Text = entry.Timestamp.ToLocalTime().ToString("HH:mm"),
-            FontSize = 12, // #110 加大字
-            Foreground = Brush("#9A6A82"),
-            VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(8, 0, 0, 0),
-        };
+        // #123：兩頁統一——改用共用 EntryTimeCell（兩行 date/time、日期縮小），與筆記條目同款
+        var time = EntryTimeCell.Build(entry.Timestamp.ToLocalTime());
         Grid.SetColumn(time, 1);
         grid.Children.Add(time);
 

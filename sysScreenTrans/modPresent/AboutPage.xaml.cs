@@ -30,6 +30,9 @@ public partial class AboutPage : UserControl
         CheckUpdateBtn.Click += async (_, _) => await CheckAsync();
         RestartUpdateBtn.Click += (_, _) => _updates.RestartToApply();
         _updates.UpdateReady += v => Dispatcher.BeginInvoke(() => ShowReady(v));
+        // #122：下載階段回饋（與「確認中」區分）——事件於背景執行緒觸發，切 Dispatcher 更新 UI
+        _updates.DownloadStarted += () => Dispatcher.BeginInvoke(() => UpdateStatusText.Text = AppStatusText.UpdateDownloading);
+        _updates.DownloadProgress += p => Dispatcher.BeginInvoke(() => UpdateStatusText.Text = AppStatusText.UpdateDownloadingPercent(p));
         if (_updates.ReadyVersion is not null)
         {
             ShowReady(_updates.ReadyVersion);
@@ -78,9 +81,10 @@ public partial class AboutPage : UserControl
         }
         else
         {
-            UpdateStatusText.Text = result == UpdateCheckResult.Failed
-                ? AppStatusText.UpdateCheckFailed
-                : AppStatusText.UpdateUpToDate;
+            // #122：已是最新 vs 各類失敗（離線/限流/暫時性/來源）各給對應訊息
+            UpdateStatusText.Text = result == UpdateCheckResult.UpToDate
+                ? AppStatusText.UpdateUpToDate
+                : AppStatusText.UpdateFailureMessage(result);
             CheckUpdateBtn.IsEnabled = true;
         }
     }

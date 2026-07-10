@@ -51,9 +51,9 @@ public class AppStatusTextTests
     [Fact]
     public void UpdateCheckStrings_DistinguishFailureFromUpToDate()
     {
-        // 手動檢查失敗（離線）不得與「已是最新版本」同文——不誤報最新（Issue #51）
+        // 手動檢查失敗不得與「已是最新版本」同文——不誤報最新（Issue #51；#122 失敗細分類）
         Assert.Equal("You're up to date", AppStatusText.UpdateUpToDate);
-        Assert.Equal("Couldn't check for updates. Check your connection and try again.", AppStatusText.UpdateCheckFailed);
-        Assert.NotEqual(AppStatusText.UpdateUpToDate, AppStatusText.UpdateCheckFailed);
+        Assert.NotEqual(AppStatusText.UpdateUpToDate, AppStatusText.UpdateFailedOffline);
+        Assert.NotEqual(AppStatusText.UpdateUpToDate, AppStatusText.UpdateFailedRateLimited);
     }
 }
