@@ -54,6 +54,9 @@ public partial class OptionsPage : UserControl
         // 發音及格門檻：滑桿↔數值框雙向同步（spec#10）
         PronThresholdSlider.ValueChanged += (_, e) => PronThresholdBox.Text = ((int)e.NewValue).ToString();
         PronThresholdBox.LostFocus += (_, _) => SyncThresholdFromBox();
+        // 條目字級：滑桿↔數值框雙向同步（#複查）
+        EntryFontSlider.ValueChanged += (_, e) => EntryFontBox.Text = ((int)e.NewValue).ToString();
+        EntryFontBox.LostFocus += (_, _) => SyncEntryFontFromBox();
 
         SetConfig(current);
     }
@@ -69,8 +72,19 @@ public partial class OptionsPage : UserControl
         PronThresholdSlider.Value = c.PronPassThreshold; // ValueChanged 同步數值框
         PronThresholdBox.Text = c.PronPassThreshold.ToString();
         PronModelBox.Text = c.PronModel;
+        EntryFontSlider.Value = c.EntryFontSize; // ValueChanged 同步數值框（#複查）
+        EntryFontBox.Text = ((int)c.EntryFontSize).ToString();
+        EntryBoldChk.IsChecked = c.EntryBold;
+        EntryWrapChk.IsChecked = c.EntryWrap;
         _hotkey = HotKeyBinding.Parse(c.Hotkey);
         UpdateHotkeyStatus();
+    }
+
+    /// <summary>條目字級數值框 → 滑桿同步（鉗制 12–32；空/非數字回預設）。</summary>
+    private void SyncEntryFontFromBox()
+    {
+        var v = int.TryParse(EntryFontBox.Text?.Trim(), out var n) ? Math.Clamp(n, 12, 32) : (int)AppConfig.DefaultEntryFontSize;
+        EntryFontSlider.Value = v;
     }
 
     private void UpdateHotkeyStatus()
@@ -192,7 +206,10 @@ public partial class OptionsPage : UserControl
         Config.HistoryMax,   // 保留（#13）
         Config.Context,      // 保留情境（由情境分頁管理，本頁不重置）
         (int)PronThresholdSlider.Value, // 發音及格門檻（spec#10）
-        string.IsNullOrWhiteSpace(PronModelBox.Text) ? AppConfig.DefaultPronModel : PronModelBox.Text.Trim());
+        string.IsNullOrWhiteSpace(PronModelBox.Text) ? AppConfig.DefaultPronModel : PronModelBox.Text.Trim(),
+        EntryFontSlider.Value,          // 條目字級（#複查）
+        EntryBoldChk.IsChecked == true, // 條目粗體
+        EntryWrapChk.IsChecked == true); // 條目自動換行
 
     /// <summary>數值框 → 滑桿同步（鉗制 0–100；空/非數字回門檻預設）。</summary>
     private void SyncThresholdFromBox()

@@ -8,6 +8,38 @@
         Background="{StaticResource PinkBg}"
         Width="560" Height="400" MinWidth="320" MinHeight="220"
         WindowStartupLocation="CenterScreen">
+  <Window.Resources>
+    <!-- 導航圓鈕（複查回饋）：啟用＝粉底深字圓鈕、hover 加深；停用＝淡底淡字、無手形——明確區分可用/不可用 -->
+    <Style x:Key="NavButton" TargetType="Button">
+      <Setter Property="Width" Value="30"/>
+      <Setter Property="Height" Value="30"/>
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Foreground" Value="#6D3A4D"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="15" Background="#F4C2D0" BorderBrush="#E48CA8" BorderThickness="1.2">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#ECA6BC"/>
+                <Setter TargetName="bg" Property="BorderBrush" Value="#D66C90"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="bg" Property="Background" Value="#F6ECF0"/>
+                <Setter TargetName="bg" Property="BorderBrush" Value="#EBDBE2"/>
+                <Setter Property="Foreground" Value="#DFCAD3"/>
+                <Setter Property="Cursor" Value="Arrow"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
   <!-- Issue #59：改標準表單——標準標題列（OS 字型/標題）＋標準邊框拖拉縮放＋右下角縮放握把（ResizeMode=CanResizeWithGrip，#97）＋
        ShowInTaskbar=True（失焦後仍有工作列按鈕可尋、不再像被隱藏）。移除原自訂 WindowStyle=None 卡片、
        自訂標題列/關閉鈕/縮放握把（改由 OS 標準 chrome 提供）。字型比照主視窗（系統預設）。 -->
@@ -27,12 +59,10 @@
     <Grid Grid.Row="0">
       <Border Height="1" Background="#F4C2D0" VerticalAlignment="Bottom"/>
       <StackPanel Orientation="Horizontal" Margin="14,8,16,8" VerticalAlignment="Center">
-        <Button x:Name="BackBtn" Content="&#xE72B;" FontFamily="Segoe MDL2 Assets" FontSize="16"
-                Width="30" Height="26" Cursor="Hand" ToolTip="Back (return to previous)"
-                Background="#66FFFFFF" BorderBrush="#E4B7C6" BorderThickness="1" Foreground="#6D3A4D"/>
-        <Button x:Name="ForwardBtn" Content="&#xE72A;" FontFamily="Segoe MDL2 Assets" FontSize="16"
-                Width="30" Height="26" Margin="6,0,0,0" Cursor="Hand" ToolTip="Forward"
-                Background="#66FFFFFF" BorderBrush="#E4B7C6" BorderThickness="1" Foreground="#6D3A4D"/>
+        <Button x:Name="BackBtn" Style="{StaticResource NavButton}" Content="&#xE76B;" ToolTip="Back (return to previous)"/>
+        <Button x:Name="ForwardBtn" Style="{StaticResource NavButton}" Content="&#xE76C;" Margin="6,0,0,0" ToolTip="Forward"/>
+        <Button x:Name="EditBtn" Style="{StaticResource NavButton}" Content="&#xE70F;" Margin="16,0,0,0"
+                ToolTip="Edit the English text and re-translate"/>
         <TextBlock Text="Add to" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="16,0,6,0"/>
         <ComboBox x:Name="FolderCombo" MinWidth="118" MaxWidth="200" FontSize="12.5" VerticalAlignment="Center"/>
       </StackPanel>

@@ -57,6 +57,7 @@ public partial class App : System.Windows.Application
         _config = AppConfig.Load(AppConfig.ResolveSettingsPath(
             Path.Combine(AppContext.BaseDirectory, "appsettings.json"), AppConfig.SettingsPath));
         NoteDefaults.Load(); // 筆記加入預設（資料夾/底色/智能配色規則，Issue #55）
+        EntryDisplaySettings.SyncFrom(_config); // #複查：條目顯示偏好（字級/粗體/換行）自 config 同步
         var keyReady = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
         _speech = new SpeechService(_config.Voice);
 
@@ -87,8 +88,10 @@ public partial class App : System.Windows.Application
         _notesPage = new NotesPage(_notesStore, () => _speech,
             () => _assessor, () => new NaudioRecorder(), () => _config.PronPassThreshold, _notify);
         _notesPage.ViewRequested += entry => ShowDetail(entry.ToResult());
+        _notesPage.EntryEditRequested += (id, text) => _ = EditNoteEntryAsync(id, text); // 複查回饋：筆記編輯→重譯
         _historyPage = new HistoryPage(_historyStore, () => _speech);
         _historyPage.ViewRequested += entry => ShowDetail(entry.ToResult());
+        _historyPage.EntryEditRequested += (id, text) => _ = EditHistoryEntryAsync(id, text); // 複查回饋：歷史編輯→重譯
         _historyPage.AddToNotesRequested += entry => // 歷史「＋筆記」：套目前預設資料夾/底色（#55）
             AddToNotes(new NoteAddRequest(entry.ToResult(), NoteDefaults.FolderName, NoteDefaults.ColorHex));
         _optionsPage = new OptionsPage(_config);
@@ -245,6 +248,7 @@ public partial class App : System.Windows.Application
         win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
         win.AddToNotesRequested += AddToNotes;
         win.WordQueryRequested += word => _ = LookupWordAsync(win, word); // 複查回饋：點單字＝查該字
+        win.TextReQueryRequested += text => _ = ReTranslateAsync(win, text); // 複查回饋：編輯原文→重譯
         win.SetNoteTargets(TopFolderNames(), ActiveContextName()); // #55「加入至」下拉來源
         return win;
     }
@@ -258,12 +262,94 @@ public partial class App : System.Windows.Application
             var result = await query.QueryWordAsync(word);
             if (ReferenceEquals(_result, win)) // 視窗未被取代才回填
             {
-                win.PushWordResult(result);
+                win.PushWordResult(result); // 內含結束等待游標
+            }
+            else
+            {
+                win.WordLookupFailed(); // 視窗已換：仍清該窗等待游標
             }
         }
         catch (QueryException ex)
         {
+            win.WordLookupFailed(); // 清等待游標＋忙碌旗標
             ToastNotifier.Show("Word lookup failed: " + ex.Message);
+        }
+    }
+
+    /// <summary>編輯筆記條目原文後重譯（複查回饋）：文字重查→更新該筆三欄（練習分數歸零）、存檔並重載筆記頁。空字串/失敗以 toast。</summary>
+    private async Task EditNoteEntryAsync(string id, string text)
+    {
+        var t = (text ?? "").Trim();
+        if (t.Length == 0)
+        {
+            _notesPage?.Reload();
+            return;
+        }
+        try
+        {
+            var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
+            var result = await query.QueryTextAsync(t);
+            var data = _notesStore.LoadEnsured();
+            if (NotesStore.UpdateEntryContent(data, id, result))
+            {
+                _notesStore.Save(data);
+            }
+        }
+        catch (QueryException ex)
+        {
+            ToastNotifier.Show("Re-translate failed: " + ex.Message);
+        }
+        finally
+        {
+            _notesPage?.Reload(); // 成功以新內容重建、失敗還原原內容
+        }
+    }
+
+    /// <summary>編輯歷史條目原文後重譯（複查回饋）：文字重查→更新該筆三欄、存檔並重載歷史頁。</summary>
+    private async Task EditHistoryEntryAsync(string id, string text)
+    {
+        var t = (text ?? "").Trim();
+        if (t.Length == 0)
+        {
+            _historyPage?.Reload();
+            return;
+        }
+        try
+        {
+            var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
+            var result = await query.QueryTextAsync(t);
+            _historyStore.UpdateContent(id, result);
+        }
+        catch (QueryException ex)
+        {
+            ToastNotifier.Show("Re-translate failed: " + ex.Message);
+        }
+        finally
+        {
+            _historyPage?.Reload();
+        }
+    }
+
+    /// <summary>編輯原文後重譯（複查回饋：辨識有誤時校正）：文字重查→取代該視窗目前結果；失敗 toast、清游標。</summary>
+    private async Task ReTranslateAsync(ResultWindow win, string text)
+    {
+        try
+        {
+            var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
+            var result = await query.QueryTextAsync(text);
+            if (ReferenceEquals(_result, win))
+            {
+                win.ReplaceCurrentResult(result);
+            }
+            else
+            {
+                win.WordLookupFailed();
+            }
+        }
+        catch (QueryException ex)
+        {
+            win.WordLookupFailed();
+            ToastNotifier.Show("Re-translate failed: " + ex.Message);
         }
     }
 
@@ -350,7 +436,9 @@ public partial class App : System.Windows.Application
         (_speech as IDisposable)?.Dispose();
         _speech = new SpeechService(_config.Voice);
         _assessor = new PronunciationService(_config.PronModel, _config.TimeoutSec, _config.MaxRetries); // 隨模型/逾時重建（spec#10）
-        _notesPage?.Reload(); // 門檻改動 → 重建卡片、依新門檻重繪成績框達標色（intTest#36）
+        EntryDisplaySettings.SyncFrom(_config); // #複查：條目字級/粗體/換行偏好同步後重建兩頁
+        _notesPage?.Reload(); // 門檻/條目顯示改動 → 重建卡片（intTest#36）
+        _historyPage?.Reload(); // #複查：條目顯示改動同步套用歷史頁
         RegisterHotkeyOrWarn();
         var keyReady = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
         if (_tray is not null)

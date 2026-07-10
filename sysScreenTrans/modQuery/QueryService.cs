@@ -87,7 +87,22 @@ public sealed class QueryService
         {
             throw new QueryException("OPENAI_API_KEY environment variable is not set, cannot query. Set the user environment variable and restart.");
         }
-        var json = await RunWithRetryAsync(c => SendOnceAsync(BuildWordPayload(word), key, c), ct);
+        var json = await RunWithRetryAsync(c => SendOnceAsync(BuildTextPayload(WordPrompt, word), key, c), ct);
+        return Parse(json);
+    }
+
+    /// <summary>
+    /// 重新翻譯一段英文文字（複查回饋：辨識有誤時使用者編輯原文後自動重查）：純文字提示回三欄
+    /// （original＝校正後英文、phonetic＝KK 音標、translation＝繁中翻譯），沿用金鑰/重試/降級。
+    /// </summary>
+    public async Task<QueryResult> QueryTextAsync(string english, CancellationToken ct = default)
+    {
+        var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
+        if (string.IsNullOrWhiteSpace(key))
+        {
+            throw new QueryException("OPENAI_API_KEY environment variable is not set, cannot query. Set the user environment variable and restart.");
+        }
+        var json = await RunWithRetryAsync(c => SendOnceAsync(BuildTextPayload(TextPrompt, english), key, c), ct);
         return Parse(json);
     }
 
@@ -95,19 +110,24 @@ public sealed class QueryService
     internal const string WordPrompt =
         "查詢下列英文單字並回傳 JSON：original＝該英文單字本身（原樣）、phonetic＝該字的 KK 音標、translation＝繁體中文字義（簡潔，可含詞性與常見義項）。單字為：";
 
-    private object BuildWordPayload(string word) => new
+    /// <summary>整段文字重譯提示（複查回饋：編輯原文後重查）：回三欄 JSON。</summary>
+    internal const string TextPrompt =
+        "翻譯下列英文文字並回傳 JSON：original＝英文原文（沿用輸入、修正明顯拼寫）、phonetic＝原文的 KK 音標、translation＝繁體中文翻譯（依語意，非逐字直譯）。文字為：";
+
+    /// <summary>純文字三欄查詢 payload（供 QueryWordAsync/QueryTextAsync 共用；prompt 決定語意）。</summary>
+    private object BuildTextPayload(string prompt, string text) => new
     {
         model = _model,
         messages = new object[]
         {
-            new { role = "user", content = WordPrompt + word },
+            new { role = "user", content = prompt + text },
         },
         response_format = new
         {
             type = "json_schema",
             json_schema = new
             {
-                name = "word_lookup",
+                name = "text_query",
                 strict = true,
                 schema = new
                 {

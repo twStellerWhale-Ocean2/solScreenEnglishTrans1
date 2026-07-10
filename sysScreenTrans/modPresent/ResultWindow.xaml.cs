@@ -54,9 +54,13 @@ public partial class ResultWindow : Window
     /// <summary>點擊結果中英文單字時觸發（複查回饋：查該單字，非發音）；App 跑 QueryWordAsync 後以 <see cref="PushWordResult"/> 回填。</summary>
     public event Action<string>? WordQueryRequested;
 
+    /// <summary>編輯原文後按「重新翻譯」時觸發（複查回饋：辨識有誤時校正重查）；App 跑 QueryTextAsync 後以 <see cref="ReplaceCurrentResult"/> 回填。</summary>
+    public event Action<string>? TextReQueryRequested;
+
     // 導航堆疊（複查回饋）：主查詢＝reset 為單一，查單字＝push，往前/往後在堆疊內移動、不重查亦不自動加入筆記
     private readonly List<QueryResult> _history = new();
     private int _pos = -1;
+    private bool _wordBusy; // 單字查詢進行中：游標等待＋忽略再點（避免連點，複查回饋）
 
     public ResultWindow()
     {
@@ -67,6 +71,7 @@ public partial class ResultWindow : Window
         AddNoteBtn.Click += (_, _) => RaiseAdd();
         BackBtn.Click += (_, _) => Navigate(-1);
         ForwardBtn.Click += (_, _) => Navigate(1);
+        EditBtn.Click += (_, _) => ShowEditMode();
         UpdateNav();
         AutoAddChk.IsChecked = AutoAddSettings.Enabled;
         AutoAddChk.Checked += (_, _) => AutoAddSettings.Enabled = true;
@@ -241,6 +246,7 @@ public partial class ResultWindow : Window
     protected override void OnClosing(CancelEventArgs e)
     {
         _closing = true;
+        EndWordLookup(); // 關窗時若仍在查單字，清除全域等待游標覆寫（免卡住）
         var b = RestoreBounds;
         if (b.Width > 0 && !double.IsNaN(b.Left))
         {
@@ -299,9 +305,10 @@ public partial class ResultWindow : Window
         }
     }
 
-    /// <summary>單字查詢結果推入導航堆疊並顯示（複查回饋）：不自動播放、**不自動加入筆記**（仍可手動加入）。</summary>
+    /// <summary>單字查詢結果推入導航堆疊並顯示（複查回饋）：不自動播放、**不自動加入筆記**（仍可手動加入）；結束等待游標。</summary>
     public void PushWordResult(QueryResult r)
     {
+        EndWordLookup();
         if (_pos < _history.Count - 1)
         {
             _history.RemoveRange(_pos + 1, _history.Count - _pos - 1); // 截去前進歷史
@@ -329,6 +336,94 @@ public partial class ResultWindow : Window
     {
         BackBtn.IsEnabled = _pos > 0;
         ForwardBtn.IsEnabled = _pos >= 0 && _pos < _history.Count - 1;
+    }
+
+    /// <summary>單字查詢失敗時由 App 呼叫：結束等待游標與忙碌旗標（結果不變）。</summary>
+    public void WordLookupFailed() => EndWordLookup();
+
+    /// <summary>編輯重譯結果回填（複查回饋）：取代目前導航位置之結果並重繪；結束等待游標。不自動加入筆記。</summary>
+    public void ReplaceCurrentResult(QueryResult r)
+    {
+        EndWordLookup();
+        if (_pos >= 0 && _pos < _history.Count)
+        {
+            _history[_pos] = r;
+        }
+        else
+        {
+            _history.Clear();
+            _history.Add(r);
+            _pos = 0;
+        }
+        Render(r);
+        UpdateNav();
+    }
+
+    /// <summary>進入編輯模式（複查回饋）：以 TextBox 呈現目前原文，供校正後「重新翻譯」。</summary>
+    private void ShowEditMode()
+    {
+        if (_current is not { IsEmpty: false } cur)
+        {
+            return; // 無可編輯內容（載入中/空結果/錯誤）
+        }
+        BodyPanel.Children.Clear();
+        var box = new System.Windows.Controls.TextBox
+        {
+            Text = cur.Original,
+            FontSize = 22,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            MinHeight = 80,
+            Padding = new Thickness(6),
+        };
+        BodyPanel.Children.Add(new TextBlock
+        {
+            Text = "Fix the English text, then re-translate:",
+            Foreground = Brush("#8A5A6D"), FontSize = 13, Margin = new Thickness(0, 0, 0, 6),
+        });
+        BodyPanel.Children.Add(box);
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 8, 0, 0) };
+        var goBtn = new Button
+        {
+            Content = "Re-translate", Padding = new Thickness(14, 6, 14, 6),
+            Background = Brush("#F4C2D0"), Foreground = Brush("#6D3A4D"),
+            BorderThickness = new Thickness(0), FontSize = 15, Cursor = Cursors.Hand,
+        };
+        goBtn.Click += (_, _) => CommitEdit(box.Text);
+        var cancelBtn = new Button
+        {
+            Content = "Cancel", Margin = new Thickness(10, 0, 0, 0), Padding = new Thickness(12, 6, 12, 6),
+            Background = Brush("#66FFFFFF"), Foreground = Brush("#6D3A4D"),
+            BorderBrush = Brush("#E4B7C6"), BorderThickness = new Thickness(1), FontSize = 15, Cursor = Cursors.Hand,
+        };
+        cancelBtn.Click += (_, _) => Render(cur); // 取消：還原顯示目前結果
+        row.Children.Add(goBtn);
+        row.Children.Add(cancelBtn);
+        BodyPanel.Children.Add(row);
+        box.Focus();
+        box.SelectAll();
+    }
+
+    private void CommitEdit(string text)
+    {
+        var t = (text ?? "").Trim();
+        if (t.Length == 0)
+        {
+            return; // 空字串不重查
+        }
+        _wordBusy = true; // 沿用查詢忙碌態（等待游標＋擋單字連點）
+        System.Windows.Input.Mouse.OverrideCursor = Cursors.Wait;
+        TextReQueryRequested?.Invoke(t);
+    }
+
+    /// <summary>結束單字查詢忙碌態：清旗標、還原游標（僅在確為等待游標時清，免誤動他處覆寫）。</summary>
+    private void EndWordLookup()
+    {
+        _wordBusy = false;
+        if (System.Windows.Input.Mouse.OverrideCursor == Cursors.Wait)
+        {
+            System.Windows.Input.Mouse.OverrideCursor = null;
+        }
     }
 
     /// <summary>渲染單一結果至內容區（不含導航/自動播放/自動加入之副作用；供主查詢、單字查詢、導航共用）。</summary>
@@ -453,7 +548,16 @@ public partial class ResultWindow : Window
                 Cursor = Cursors.Hand,
                 ToolTip = $"Look up “{word}”",
             };
-            link.Click += (_, _) => WordQueryRequested?.Invoke(word); // 複查回饋：點單字＝查該字（非發音）
+            link.Click += (_, _) =>
+            {
+                if (_wordBusy) // 查詢中：忽略連點（複查回饋）
+                {
+                    return;
+                }
+                _wordBusy = true;
+                System.Windows.Input.Mouse.OverrideCursor = Cursors.Wait; // 等待游標，直到 PushWordResult/失敗清除
+                WordQueryRequested?.Invoke(word); // 點單字＝查該字（非發音）
+            };
             tb.Inlines.Add(link);
         }
         return tb;

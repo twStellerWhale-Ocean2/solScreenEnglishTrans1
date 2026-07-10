@@ -20,6 +20,7 @@ using CornerRadius = System.Windows.CornerRadius;
 using Visibility = System.Windows.Visibility;
 using RoutedPropertyChangedEventArgs = System.Windows.RoutedPropertyChangedEventArgs<object>;
 using TextTrimming = System.Windows.TextTrimming;
+using TextWrapping = System.Windows.TextWrapping;
 using VerticalAlignment = System.Windows.VerticalAlignment;
 using FrameworkElement = System.Windows.FrameworkElement;
 using UIElement = System.Windows.UIElement;
@@ -498,18 +499,19 @@ public partial class NotesPage : UserControl
             BorderBrush = NoteCardBrush.BorderFor(entry.Color),
             BorderThickness = new Thickness(2), // #110：框厚恆定 2px（選取只換色不跳版）
             CornerRadius = new CornerRadius(8),
-            Padding = new Thickness(8, 4, 10, 4), // #複查：內距縮小、免浪費空間（原 10 上下）
-            Margin = new Thickness(0, 0, 0, 8),
+            Padding = new Thickness(8, 3, 10, 3), // #複查：比照歷史條目之緊湊內距（單行、時間 inline）
+            Margin = new Thickness(0, 0, 0, 5),   // #複查：比照歷史條目卡間距（原 8）
             AllowDrop = true, // 事件交由 EntryPanel 統一處理（冒泡），卡片僅作為有效放置目標
         };
         card.MouseRightButtonDown += (_, _) => _selector.Select(card); // 右鍵開選單亦設選取（Windows 慣例，#110）
 
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 行尾播音鈕（Issue #56）
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 行尾麥克風錄音鈕（spec#10）
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 行尾發音成績框（spec#10）
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                        // 0 拖曳握把
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });    // 1 原文
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 2 登記時間（#複查：比照歷史 inline 靠右、單行）
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 3 行尾播音鈕（Issue #56）
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 4 行尾麥克風錄音鈕（spec#10）
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 5 行尾發音成績框（spec#10）
 
         var handle = new TextBlock
         {
@@ -530,35 +532,39 @@ public partial class NotesPage : UserControl
         var text = new TextBlock
         {
             Text = string.IsNullOrWhiteSpace(entry.Original) ? "(no content)" : entry.Original,
-            FontSize = 28, // #複查：與查詢結果視窗英文原文同大並加粗（原 #110 之 16）
-            FontWeight = System.Windows.FontWeights.SemiBold,
+            FontSize = EntryDisplaySettings.FontSize, // #複查：選項頁「條目顯示」可調字級/粗體/換行
+            FontWeight = EntryDisplaySettings.Bold ? System.Windows.FontWeights.SemiBold : System.Windows.FontWeights.Normal,
             Foreground = Brush("#3A2C33"),
-            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextWrapping = EntryDisplaySettings.Wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
+            TextTrimming = EntryDisplaySettings.Wrap ? TextTrimming.None : TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        // 原文下小字登記時間（Issue #104）：AddedAt == default（極舊資料無值）不顯示、不佔位
-        var textStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        textStack.Children.Add(text);
+        Grid.SetColumn(text, 1);
+        grid.Children.Add(text);
+
+        // 登記時間 inline 靠右（Issue #104；#複查：比照歷史條目由「原文下小字」改為單行 inline，省空間）
+        // AddedAt == default（極舊資料無值）不顯示、不佔位
         if (entry.AddedAt != default)
         {
             var local = entry.AddedAt.ToLocalTime();
-            textStack.Children.Add(new TextBlock
+            var time = new TextBlock
             {
                 Text = local.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture),
-                FontSize = 11.5, // #110 加大字
-                Foreground = Brush("#8A5A6D"), // 沿系統既有次要文字色（對比達標；§5 審查 #3）
-                Margin = new Thickness(0, 2, 0, 0),
+                FontSize = 12,
+                Foreground = Brush("#9A6A82"), // 比照歷史條目時刻色
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 0, 0),
                 ToolTip = local.ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture),
-            });
+            };
+            Grid.SetColumn(time, 2);
+            grid.Children.Add(time);
         }
-        Grid.SetColumn(textStack, 1);
-        grid.Children.Add(textStack);
 
         // 行尾播音鈕（Issue #56）：最高頻動作一鍵可達，其餘（檢視/底色/刪除）仍走右鍵選單。
         // 圓鈕（RoundIcon）明示可按；Click 自處理、不冒泡至卡片（單擊播音不觸發雙擊檢視、不啟動拖曳）。
         var playBtn = RoundButton("", "Play", fg: "#2F6FED", bg: "#EAF1FE", border: "#CFE0FB"); // MDL2 Play
         playBtn.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
-        Grid.SetColumn(playBtn, 2);
+        Grid.SetColumn(playBtn, 3);
         grid.Children.Add(playBtn);
 
         // 行尾發音練習＝麥克風圓鈕（動作）＋成績框（狀態），取代舊燈泡（spec#10）。
@@ -575,10 +581,10 @@ public partial class NotesPage : UserControl
         micBtn.PreviewMouseLeftButtonDown += OnMicDown;
         micBtn.PreviewMouseLeftButtonUp += OnMicUp;
         micBtn.LostMouseCapture += OnMicLostCapture; // 擷取被搶走（alt-tab／他處彈窗）亦收束錄音、不卡在上限
-        Grid.SetColumn(micBtn, 3);
+        Grid.SetColumn(micBtn, 4);
         grid.Children.Add(micBtn);
 
-        Grid.SetColumn(scoreBox, 4);
+        Grid.SetColumn(scoreBox, 5);
         grid.Children.Add(scoreBox);
 
         card.Child = grid;
@@ -844,6 +850,19 @@ public partial class NotesPage : UserControl
     private ContextMenu MakeEntryMenu(NoteEntry entry)
     {
         var menu = new ContextMenu();
+
+        // 編輯原文（複查回饋：辨識有誤時校正、自動重譯更新中文）
+        var edit = new MenuItem { Header = "Edit text" };
+        edit.Click += (s, _) =>
+        {
+            if ((s as MenuItem)?.Parent is ContextMenu cm && cm.PlacementTarget is Border card)
+            {
+                BeginEntryEdit(card, entry);
+            }
+        };
+        menu.Items.Add(edit);
+        menu.Items.Add(new Separator());
+
         menu.Items.Add(ColorItem(entry, "No Color", ""));
         foreach (var (name, hex) in NoteColors.Palette) // 集中色盤（Issue #55）
         {
@@ -856,6 +875,44 @@ public partial class NotesPage : UserControl
         menu.Items.Add(new Separator());
         menu.Items.Add(delete);
         return menu;
+    }
+
+    /// <summary>編輯條目原文後自動重譯（複查回饋）：Save 交 App 重查更新、Cancel 還原。</summary>
+    public event Action<string, string>? EntryEditRequested;
+
+    private void BeginEntryEdit(Border card, NoteEntry entry)
+    {
+        var box = new TextBox
+        {
+            Text = entry.Original,
+            FontSize = EntryDisplaySettings.FontSize,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            Padding = new Thickness(4),
+        };
+        var save = new Button
+        {
+            Content = "Save & re-translate", Padding = new Thickness(10, 4, 10, 4),
+            Background = Brush("#F4C2D0"), Foreground = Brush("#6D3A4D"),
+            BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
+        };
+        save.Click += (_, _) => EntryEditRequested?.Invoke(entry.Id, box.Text); // App 重譯後 Reload 重建卡片
+        var cancel = new Button
+        {
+            Content = "Cancel", Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(10, 4, 10, 4),
+            Background = Brush("#66FFFFFF"), Foreground = Brush("#6D3A4D"),
+            BorderBrush = Brush("#E4B7C6"), BorderThickness = new Thickness(1), Cursor = Cursors.Hand,
+        };
+        cancel.Click += (_, _) => RenderFolder(); // 取消：重建卡片還原
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+        row.Children.Add(save);
+        row.Children.Add(cancel);
+        var panel = new StackPanel();
+        panel.Children.Add(box);
+        panel.Children.Add(row);
+        card.Child = panel;
+        box.Focus();
+        box.SelectAll();
     }
 
     private MenuItem ColorItem(NoteEntry entry, string name, string hex)

@@ -17,6 +17,7 @@ using Visibility = System.Windows.Visibility;
 using RoutedEventArgs = System.Windows.RoutedEventArgs;
 using FontWeights = System.Windows.FontWeights;
 using TextTrimming = System.Windows.TextTrimming;
+using TextWrapping = System.Windows.TextWrapping;
 using VerticalAlignment = System.Windows.VerticalAlignment;
 using UIElement = System.Windows.UIElement;
 using Cursors = System.Windows.Input.Cursors;
@@ -155,10 +156,11 @@ public partial class HistoryPage : UserControl
         var text = new TextBlock
         {
             Text = string.IsNullOrWhiteSpace(entry.Original) ? "(No English text detected)" : entry.Original,
-            FontSize = 28, // #複查：與查詢結果視窗英文原文同大並加粗（原 #110 之 15.5）
-            FontWeight = System.Windows.FontWeights.SemiBold,
+            FontSize = EntryDisplaySettings.FontSize, // #複查：選項頁「條目顯示」可調字級/粗體/換行
+            FontWeight = EntryDisplaySettings.Bold ? System.Windows.FontWeights.SemiBold : System.Windows.FontWeights.Normal,
             Foreground = Brush("#3A2C33"),
-            TextTrimming = TextTrimming.CharacterEllipsis,
+            TextWrapping = EntryDisplaySettings.Wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
+            TextTrimming = EntryDisplaySettings.Wrap ? TextTrimming.None : TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
         };
         Grid.SetColumn(text, 0);
@@ -217,16 +219,63 @@ public partial class HistoryPage : UserControl
         play.Click += (_, _) => _speech()?.Speak(entry.Original, "en-US", stopPrevious: true);
         var view = new MenuItem { Header = "View" };
         view.Click += (_, _) => ViewRequested?.Invoke(entry);
+        var edit = new MenuItem { Header = "Edit text" }; // 複查回饋：校正原文→自動重譯更新中文
+        edit.Click += (s, _) =>
+        {
+            if ((s as MenuItem)?.Parent is ContextMenu cm && cm.PlacementTarget is Border card)
+            {
+                BeginEntryEdit(card, entry);
+            }
+        };
         var addNote = new MenuItem { Header = "Add to Notes", Foreground = Brush("#2F6F4A") };
         addNote.Click += (_, _) => AddToNotesRequested?.Invoke(entry);
         var delete = new MenuItem { Header = "Delete", Foreground = Brush("#B23B3B") };
         delete.Click += (_, _) => { _store.Delete(entry.Id); Reload(); };
         menu.Items.Add(play);
         menu.Items.Add(view);
+        menu.Items.Add(edit);
         menu.Items.Add(addNote);
         menu.Items.Add(new Separator());
         menu.Items.Add(delete);
         return menu;
+    }
+
+    /// <summary>編輯歷史條目原文後自動重譯（複查回饋）：Save 交 App 重查更新、Cancel 還原。</summary>
+    public event Action<string, string>? EntryEditRequested;
+
+    private void BeginEntryEdit(Border card, HistoryEntry entry)
+    {
+        var box = new System.Windows.Controls.TextBox
+        {
+            Text = entry.Original,
+            FontSize = EntryDisplaySettings.FontSize,
+            AcceptsReturn = true,
+            TextWrapping = System.Windows.TextWrapping.Wrap,
+            Padding = new Thickness(4),
+        };
+        var save = new Button
+        {
+            Content = "Save & re-translate", Padding = new Thickness(10, 4, 10, 4),
+            Background = Brush("#F4C2D0"), Foreground = Brush("#6D3A4D"),
+            BorderThickness = new Thickness(0), Cursor = Cursors.Hand,
+        };
+        save.Click += (_, _) => EntryEditRequested?.Invoke(entry.Id, box.Text);
+        var cancel = new Button
+        {
+            Content = "Cancel", Margin = new Thickness(8, 0, 0, 0), Padding = new Thickness(10, 4, 10, 4),
+            Background = Brush("#66FFFFFF"), Foreground = Brush("#6D3A4D"),
+            BorderBrush = Brush("#E4B7C6"), BorderThickness = new Thickness(1), Cursor = Cursors.Hand,
+        };
+        cancel.Click += (_, _) => RenderSelected();
+        var row = new StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, Margin = new Thickness(0, 6, 0, 0) };
+        row.Children.Add(save);
+        row.Children.Add(cancel);
+        var panel = new StackPanel();
+        panel.Children.Add(box);
+        panel.Children.Add(row);
+        card.Child = panel;
+        box.Focus();
+        box.SelectAll();
     }
 
     private static SolidColorBrush Brush(string hex) => new((Color)ColorConverter.ConvertFromString(hex));

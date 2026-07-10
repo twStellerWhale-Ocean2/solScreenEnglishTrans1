@@ -294,6 +294,30 @@ public sealed class NotesStore
     }
 
     /// <summary>
+    /// 更新條目之三欄內容（複查回饋：編輯原文後重譯）：以新結果覆蓋 Original/Phonetic/Translation，
+    /// **保留 Id/AddedAt/Color**；因原文已變、發音練習最佳分歸 -1（成績框回未練）。找不到 id 回 false。純函式、可測。
+    /// </summary>
+    public static bool UpdateEntryContent(NotesData d, string entryId, QueryResult r)
+    {
+        foreach (var f in AllFolders(d))
+        {
+            var i = f.Entries.FindIndex(e => e.Id == entryId);
+            if (i >= 0)
+            {
+                f.Entries[i] = f.Entries[i] with
+                {
+                    Original = r.Original,
+                    Phonetic = r.Phonetic,
+                    Translation = r.Translation,
+                    PracticeScore = -1, // 原文變更 → 練習分數失效、回未練
+                };
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
     /// 清空指定資料夾之發音練習紀錄（spec#10）：該夾所有條目 <see cref="NoteEntry.PracticeScore"/> 歸 -1
     /// （成績框全回未練灰「—」），子夾與他夾不動。取代原「清除全部（刪筆記）」之 UI 入口——本法**不刪筆記、只重置練習**。
     /// 找不到夾即無為。純函式、可單元測試。

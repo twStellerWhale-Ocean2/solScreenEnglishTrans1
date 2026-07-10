@@ -80,6 +80,22 @@ public sealed class HistoryStore
         catch { /* 不致命 */ }
     }
 
+    /// <summary>更新單筆之三欄內容（複查回饋：編輯原文後重譯）：以新結果覆蓋 Original/Phonetic/Translation，保留 Id/Timestamp。找不到即無動作。</summary>
+    public void UpdateContent(string id, QueryResult r)
+    {
+        try
+        {
+            var list = Load();
+            var i = list.FindIndex(e => e.Id == id);
+            if (i >= 0)
+            {
+                list[i] = list[i] with { Original = r.Original, Phonetic = r.Phonetic, Translation = r.Translation };
+                Save(list);
+            }
+        }
+        catch { /* 不致命 */ }
+    }
+
     private void Save(List<HistoryEntry> list)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
