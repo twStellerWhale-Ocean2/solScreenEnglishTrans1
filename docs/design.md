@@ -5,7 +5,7 @@ formatVersion: "3.2"
 description: 遊戲畫面選區英文發音與中譯即時查詢工具設計文件（MVP）：Windows 常駐（工作列常顯主控入口＋系統匣輔助）、可自訂快捷鍵（預設 Alt+L、支援鍵盤/滑鼠組合）喚起變暗遮罩框選、OpenAI vision 單次查詢回傳原文／KK 音標／繁中翻譯、浮動視窗顯示與 TTS 朗讀（含逐字點選發音）、查詢歷史本機回顧（清單／詳情／重聽／刪除清除）、我的筆記收藏（依資料夾分類／拖曳排序／檢視重聽／去重）、可管理多個命名應用情境（文字或貼圖 vision 自動解釋）擇一注入查詢以提升翻譯準確度。
 ---
 
-# I. 方案設計
+# I. 需求分析
 
 > 需求視角；使用者之初始需求。只談「使用者是誰、做什麼、要什麼」，不預設解法。
 
@@ -36,13 +36,13 @@ SOL["[solScreenEnglishTrans1方案]"]
 OPENAI["[OpenAI平台]<br/>(vision API，使用者自備金鑰)"]
 SPEECH["[Windows內建語音]<br/>(英文語音包)"]
 
-USR -->|"熱鍵框選／查看聆聽"| SOL
-SOL -->|"截取選區影像"| GAME
-SOL -->|"辨識翻譯查詢"| OPENAI
-SOL -->|"原文朗讀"| SPEECH
+USR -.->|"熱鍵框選／查看聆聽"| SOL
+SOL ==>|"截取選區影像"| GAME
+SOL ==>|"辨識翻譯查詢"| OPENAI
+SOL ==>|"原文朗讀"| SPEECH
 ```
 
-> 圖例：`-->` 需求層運作關係（正式介面契約於 ＜II＞／＜III＞ 落地）。
+> 圖例（三線通則）：粗 `==>`＝運行關聯／細 `-->`＝部署設定關聯／虛 `-.->`＝人員操作；本層為需求層示意，正式介面契約於 ＜II＞／＜III＞ 落地。
 
 部署環境（需求偏好）：
 
@@ -52,10 +52,10 @@ flowchart LR
 SOL["[solScreenEnglishTrans1方案]"]
 ENV["[Windows11桌面]<br/>(使用者遊戲主機，含多螢幕與DPI縮放)"]
 
-SOL -.->|"常駐於"| ENV
+SOL -->|"常駐於"| ENV
 ```
 
-> 圖例：`-.->` 部署／配置關係。
+> 圖例：細 `-->`＝部署設定關聯（沿三線通則）。
 
 #### sol 查詢工具
 
@@ -206,7 +206,7 @@ solScreenEnglishTrans1 畫面選區查詢工具，對內以單一系統實現（
 * **spec#9**：情境 CRUD 與單一使用中正確、圖片自動解釋回描述文字、使用中情境之描述確注入查詢（無使用中＝回歸）、舊 `paramContextHint` 相容遷移、`contexts.json` 損毀退空不致命。
 * **spec#10**：按住錄音／放開送出之擷取正確率與延遲、**錄音時成績框藍色音量條是否即時反映收音**、評分中轉圈動畫、AI 發音評分回應成功率與單次延遲、放開後分數是否明示（含各失敗態訊息可辨）、**無真正朗讀（靜音／雜訊／與目標無關）評為 0、不誤判通過**、及格門檻套用正確（達標成績框轉綠／未達紅、門檻改動即時重判）、同一錄音重送之分數波動範圍（一致性）、**最佳分**取 Max 落地與重啟留存、清空練習紀錄後該夾成績框回未練、異常（無麥克風／未授權／空錄音／無網／識別失敗）各自明確降級不當機且不誤判通過、錄音不落地（掃描本機無錄音檔）與金鑰不入日誌。
 
-# II. 系統設計
+# II. 方案設計
 
 > 視角＝team。自 ＜I＞ 的 Org／orgSop 解析出團隊（team）與其作業（teamSop），並界定方案下屬之系統（sys）。不出現 prsn／module。
 
@@ -233,8 +233,8 @@ subgraph SOL["[solScreenEnglishTrans1方案]"]
   T1["team遊戲查詢"]
   T2["team工具維保"]
   SYS["[sysScreenTrans系統]"]
-  T1 ==>|"comIntf自訂本機桌面操作"| SYS
-  T2 ==>|"comIntf自訂本機桌面操作"| SYS
+  T1 -.->|"comIntf自訂本機桌面操作"| SYS
+  T2 -.->|"comIntf自訂本機桌面操作"| SYS
 end
 
 OPENAI["[OpenAI平台]"]
@@ -245,7 +245,7 @@ SYS ==>|"techItem語音合成"| SPEECH
 MIC ==>|"錄音輸入(techItem發音評分)"| SYS
 ```
 
-> 圖例：`==>` 通訊／承載（線上標 comIntf 契約名，apiIntf 並列附掛）。
+> 圖例（三線通則）：粗 `==>`＝運行關聯（系統／裝置間，線上標 comIntf 契約名，apiIntf 並列附掛）／虛 `-.->`＝人員操作（team 經桌面操作系統）。
 
 組態架構圖（techStack 以文字標於建置單元方框）：
 
@@ -261,10 +261,10 @@ subgraph SOL["[solScreenEnglishTrans1方案]"]
 end
 
 ENV["[Windows11桌面]"]
-SYS -.->|"常駐於"| ENV
+SYS -->|"常駐於"| ENV
 ```
 
-> 圖例：`-.->` 配置作業（線上標 setWi）、techStack 選型（文字標記）。
+> 圖例（沿三線通則）：細 `-->`＝部署設定關聯／虛 `-.->`＝人員操作（配置作業，線上標 setWi）；techStack 選型以文字標記。
 
 * **sol 下屬 sys**：[sysScreenTrans系統]——實現常駐熱鍵、遮罩框選截圖、vision 查詢與結果呈現朗讀之單一系統；內部 module 見 ＜III＞。
   * **對外保證**（機制見 ＜III.B.(A)＞）：喚起即時且零輸入干擾（spec#1）、選區對位正確（spec#2）、查詢結果三欄齊備或明確錯誤降級（spec#3）、隨時可逃（spec#1／#4）、金鑰不落地（spec#5）、查詢歷史本機留存與可回顧（spec#6）、查詢結果可收藏為我的筆記並分類管理（spec#7）、可自訂應用情境提示輔助翻譯（spec#8）、可管理多個命名情境並擇一注入查詢（spec#9）。
@@ -373,9 +373,9 @@ SYS -.->|"常駐於"| ENV
 
 > 系統層效益回扣需求層；指標正本見 ＜I.D.(B) 效益指標＞（每 spec 一項），本層不重列、僅標承接。
 
-* 本層之 cfgTest／docProgTest 全綠為「系統設計可被工程驗證」之效益門檻；對各 spec 之成效量測沿用 ＜I.D.(B)＞，不另立指標（硬規則①，不重抄）。
+* 本層之 cfgTest／docProgTest 全綠為「方案設計可被工程驗證」之效益門檻；對各 spec 之成效量測沿用 ＜I.D.(B)＞，不另立指標（硬規則①，不重抄）。
 
-# III. 模組設計
+# III. 系統設計
 
 > 視角＝prsn。自 ＜II＞ 的 team／teamSop 解析出一線操作者（prsn）與其工作項（WI），並界定模組（module）與模組間介面。系統＝[sysScreenTrans系統]。
 
@@ -418,14 +418,14 @@ OPENAI["[OpenAI平台]"]
 SPEECH["[Windows內建語音]"]
 MIC["[Windows麥克風]"]
 
-PRSN ==>|"comIntf自訂本機桌面操作"| CAP
-PRSN ==>|"comIntf自訂本機桌面操作"| PRE
+PRSN -.->|"comIntf自訂本機桌面操作"| CAP
+PRSN -.->|"comIntf自訂本機桌面操作"| PRE
 QRY ==>|"comIntf通用HTTPS連線<br/>(附掛 apiIntf標準OPENAI的API協定)"| OPENAI
 PRE ==>|"techItem語音合成"| SPEECH
 MIC ==>|"錄音輸入"| PRE
 ```
 
-> 圖例：`==>` 通訊／呼叫（線上標契約名；模組間為 in-process C# interface，機器可驗全文歸 code）。
+> 圖例（三線通則）：粗 `==>`＝運行關聯（通訊／呼叫，線上標契約名；模組間為 in-process C# interface，機器可驗全文歸 code）／虛 `-.->`＝人員操作。
 
 組態架構圖：
 
@@ -451,7 +451,7 @@ ADM -.->|"setWi自訂Usr安裝設定金鑰"| ENVV
 ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 ```
 
-> 圖例：`-->` 參數相依（標 param）、`-.->` 配置作業（標 setWi）、techStack 選型（文字標記）。
+> 圖例（沿三線通則）：細 `-->`＝部署設定關聯（參數相依，標 param）／虛 `-.->`＝人員操作（配置作業，標 setWi）；techStack 選型以文字標記。
 
 * **sys 下屬 module**：[modCapture模組]、[modQuery模組]、[modPresent模組]（皆隸屬單一 WPF exe；[techStackDotnetWin] 候選）。
   * **[modCapture模組] 選區對位契約**（spec#2）：遮罩喚起當下即截取整個虛擬桌面為**凍結畫格快照**（不透明鋪滿遮罩背景、畫面靜止、輸入被遮罩攔截不達背後遊戲，Issue #90）；遮罩視窗覆蓋全部螢幕（含多螢幕虛擬桌面）；框選座標以**實際像素**（physical pixels）換算（Per-Monitor DPI aware），選區與雙擊標記皆**自凍結快照裁切／繪製**（非實時螢幕，故不必先隱藏遮罩再截）。**雙擊自動判斷模式（Issue #54）**：於遮罩上**左鍵雙擊**＝不框選、改截取整個虛擬桌面（physical px）並於游標處畫**紅色圓圈十字標記**（`ScreenCapture.CaptureWithMarker`），`CaptureResult.IsPointMode=true`，交查詢層依標記處辨識該句（非矩形選區）；**過小/誤點之單擊不再取消遮罩、僅復位提示**（唯 ESC 取消，以容雙擊之首擊）。**invariant**：框選模式選區影像與使用者所見框選範圍 0px 偏移（任一螢幕/DPI 皆同）；雙擊模式標記落於游標實際像素處、截圖含標記；單擊不誤觸取消。
@@ -648,4 +648,4 @@ ADM -.->|"setWi自訂Usr啟動結束常駐"| SYS
 
 > 模組層效益回扣需求層；指標正本見 ＜I.D.(B) 效益指標＞（每 spec 一項），本層不重列、僅標承接。
 
-* 本層之 intTest 全綠＋上述 invariant 成立（選區 0px 偏移、零輸入干擾、金鑰不落地、UI 不阻塞、單一實例），為「模組設計可被工程驗證、對外保證成立」之效益門檻；對各 spec 之成效量測沿用 ＜I.D.(B)＞，不另立指標（硬規則①，不重抄）。
+* 本層之 intTest 全綠＋上述 invariant 成立（選區 0px 偏移、零輸入干擾、金鑰不落地、UI 不阻塞、單一實例），為「系統設計可被工程驗證、對外保證成立」之效益門檻；對各 spec 之成效量測沿用 ＜I.D.(B)＞，不另立指標（硬規則①，不重抄）。
