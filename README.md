@@ -71,6 +71,8 @@
 
 ![條目點一下即選取——選中卡深粉框標示（筆記/歷史同款，v0.36.0）](docs/manual-assets/notes-entry-selected.png)
 
+![發音練習過關的筆記卡底色亮起深色星星花紋（v0.37.0）](docs/manual-assets/notes-pass-pattern.png)
+
 ![查詢結果視窗底部「底色」列——十色一列全可視（v0.35.0）](docs/manual-assets/result-swatches-ten.png)
 
 ## 發音練習畫面（v0.31.0）
