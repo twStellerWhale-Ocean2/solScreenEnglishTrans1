@@ -41,14 +41,16 @@ write-host "# II.參考準備 ================================" -ForegroundColor
   $e1 = $folder.Entries[0]; $e2 = $folder.Entries[1]
   write-host "* 測試夾「$($folder.Name)」：條1=100（過）、條2=-1（未練）"
 
-  # 底色/框色鏡像計算（NoteCardBrush：無底色退白；框＝×0.80 截斷）
+  # 底色/框色鏡像計算（NoteCardBrush：無底色退白；框＝先拉飽和 ×1.6 再加深 ×0.62、鉗制截斷，#123）
   function Get-BaseRgb([string]$hex) {
     if ([string]::IsNullOrWhiteSpace($hex)) { $hex = "#FFFFFF" }
     return @([Convert]::ToInt32($hex.Substring(1,2),16), [Convert]::ToInt32($hex.Substring(3,2),16), [Convert]::ToInt32($hex.Substring(5,2),16))
   }
   function Get-BorderRgb([string]$hex) {
     $b = Get-BaseRgb $hex
-    return @([int][Math]::Truncate($b[0]*0.80), [int][Math]::Truncate($b[1]*0.80), [int][Math]::Truncate($b[2]*0.80))
+    $mean = ($b[0] + $b[1] + $b[2]) / 3.0
+    $chan = { param($c) [int][Math]::Max(0, [Math]::Min(255, [Math]::Truncate(($mean + ($c - $mean) * 1.6) * 0.62))) }
+    return @((& $chan $b[0]), (& $chan $b[1]), (& $chan $b[2]))
   }
   $base1 = Get-BaseRgb $e1.Color;  $bord1 = Get-BorderRgb $e1.Color
   $base2 = Get-BaseRgb $e2.Color;  $bord2 = Get-BorderRgb $e2.Color
