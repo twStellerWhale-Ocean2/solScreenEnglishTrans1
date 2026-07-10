@@ -100,6 +100,8 @@ public partial class NotesPage : UserControl
         NewFolderBtn.Click += (_, _) => CreateFolder(parent: null); // 一律建頂層；子資料夾走節點右鍵選單（檔案總管慣例）
         SortAscBtn.Click += (_, _) => SortEntries(ascending: true);   // 順向 A→Z（Issue #52）
         SortDescBtn.Click += (_, _) => SortEntries(ascending: false); // 反向 Z→A
+        SortOldBtn.Click += (_, _) => SortEntriesByTime(ascending: true);   // 依登記時間 舊→新（Issue #104）
+        SortNewBtn.Click += (_, _) => SortEntriesByTime(ascending: false);  // 依登記時間 新→舊
         ClearPracticeBtn.Click += (_, _) => OnClearPractice();
         FolderTree.SelectedItemChanged += OnFolderSelected;
         FolderTree.PreviewMouseLeftButtonUp += (_, _) => _pressItem = null; // 放開即清，防殘留按壓被後續拖曳劫持
@@ -245,6 +247,8 @@ public partial class NotesPage : UserControl
         ClearPracticeBtn.IsEnabled = any;
         SortAscBtn.IsEnabled = any;   // 空夾無可排序（Issue #52）
         SortDescBtn.IsEnabled = any;
+        SortOldBtn.IsEnabled = any;   // 時間排序同空夾停用（Issue #104）
+        SortNewBtn.IsEnabled = any;
         if (f is null)
         {
             return;
@@ -271,6 +275,19 @@ public partial class NotesPage : UserControl
             return;
         }
         NotesStore.SortEntries(f, ascending);
+        _store.Save(_data);
+        RenderFolder();
+    }
+
+    /// <summary>依登記時間正反排序目前資料夾條目（Issue #104）：穩定排序、無值視為最舊、即時落地 notes.json、重繪。</summary>
+    private void SortEntriesByTime(bool ascending)
+    {
+        var f = Selected;
+        if (f is null || f.Entries.Count == 0)
+        {
+            return;
+        }
+        NotesStore.SortEntriesByTime(f, ascending);
         _store.Save(_data);
         RenderFolder();
     }
@@ -511,8 +528,23 @@ public partial class NotesPage : UserControl
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
         };
-        Grid.SetColumn(text, 1);
-        grid.Children.Add(text);
+        // 原文下小字登記時間（Issue #104）：AddedAt == default（極舊資料無值）不顯示、不佔位
+        var textStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+        textStack.Children.Add(text);
+        if (entry.AddedAt != default)
+        {
+            var local = entry.AddedAt.ToLocalTime();
+            textStack.Children.Add(new TextBlock
+            {
+                Text = local.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture),
+                FontSize = 10.5,
+                Foreground = Brush("#A88796"),
+                Margin = new Thickness(0, 2, 0, 0),
+                ToolTip = local.ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture),
+            });
+        }
+        Grid.SetColumn(textStack, 1);
+        grid.Children.Add(textStack);
 
         // 行尾播音鈕（Issue #56）：最高頻動作一鍵可達，其餘（檢視/底色/刪除）仍走右鍵選單。
         // 圓鈕（RoundIcon）明示可按；Click 自處理、不冒泡至卡片（單擊播音不觸發雙擊檢視、不啟動拖曳）。

@@ -214,6 +214,63 @@ public class NotesStoreTests
         Assert.Empty(f.Entries);
     }
 
+    // ---- #104：依登記時間正反排序 ----
+
+    private static NoteEntry T(string original, DateTimeOffset addedAt) =>
+        new(Guid.NewGuid().ToString("N"), addedAt, original, "ph", "tr");
+
+    private static readonly DateTimeOffset T0 = new(2026, 7, 1, 12, 0, 0, TimeSpan.FromHours(8));
+
+    [Fact]
+    public void SortEntriesByTime_Ascending_OldestFirst()
+    {
+        var f = new NoteFolder();
+        f.Entries.AddRange(new[] { T("b", T0.AddMinutes(2)), T("a", T0), T("c", T0.AddMinutes(1)) });
+        NotesStore.SortEntriesByTime(f, ascending: true);
+        Assert.Equal(new[] { "a", "c", "b" }, f.Entries.Select(x => x.Original).ToArray());
+    }
+
+    [Fact]
+    public void SortEntriesByTime_Descending_NewestFirst()
+    {
+        var f = new NoteFolder();
+        f.Entries.AddRange(new[] { T("b", T0.AddMinutes(2)), T("a", T0), T("c", T0.AddMinutes(1)) });
+        NotesStore.SortEntriesByTime(f, ascending: false);
+        Assert.Equal(new[] { "b", "c", "a" }, f.Entries.Select(x => x.Original).ToArray());
+    }
+
+    [Fact]
+    public void SortEntriesByTime_Stable_SameTimestampKeepsRelativeOrder()
+    {
+        // 穩定排序：同時刻多筆維持原相對順序（批次收藏常見）
+        var f = new NoteFolder();
+        f.Entries.AddRange(new[] { T("x1", T0), T("x2", T0), T("later", T0.AddMinutes(5)), T("x3", T0) });
+        NotesStore.SortEntriesByTime(f, ascending: true);
+        Assert.Equal(new[] { "x1", "x2", "x3", "later" }, f.Entries.Select(x => x.Original).ToArray());
+        NotesStore.SortEntriesByTime(f, ascending: false);
+        Assert.Equal(new[] { "later", "x1", "x2", "x3" }, f.Entries.Select(x => x.Original).ToArray());
+    }
+
+    [Fact]
+    public void SortEntriesByTime_DefaultAddedAt_TreatedAsOldest()
+    {
+        // AddedAt == default（極舊資料無值）視為最舊：Old→New 排最前、New→Old 排最後
+        var f = new NoteFolder();
+        f.Entries.AddRange(new[] { T("new", T0), T("legacy", default), T("mid", T0.AddMinutes(-10)) });
+        NotesStore.SortEntriesByTime(f, ascending: true);
+        Assert.Equal(new[] { "legacy", "mid", "new" }, f.Entries.Select(x => x.Original).ToArray());
+        NotesStore.SortEntriesByTime(f, ascending: false);
+        Assert.Equal(new[] { "new", "mid", "legacy" }, f.Entries.Select(x => x.Original).ToArray());
+    }
+
+    [Fact]
+    public void SortEntriesByTime_EmptyFolder_NoThrow()
+    {
+        var f = new NoteFolder();
+        NotesStore.SortEntriesByTime(f, ascending: true); // 空夾無為、不擲例外
+        Assert.Empty(f.Entries);
+    }
+
     [Fact]
     public void RemoveEntry_RemovesById()
     {

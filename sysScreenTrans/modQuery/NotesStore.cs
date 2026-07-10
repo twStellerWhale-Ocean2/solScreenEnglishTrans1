@@ -466,6 +466,21 @@ public sealed class NotesStore
         });
     }
 
+    /// <summary>
+    /// 依登記時間排序目前資料夾之條目（Issue #104）：<paramref name="ascending"/>＝舊→新（Old→New）、否則新→舊。
+    /// 以 OrderBy **穩定排序**（同時刻多筆維持相對順序；穩定性條款限本時間排序）；
+    /// `AddedAt == default`（極舊資料無值）視為最舊——Old→New 排最前、New→Old 排最後。
+    /// 空夾即無為；重排後由呼叫端 Save 持久化。純函式、可單元測試。
+    /// </summary>
+    public static void SortEntriesByTime(NoteFolder f, bool ascending)
+    {
+        var sorted = (ascending
+            ? f.Entries.OrderBy(e => e.AddedAt)
+            : f.Entries.OrderByDescending(e => e.AddedAt)).ToList();
+        f.Entries.Clear();
+        f.Entries.AddRange(sorted);
+    }
+
     /// <summary>同一資料夾內把條目自 from 位置移到 to 位置（拖曳排序）。</summary>
     public static void Reorder(NoteFolder f, int from, int to)
     {

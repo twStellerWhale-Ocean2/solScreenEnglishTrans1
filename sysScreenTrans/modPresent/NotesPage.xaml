@@ -60,16 +60,20 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
-      <!-- 條目工具列（Issue #52 排序鈕於[清除全部]左側；均右對齊比照歷史分頁） -->
-      <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,6">
-        <Button x:Name="SortAscBtn" Content="Sort A→Z" Style="{StaticResource GhostButton}"
-                ToolTip="Sort entries in this folder A→Z by original text" Margin="0,0,6,0"/>
-        <Button x:Name="SortDescBtn" Content="Sort Z→A" Style="{StaticResource GhostButton}"
-                ToolTip="Sort entries in this folder Z→A by original text" Margin="0,0,6,0"/>
+      <!-- 條目工具列（Issue #52 名稱排序＋#104 時間排序；WrapPanel 換行——右欄壓窄時五鈕全可視可點） -->
+      <WrapPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,6">
+        <Button x:Name="SortAscBtn" Content="A→Z" Style="{StaticResource GhostButton}"
+                ToolTip="Sort entries in this folder A→Z by original text" Margin="0,0,6,4"/>
+        <Button x:Name="SortDescBtn" Content="Z→A" Style="{StaticResource GhostButton}"
+                ToolTip="Sort entries in this folder Z→A by original text" Margin="0,0,6,4"/>
+        <Button x:Name="SortOldBtn" Content="Old→New" Style="{StaticResource GhostButton}"
+                ToolTip="Sort entries in this folder oldest→newest by added time" Margin="0,0,6,4"/>
+        <Button x:Name="SortNewBtn" Content="New→Old" Style="{StaticResource GhostButton}"
+                ToolTip="Sort entries in this folder newest→oldest by added time" Margin="0,0,6,4"/>
         <Button x:Name="ClearPracticeBtn" Content="Clear Practice"
                 ToolTip="Reset every pronunciation-practice score box in this folder (notes are kept)"
-                Foreground="#8A2B2B" Style="{StaticResource GhostButton}"/>
-      </StackPanel>
+                Foreground="#8A2B2B" Style="{StaticResource GhostButton}" Margin="0,0,0,4"/>
+      </WrapPanel>
       <!-- 發音練習操作提示（spec#10；自成一列、全寬置左，不與排序鈕重疊） -->
       <TextBlock Grid.Row="1" HorizontalAlignment="Left" Foreground="#8A5A6D" FontSize="11.5"
                  Margin="2,0,0,6" TextTrimming="CharacterEllipsis"
