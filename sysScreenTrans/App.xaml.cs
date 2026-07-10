@@ -107,8 +107,7 @@ public partial class App : System.Windows.Application
 
         _main = new MainWindow(_notesPage, _historyPage, _contextPage, _optionsPage, new AboutPage(_updates));
         _main.RefreshStatus(keyReady, HotkeyDisplay());
-        // 主視窗被帶到前景時關 topmost 結果卡片（否則會蓋住主視窗）
-        _main.Activated += (_, _) => CloseResult();
+        // 主視窗取得焦點不關結果卡片（Issue #105：與主視窗共存，關閉時機僅限使用者關閉／新查詢或檢視取代／選項儲存重建）
         _main.WindowState = WindowState.Minimized;
         _main.Show();
 
@@ -251,10 +250,9 @@ public partial class App : System.Windows.Application
     /// <summary>使用中情境名（空＝無使用中情境；供「加入至」預設夾解析與標籤，#55）。</summary>
     private string ActiveContextName() => ContextStore.GetActive(_contextStore.Load())?.Name ?? "";
 
-    /// <summary>開啟統一主視窗並切到指定分頁（tray／入口）；先關 topmost 結果卡片免遮蔽。</summary>
+    /// <summary>開啟統一主視窗並切到指定分頁（tray／入口）；結果卡片保留不關（Issue #105 與主視窗共存）。</summary>
     private void OpenMain(MainTab tab)
     {
-        CloseResult();
         _main?.ShowTab(tab);
     }
 
@@ -286,9 +284,11 @@ public partial class App : System.Windows.Application
         return ctx.Length > 0 ? ctx : NotesStore.DefaultFolderName;
     }
 
-    /// <summary>「檢視」：以結果卡片顯示三欄詳情（重用 ResultWindow 之整句/逐字發音，供歷史與筆記共用）。</summary>
+    /// <summary>「檢視」：以結果卡片顯示三欄詳情（重用 ResultWindow 之整句/逐字發音，供歷史與筆記共用）；
+    /// 先經單一守衛取代前一結果卡——移除 Activated 關閉路徑後（Issue #105）此處不再被順帶蓋住，須自守「同時至多一個」。</summary>
     private void ShowDetail(QueryResult r)
     {
+        CloseResult();
         var win = NewResultWindow();
         win.Show();
         win.Activate();
