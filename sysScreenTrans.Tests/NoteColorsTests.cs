@@ -32,7 +32,7 @@ public class NoteColorsTests
     public void NormalizeSuggested_NewColor_NameAndHex() // #109：AI 建議色認得新色名與新 hex
     {
         Assert.Equal("#B4EBFF", NoteColors.NormalizeSuggested("Sky"));
-        Assert.Equal("#ffd9b8", NoteColors.NormalizeSuggested("#ffd9b8"));
+        Assert.Equal("#FFD9B8", NoteColors.NormalizeSuggested("#ffd9b8")); // 正典化
     }
 
     [Theory]
@@ -51,9 +51,10 @@ public class NoteColorsTests
     }
 
     [Fact]
-    public void NormalizeSuggested_PaletteHex_KeptAsIs_CaseInsensitive()
+    public void NormalizeSuggested_PaletteHex_CanonicalCase()
     {
-        Assert.Equal("#e1effb", NoteColors.NormalizeSuggested("#e1effb")); // 盤上 hex（大小寫不敏感）保留原樣
+        // #109 §5：盤上 hex（大小寫不敏感）正規化為 Palette 正典寫法——下游字面比對（選單打勾）判準一致
+        Assert.Equal("#E1EFFB", NoteColors.NormalizeSuggested("#e1effb"));
     }
 
     [Theory]

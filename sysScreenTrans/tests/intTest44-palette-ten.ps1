@@ -205,6 +205,13 @@ try {
   if ($res) {
     write-host "* PASS：檢視開卡" -ForegroundColor Green
     Save-WindowShot (Join-Path $ShotDir "result-swatches-ten.png") $res
+    # 窄窗換行證據（§5 審查必修）：縮至 MinWidth=320 → 色塊列應換行、11 塊全可視（DockPanel+WrapPanel）
+    Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int X, int Y, int W, int H, bool r);' -Name N2 -Namespace T44b
+    $rr = $res.Current.BoundingRectangle
+    [T44b.N2]::MoveWindow([IntPtr][int64]$res.Current.NativeWindowHandle, [int]$rr.X, [int]$rr.Y, 320, [int]$rr.Height, $true) | Out-Null
+    Start-Sleep -Milliseconds 800
+    Save-WindowShot (Join-Path $ShotDir "result-swatches-narrow.png") $res
+    write-host "* 窄窗（320px）截圖存證——換行全可視由截圖視覺驗（色塊 Border 無 UIA peer、無法機判）"
     ($res.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern)).Close()
     Start-Sleep -Milliseconds 400
   } else { write-host "* FAIL：檢視未開卡（色塊列證據缺）" -ForegroundColor Red; $fail++ }
@@ -225,9 +232,11 @@ try {
     $names = @($texts | ForEach-Object { $_.Current.Name })
     $missing = @($TenNames | Where-Object { $n = $_; -not ($names -contains $n) })
     if ($missing.Count -eq 0) { write-host "* PASS：情境頁配色規則十色標籤齊備" -ForegroundColor Green }
-    else { write-host "* FAIL：缺色格標籤：$($missing -join ',')（情境頁需選有情境項；若無情境屬前置限制）" -ForegroundColor Yellow
-           # 無情境時規則格不渲染——降級為警示、不計失敗（前置依使用者資料而定）
-           if ((Get-Content (Join-Path $env:APPDATA "ScreenTrans\contexts.json") -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json).Items.Count -gt 0) { $fail++ } }
+    else {
+      $hasCtx = ((Get-Content (Join-Path $env:APPDATA "ScreenTrans\contexts.json") -Raw -ErrorAction SilentlyContinue | ConvertFrom-Json).Items.Count -gt 0)
+      if ($hasCtx) { write-host "* FAIL：缺色格標籤：$($missing -join ',')" -ForegroundColor Red; $fail++ }
+      else { write-host "* SKIP：無情境項、規則格不渲染（前置不足，本節未驗——結果不得宣稱含 D 節）" -ForegroundColor Yellow; $script:dSkipped = $true }
+    }
   } else { write-host "* FAIL：找不到 Context 分頁鈕" -ForegroundColor Red; $fail++ }
 
   #endregion
@@ -255,7 +264,10 @@ try {
 #region IV.備註紀錄 ================================
 write-host "# IV.備註紀錄 ================================" -ForegroundColor Blue
 
-if ($fail -eq 0) { write-host "結果：PASS（intTest#44 十色流佈全數成立）" -ForegroundColor Green; exit 0 }
+if ($fail -eq 0) {
+  $note = if ($script:dSkipped) { "（D 節因無情境前置 SKIP、未驗）" } else { "" }
+  write-host "結果：PASS（intTest#44 十色流佈成立$note）" -ForegroundColor Green; exit 0
+}
 else { write-host "結果：FAIL（$fail 項斷言未過）" -ForegroundColor Red; exit 1 }
 
 #endregion

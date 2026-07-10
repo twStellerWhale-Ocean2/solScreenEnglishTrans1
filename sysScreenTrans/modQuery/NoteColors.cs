@@ -54,8 +54,9 @@ public static class NoteColors
     }
 
     /// <summary>
-    /// 把 AI 回傳之建議色（可能是色名如「粉紅」或 hex）正規化為盤上 hex；無法對應回空字串（不套色）。
-    /// 供智能配色容錯：模型回色名走 <see cref="HexOfName"/>，回 hex 則驗證是否在盤上。
+    /// 把 AI 回傳之建議色（可能是色名如「粉紅」或 hex）正規化為盤上**正典** hex；無法對應回空字串（不套色）。
+    /// 供智能配色容錯：模型回色名走 <see cref="HexOfName"/>，回 hex 則對應回 Palette 定本寫法——
+    /// 落地一律正典大小寫，下游（筆記選單打勾之字面比對、色塊列高亮）判準一致（#109 §5 審查）。
     /// </summary>
     public static string NormalizeSuggested(string? raw)
     {
@@ -69,6 +70,13 @@ public static class NoteColors
         {
             return byName;
         }
-        return IsPaletteHex(s) ? s : "";
+        foreach (var (_, ph) in Palette)
+        {
+            if (string.Equals(ph, s, StringComparison.OrdinalIgnoreCase))
+            {
+                return ph; // 盤上 hex → 正典寫法
+            }
+        }
+        return "";
     }
 }
