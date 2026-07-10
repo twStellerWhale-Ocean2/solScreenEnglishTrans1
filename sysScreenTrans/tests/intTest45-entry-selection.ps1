@@ -157,46 +157,63 @@ try {
   #region C.單擊選取→卡1 深粉框；點卡2→移轉 --------------------------------
   write-host "## C.單擊選取→卡1 深粉框；點卡2→移轉 --------------------------------" -ForegroundColor Cyan
 
+  # 實體點擊在使用者並用滑鼠時偶發落空——各斷言以「點擊→驗末態」重試至多 3 次（末態驗證、重試安全）
   $r1 = $t1.Current.BoundingRectangle
-  Invoke-ClickAt ([int]($r1.X + $r1.Width/2)) ([int]($r1.Y + $r1.Height/2))
-  Start-Sleep -Milliseconds 600
-  $bmp = Get-WindowBitmap $main
-  $sel1 = Band-HasSelColor $bmp $main $t1; $sel2 = Band-HasSelColor $bmp $main $t2
-  $bmp.Dispose()
-  if ($sel1 -and -not $sel2) {
+  $ok = $false
+  for ($k = 0; $k -lt 3 -and -not $ok; $k++) {
+    Invoke-ClickAt ([int]($r1.X + $r1.Width/2)) ([int]($r1.Y + $r1.Height/2))
+    Start-Sleep -Milliseconds 600
+    $bmp = Get-WindowBitmap $main
+    $ok = (Band-HasSelColor $bmp $main $t1) -and -not (Band-HasSelColor $bmp $main $t2)
+    $bmp.Dispose()
+    if (-not $ok) { write-host "* 點卡1 未達預期態（第 $($k+1) 次），重試…" -ForegroundColor Yellow }
+  }
+  if ($ok) {
     write-host "* PASS：點卡1 → 卡1 深粉框、卡2 無" -ForegroundColor Green
     [T45.Native]::SetCursorPos(5,5) | Out-Null; Start-Sleep -Milliseconds 300
     Save-WindowShot (Join-Path $ShotDir "notes-entry-selected.png") $main
-  } else { write-host "* FAIL：卡1=$sel1 卡2=$sel2" -ForegroundColor Red; $fail++ }
+  } else { write-host "* FAIL：點卡1 未見單選態" -ForegroundColor Red; $fail++ }
 
   $r2 = $t2.Current.BoundingRectangle
-  Invoke-ClickAt ([int]($r2.X + $r2.Width/2)) ([int]($r2.Y + $r2.Height/2))
-  Start-Sleep -Milliseconds 600
-  $bmp = Get-WindowBitmap $main
-  $sel1 = Band-HasSelColor $bmp $main $t1; $sel2 = Band-HasSelColor $bmp $main $t2
-  $bmp.Dispose()
-  if (-not $sel1 -and $sel2) { write-host "* PASS：點卡2 → 選取移轉（單選）" -ForegroundColor Green }
-  else { write-host "* FAIL：卡1=$sel1 卡2=$sel2（未移轉）" -ForegroundColor Red; $fail++ }
+  $ok = $false
+  for ($k = 0; $k -lt 3 -and -not $ok; $k++) {
+    Invoke-ClickAt ([int]($r2.X + $r2.Width/2)) ([int]($r2.Y + $r2.Height/2))
+    Start-Sleep -Milliseconds 600
+    $bmp = Get-WindowBitmap $main
+    $ok = (-not (Band-HasSelColor $bmp $main $t1)) -and (Band-HasSelColor $bmp $main $t2)
+    $bmp.Dispose()
+    if (-not $ok) { write-host "* 點卡2 未達預期態（第 $($k+1) 次），重試…" -ForegroundColor Yellow }
+  }
+  if ($ok) { write-host "* PASS：點卡2 → 選取移轉（單選）" -ForegroundColor Green }
+  else { write-host "* FAIL：點卡2 未見移轉" -ForegroundColor Red; $fail++ }
 
   #endregion
 
   #region D.右鍵亦選取＋雙擊檢視迴歸 --------------------------------
   write-host "## D.右鍵亦選取＋雙擊檢視迴歸 --------------------------------" -ForegroundColor Cyan
 
-  Invoke-ClickAt ([int]($r1.X + $r1.Width/2)) ([int]($r1.Y + $r1.Height/2)) "R"
-  Start-Sleep -Milliseconds 800
-  [System.Windows.Forms.SendKeys]::SendWait("{ESC}")  # 關選單再驗框色
-  Start-Sleep -Milliseconds 500
-  $bmp = Get-WindowBitmap $main
-  $sel1 = Band-HasSelColor $bmp $main $t1
-  $bmp.Dispose()
+  $sel1 = $false
+  for ($k = 0; $k -lt 3 -and -not $sel1; $k++) {   # 實體右鍵偶發落空（並用滑鼠干擾）→ 重試至多 3 次
+    Invoke-ClickAt ([int]($r1.X + $r1.Width/2)) ([int]($r1.Y + $r1.Height/2)) "R"
+    Start-Sleep -Milliseconds 800
+    [System.Windows.Forms.SendKeys]::SendWait("{ESC}")  # 關選單再驗框色
+    Start-Sleep -Milliseconds 500
+    $bmp = Get-WindowBitmap $main
+    $sel1 = Band-HasSelColor $bmp $main $t1
+    $bmp.Dispose()
+    if (-not $sel1) { write-host "* 右鍵後未見選取（第 $($k+1) 次），重試…" -ForegroundColor Yellow }
+  }
   if ($sel1) { write-host "* PASS：右鍵卡1 → 選取移至卡1" -ForegroundColor Green }
   else { write-host "* FAIL：右鍵未設選取" -ForegroundColor Red; $fail++ }
 
-  Invoke-ClickAt ([int]($r1.X + $r1.Width/2)) ([int]($r1.Y + $r1.Height/2)); Start-Sleep -Milliseconds 80
-  Invoke-ClickAt ([int]($r1.X + $r1.Width/2)) ([int]($r1.Y + $r1.Height/2))
-  Start-Sleep 2
-  $res = Find-AppWindow $appPid "Query Result"
+  $res = $null
+  for ($k = 0; $k -lt 3 -and -not $res; $k++) {
+    Invoke-ClickAt ([int]($r1.X + $r1.Width/2)) ([int]($r1.Y + $r1.Height/2)); Start-Sleep -Milliseconds 80
+    Invoke-ClickAt ([int]($r1.X + $r1.Width/2)) ([int]($r1.Y + $r1.Height/2))
+    Start-Sleep 2
+    $res = Find-AppWindow $appPid "Query Result"
+    if (-not $res) { write-host "* 雙擊未開卡（第 $($k+1) 次），重試…" -ForegroundColor Yellow }
+  }
   if ($res) {
     write-host "* PASS：雙擊仍開檢視（迴歸）" -ForegroundColor Green
     ($res.GetCurrentPattern([Windows.Automation.WindowPattern]::Pattern)).Close(); Start-Sleep -Milliseconds 400
@@ -218,15 +235,19 @@ try {
     $ht = Find-TextLike $main $hh
     if ($ht) {
       $hrr = $ht.Current.BoundingRectangle
-      Invoke-ClickAt ([int]($hrr.X + $hrr.Width/2)) ([int]($hrr.Y + $hrr.Height/2))
-      Start-Sleep -Milliseconds 600
-      $bmp = Get-WindowBitmap $main
-      $selH = Band-HasSelColor $bmp $main $ht
-      $bmp.Dispose()
+      $selH = $false
+      for ($k = 0; $k -lt 3 -and -not $selH; $k++) {
+        Invoke-ClickAt ([int]($hrr.X + $hrr.Width/2)) ([int]($hrr.Y + $hrr.Height/2))
+        Start-Sleep -Milliseconds 600
+        $bmp = Get-WindowBitmap $main
+        $selH = Band-HasSelColor $bmp $main $ht 6  # 歷史卡距小、掃描帶收斂免越入鄰卡（§5 審查 #5）
+        $bmp.Dispose()
+        if (-not $selH) { write-host "* 歷史點擊未達預期態（第 $($k+1) 次），重試…" -ForegroundColor Yellow }
+      }
       if ($selH) { write-host "* PASS：歷史條目單擊選取（深粉框）" -ForegroundColor Green }
       else { write-host "* FAIL：歷史條目未見選取色" -ForegroundColor Red; $fail++ }
-    } else { write-host "* SKIP：歷史最新條目不在當前日清單頂（定位不到）" -ForegroundColor Yellow }
-  } else { write-host "* SKIP：無查詢歷史（前置不足）" -ForegroundColor Yellow }
+    } else { write-host "* SKIP：歷史最新條目不在當前日清單頂（定位不到）" -ForegroundColor Yellow; $script:eSkipped = $true }
+  } else { write-host "* SKIP：無查詢歷史（前置不足）" -ForegroundColor Yellow; $script:eSkipped = $true }
 
   #endregion
 
@@ -248,7 +269,10 @@ try {
 #region IV.備註紀錄 ================================
 write-host "# IV.備註紀錄 ================================" -ForegroundColor Blue
 
-if ($fail -eq 0) { write-host "結果：PASS（intTest#45 選取回饋/移轉/右鍵/迴歸 全數成立）" -ForegroundColor Green; exit 0 }
+if ($fail -eq 0) {
+  $note = if ($script:eSkipped) { "（E 歷史段前置不足 SKIP、未驗）" } else { "" }
+  write-host "結果：PASS（intTest#45 選取回饋/移轉/右鍵/迴歸 成立$note）" -ForegroundColor Green; exit 0
+}
 else { write-host "結果：FAIL（$fail 項斷言未過）" -ForegroundColor Red; exit 1 }
 
 #endregion

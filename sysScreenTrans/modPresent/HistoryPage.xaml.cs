@@ -91,26 +91,12 @@ public partial class HistoryPage : UserControl
 
     private void OnDateChanged(object? sender, SelectionChangedEventArgs e) => RenderSelected();
 
-    // 單擊選取（Issue #110，同筆記款）：單選、僅視覺回饋；框厚恆定 2px 只換色。
-    private Border? _selectedCard;
-
-    private void SelectCard(Border card)
-    {
-        if (ReferenceEquals(_selectedCard, card))
-        {
-            return;
-        }
-        if (_selectedCard is not null)
-        {
-            _selectedCard.BorderBrush = Brush("#F4C2D0");
-        }
-        _selectedCard = card;
-        card.BorderBrush = Brush("#B0578D");
-    }
+    // 單擊選取（Issue #110，同筆記款；共用 CardSelector）：單選、僅視覺回饋；框厚恆定 2px 只換色。
+    private readonly CardSelector _selector = new();
 
     private void RenderSelected()
     {
-        _selectedCard = null; // 重繪/切日即清選取（#110）
+        _selector.Clear(); // 重繪/切日即清選取（#110）
         EntryPanel.Children.Clear();
         if ((DateList.SelectedItem as ListBoxItem)?.Tag is not DateGroup g)
         {
@@ -154,13 +140,13 @@ public partial class HistoryPage : UserControl
         var card = new Border
         {
             Background = Brush("#FFFFFF"),
-            BorderBrush = Brush("#F4C2D0"),
+            BorderBrush = Brush(CardSelector.IdleBorder),
             BorderThickness = new Thickness(2), // #110：框厚恆定 2px（選取只換色不跳版）
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(10, 6, 10, 6),
             Margin = new Thickness(0, 0, 0, 5),
         };
-        card.MouseRightButtonDown += (_, _) => SelectCard(card); // 右鍵亦設選取（#110）
+        card.MouseRightButtonDown += (_, _) => _selector.Select(card); // 右鍵亦設選取（#110）
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // 原文
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                     // 時刻
@@ -212,7 +198,7 @@ public partial class HistoryPage : UserControl
         card.ContextMenu = MakeEntryMenu(entry);
         card.MouseLeftButtonDown += (_, e) =>
         {
-            SelectCard(card); // 單擊即選取（#110）
+            _selector.Select(card); // 單擊即選取（#110）
             if (e.ClickCount == 2) // 雙擊＝檢視（比照筆記）
             {
                 ViewRequested?.Invoke(entry);
