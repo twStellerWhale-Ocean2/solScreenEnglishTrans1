@@ -57,6 +57,9 @@ public partial class OptionsPage : UserControl
         // 條目字級：滑桿↔數值框雙向同步（#複查）
         EntryFontSlider.ValueChanged += (_, e) => EntryFontBox.Text = ((int)e.NewValue).ToString();
         EntryFontBox.LostFocus += (_, _) => SyncEntryFontFromBox();
+        // 查詢視窗字級：滑桿↔數值框雙向同步（#複查）
+        ResultFontSlider.ValueChanged += (_, e) => ResultFontBox.Text = ((int)e.NewValue).ToString();
+        ResultFontBox.LostFocus += (_, _) => SyncResultFontFromBox();
 
         SetConfig(current);
     }
@@ -76,6 +79,8 @@ public partial class OptionsPage : UserControl
         EntryFontBox.Text = ((int)c.EntryFontSize).ToString();
         EntryBoldChk.IsChecked = c.EntryBold;
         EntryWrapChk.IsChecked = c.EntryWrap;
+        ResultFontSlider.Value = c.ResultFontSize; // ValueChanged 同步數值框（#複查）
+        ResultFontBox.Text = ((int)c.ResultFontSize).ToString();
         _hotkey = HotKeyBinding.Parse(c.Hotkey);
         UpdateHotkeyStatus();
     }
@@ -85,6 +90,13 @@ public partial class OptionsPage : UserControl
     {
         var v = int.TryParse(EntryFontBox.Text?.Trim(), out var n) ? Math.Clamp(n, 12, 32) : (int)AppConfig.DefaultEntryFontSize;
         EntryFontSlider.Value = v;
+    }
+
+    /// <summary>查詢視窗字級數值框 → 滑桿同步（鉗制 16–40；空/非數字回預設）。</summary>
+    private void SyncResultFontFromBox()
+    {
+        var v = int.TryParse(ResultFontBox.Text?.Trim(), out var n) ? Math.Clamp(n, 16, 40) : (int)AppConfig.DefaultResultFontSize;
+        ResultFontSlider.Value = v;
     }
 
     private void UpdateHotkeyStatus()
@@ -209,7 +221,8 @@ public partial class OptionsPage : UserControl
         string.IsNullOrWhiteSpace(PronModelBox.Text) ? AppConfig.DefaultPronModel : PronModelBox.Text.Trim(),
         EntryFontSlider.Value,          // 條目字級（#複查）
         EntryBoldChk.IsChecked == true, // 條目粗體
-        EntryWrapChk.IsChecked == true); // 條目自動換行
+        EntryWrapChk.IsChecked == true, // 條目自動換行
+        ResultFontSlider.Value);        // 查詢視窗基準字級（#複查）
 
     /// <summary>數值框 → 滑桿同步（鉗制 0–100；空/非數字回門檻預設）。</summary>
     private void SyncThresholdFromBox()

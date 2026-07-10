@@ -58,6 +58,7 @@ public partial class App : System.Windows.Application
             Path.Combine(AppContext.BaseDirectory, "appsettings.json"), AppConfig.SettingsPath));
         NoteDefaults.Load(); // 筆記加入預設（資料夾/底色/智能配色規則，Issue #55）
         EntryDisplaySettings.SyncFrom(_config); // #複查：條目顯示偏好（字級/粗體/換行）自 config 同步
+        ResultDisplaySettings.SyncFrom(_config); // #複查：查詢結果視窗基準字級自 config 同步
         var keyReady = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
         _speech = new SpeechService(_config.Voice);
 
@@ -437,6 +438,7 @@ public partial class App : System.Windows.Application
         _speech = new SpeechService(_config.Voice);
         _assessor = new PronunciationService(_config.PronModel, _config.TimeoutSec, _config.MaxRetries); // 隨模型/逾時重建（spec#10）
         EntryDisplaySettings.SyncFrom(_config); // #複查：條目字級/粗體/換行偏好同步後重建兩頁
+        ResultDisplaySettings.SyncFrom(_config); // #複查：查詢視窗基準字級同步（下次查詢即套用；CloseResult 已關舊窗）
         _notesPage?.Reload(); // 門檻/條目顯示改動 → 重建卡片（intTest#36）
         _historyPage?.Reload(); // #複查：條目顯示改動同步套用歷史頁
         RegisterHotkeyOrWarn();

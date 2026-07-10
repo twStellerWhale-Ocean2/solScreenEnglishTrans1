@@ -370,7 +370,7 @@ public partial class ResultWindow : Window
         var box = new System.Windows.Controls.TextBox
         {
             Text = cur.Original,
-            FontSize = 22,
+            FontSize = ResultDisplaySettings.FontSize, // #複查：編輯框比照基準字級
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
             MinHeight = 80,
@@ -450,7 +450,7 @@ public partial class ResultWindow : Window
         // 英文組：原文（逐字可點＝查該單字）＋ KK 音標 ＋ 整句播放/自動。
         // 三區不加欄目標示（Issue #40）：字級/色彩/字體本身分層、一望即知。
         BodyPanel.Children.Add(WordifiedOriginal(r.Original));
-        BodyPanel.Children.Add(Value(r.Phonetic, "#9A6A82", 24, bold: false, font: "Georgia", topMargin: 6));
+        BodyPanel.Children.Add(Value(r.Phonetic, "#9A6A82", ResultDisplaySettings.PhoneticSize, bold: false, font: "Georgia", topMargin: 6));
         BodyPanel.Children.Add(PlayRow("▶ Play",
             () => _speech?.Speak(r.Original, "en-US", stopPrevious: true),
             AutoPlaySettings.English, v => AutoPlaySettings.English = v));
@@ -459,7 +459,7 @@ public partial class ResultWindow : Window
         BodyPanel.Children.Add(new Border { Height = 16 });
 
         // 中文組：中譯 ＋ 中文播放/自動
-        BodyPanel.Children.Add(Value(r.Translation, "#3A2C33", 26, bold: false));
+        BodyPanel.Children.Add(Value(r.Translation, "#3A2C33", ResultDisplaySettings.TranslationSize, bold: false));
         BodyPanel.Children.Add(PlayRow("▶ Play",
             () => _speech?.Speak(r.Translation, "zh-TW", stopPrevious: true),
             AutoPlaySettings.Chinese, v => AutoPlaySettings.Chinese = v));
@@ -528,7 +528,7 @@ public partial class ResultWindow : Window
     {
         var tb = new TextBlock
         {
-            FontSize = 28,
+            FontSize = ResultDisplaySettings.FontSize, // #複查：查詢視窗基準字級（選項頁可調）
             FontWeight = FontWeights.SemiBold,
             Foreground = Brush("#3A2C33"),
             TextWrapping = TextWrapping.Wrap,

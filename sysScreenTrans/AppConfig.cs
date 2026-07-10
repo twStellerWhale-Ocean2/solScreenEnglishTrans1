@@ -8,10 +8,13 @@ namespace ScreenTrans;
 /// <param name="Hotkey">喚起快捷鍵綁定（序列化字串，如 <c>Alt+L</c>／<c>Ctrl+Shift+F</c>／<c>Mouse:Middle</c>）。</param>
 /// <param name="HistoryMax">查詢歷史保留筆數上限（非正值套用預設 200）。</param>
 /// <param name="Context">應用情境提示（自然語言，選填；非空時查詢注入為參考情境，spec#8）。</param>
-public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200, string Context = "", int PronPassThreshold = 80, string PronModel = "gpt-audio-1.5", double EntryFontSize = 18, bool EntryBold = true, bool EntryWrap = false)
+public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200, string Context = "", int PronPassThreshold = 80, string PronModel = "gpt-audio-1.5", double EntryFontSize = 18, bool EntryBold = true, bool EntryWrap = false, double ResultFontSize = 28)
 {
     /// <summary>筆記/歷史條目原文字級預設（#複查：選項頁「條目顯示」可調；缺欄或超界回此值）。</summary>
     public const double DefaultEntryFontSize = 18;
+
+    /// <summary>查詢結果視窗英文原文基準字級預設（#複查：音標/中譯按此等比縮放；缺欄或超界回此值）。</summary>
+    public const double DefaultResultFontSize = 28;
 
     /// <summary>查詢逾時秒數安全下限／預設（缺欄、解析失敗或非正值皆退回此值）。</summary>
     private const int DefaultTimeoutSec = 15;
@@ -69,6 +72,8 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
             var timeoutSec = r.TryGetProperty("paramQueryTimeoutSec", out var t) ? t.GetInt32() : DefaultTimeoutSec;
             var historyMax = r.TryGetProperty("paramHistoryMax", out var hm) ? hm.GetInt32() : DefaultHistoryMax;
             var pronThreshold = r.TryGetProperty("paramPronPassThreshold", out var pt) ? pt.GetInt32() : DefaultPronThreshold;
+            var entryFont = r.TryGetProperty("paramEntryFontSize", out var ef) && ef.TryGetDouble(out var efv) ? efv : DefaultEntryFontSize;
+            var resultFont = r.TryGetProperty("paramResultFontSize", out var rf) && rf.TryGetDouble(out var rfv) ? rfv : DefaultResultFontSize;
             return new AppConfig(
                 r.TryGetProperty("paramModel", out var m) ? m.GetString() ?? "gpt-4o-mini" : "gpt-4o-mini",
                 timeoutSec > 0 ? timeoutSec : DefaultTimeoutSec, // 非正值即刻取消會使查詢永遠逾時，套用安全下限
@@ -78,7 +83,11 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
                 historyMax > 0 ? historyMax : DefaultHistoryMax, // 非正上限套用預設，免歷史被清空或無界成長
                 r.TryGetProperty("paramContextHint", out var cx) ? cx.GetString() ?? "" : "", // 應用情境提示（選填）；Issue #90 起舊 paramHotkeyPoint 忽略不讀
                 pronThreshold is >= 0 and <= 100 ? pronThreshold : DefaultPronThreshold, // 發音及格門檻（spec#10；界外套預設）
-                NormalizePronModel(r.TryGetProperty("paramPronModel", out var pm) ? pm.GetString() : null)); // 發音評分模型（spec#10）
+                NormalizePronModel(r.TryGetProperty("paramPronModel", out var pm) ? pm.GetString() : null), // 發音評分模型（spec#10）
+                entryFont, // 條目原文字級（#複查；holder 端另鉗界）
+                r.TryGetProperty("paramEntryBold", out var eb) && eb.ValueKind == JsonValueKind.False ? false : true, // 條目粗體（缺欄預設 true）
+                r.TryGetProperty("paramEntryWrap", out var ew) && ew.ValueKind == JsonValueKind.True, // 條目自動換行（缺欄預設 false）
+                resultFont); // 查詢結果視窗基準字級（#複查）
         }
         catch
         {
@@ -105,6 +114,10 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
             paramContextHint = Context,
             paramPronPassThreshold = PronPassThreshold,
             paramPronModel = PronModel,
+            paramEntryFontSize = EntryFontSize, // #複查：條目顯示偏好持久化
+            paramEntryBold = EntryBold,
+            paramEntryWrap = EntryWrap,
+            paramResultFontSize = ResultFontSize, // #複查：查詢結果視窗基準字級
         };
         File.WriteAllText(path, JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
     }
