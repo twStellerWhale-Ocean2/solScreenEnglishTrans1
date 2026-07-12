@@ -84,6 +84,8 @@ public partial class NotesPage : UserControl
     private Point _entryStart;
     private TreeViewItem? _dropHighlight;   // 目前拖曳滑過之目標夾（高亮回饋，Issue #38）
     private InsertionAdorner? _insertLine;  // 條目拖曳之插入位置指示線（Issue #38）
+    private System.Windows.Threading.DispatcherTimer? _edgeScrollTimer; // #128：拖曳邊緣自動捲動計時器
+    private double _edgeScrollDelta;                                    // 每 tick 垂直捲動量（含方向）；0＝不捲
 
     public NotesPage(NotesStore store, Func<ISpeechService?> speechProvider,
         Func<IPronunciationAssessor?> assessorProvider, Func<IAudioRecorder> recorderFactory, Func<int> passThreshold,
@@ -112,7 +114,7 @@ public partial class NotesPage : UserControl
 
         EntryPanel.AllowDrop = true;
         EntryPanel.DragOver += OnEntryAreaDragOver;
-        EntryPanel.DragLeave += (_, _) => HideInsertLine();
+        EntryPanel.DragLeave += (_, _) => { HideInsertLine(); StopEdgeScroll(); }; // #128：離開清單即停自動捲動
         EntryPanel.Drop += OnEntryAreaDrop;
 
         BuildTree();
@@ -995,7 +997,8 @@ public partial class NotesPage : UserControl
         var moving = _entryDrag;
         _entryDrag = null;
         DragDrop.DoDragDrop(EntryPanel, new DataObject(FmtEntry, moving.Id), DragDropEffects.Move);
-        HideInsertLine(); // 拖曳結束（含取消／落在樹側）清除指示線
+        HideInsertLine();  // 拖曳結束（含取消／落在樹側）清除指示線
+        StopEdgeScroll();  // #128：拖曳結束（放開/Esc/取消）即停自動捲動
     }
 
     /// <summary>條目拖曳滑過右側清單 → 於預定落點顯示插入位置指示線（標準拖放回饋）。</summary>
@@ -1005,11 +1008,13 @@ public partial class NotesPage : UserControl
         {
             e.Effects = DragDropEffects.None; // 資料夾拖入右側無意義 → 標準「不可放置」回饋
             e.Handled = true;
+            StopEdgeScroll();
             return;
         }
         e.Effects = DragDropEffects.Move;
         e.Handled = true;
         ShowInsertLine(SlotIndex(e.GetPosition(EntryPanel).Y));
+        UpdateEdgeScroll(e.GetPosition(EntryScroll).Y); // #128：以視口 Y 判上/下緣感應帶、驅動自動捲動
     }
 
     // 條目落下 → 同夾排序（插入槽位所見即所得；來自他夾之條目交由左側資料夾 drop 處理移動）
@@ -1035,6 +1040,58 @@ public partial class NotesPage : UserControl
         _store.Save(_data);
         RenderFolder();
         e.Handled = true;
+    }
+
+    // ---- #128：拖曳邊緣自動捲動（指標近清單上/下緣時 ScrollViewer 自動捲動、長清單重排免中斷） ----
+
+    /// <summary>
+    /// 依指標於 <see cref="EntryScroll"/> 視口之 Y 判上/下緣感應帶（≈16px），設每 tick 捲動量（速度隨貼近遞增）並驅動計時器；
+    /// 另立即捲一步（`DragOver` 驅動、不依賴計時器於拖放 modal 迴圈是否 tick）。以 `DragOver` 視口 Y 判定、非靠 `DragLeave` 邊緣抖動。
+    /// </summary>
+    private void UpdateEdgeScroll(double viewportY)
+    {
+        const double band = 16;    // 感應帶厚（px）
+        const double maxStep = 22; // 最大每 tick 捲動量（px；約 1–2 行高）
+        double h = EntryScroll.ActualHeight;
+        double delta = 0;
+        if (viewportY < band)
+        {
+            delta = -maxStep * (1 - viewportY / band);      // 近頂 → 上捲，越近越快
+        }
+        else if (viewportY > h - band)
+        {
+            delta = maxStep * (1 - (h - viewportY) / band); // 近底 → 下捲
+        }
+        _edgeScrollDelta = delta;
+        if (delta == 0)
+        {
+            StopEdgeScroll();
+            return;
+        }
+        EntryScroll.ScrollToVerticalOffset(EntryScroll.VerticalOffset + delta); // 立即捲一步（自動鉗制 0..ScrollableHeight）
+        if (_edgeScrollTimer is null)
+        {
+            _edgeScrollTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
+            _edgeScrollTimer.Tick += OnEdgeScrollTick;
+        }
+        _edgeScrollTimer.Start();
+    }
+
+    private void OnEdgeScrollTick(object? sender, EventArgs e)
+    {
+        if (_edgeScrollDelta == 0)
+        {
+            StopEdgeScroll();
+            return;
+        }
+        EntryScroll.ScrollToVerticalOffset(EntryScroll.VerticalOffset + _edgeScrollDelta); // 到頂/底 ScrollViewer 自動鉗制不再捲
+    }
+
+    /// <summary>停止拖曳邊緣自動捲動（放開/離開清單/Esc/離開感應帶；不殘留計時器）。</summary>
+    private void StopEdgeScroll()
+    {
+        _edgeScrollTimer?.Stop();
+        _edgeScrollDelta = 0;
     }
 
     /// <summary>以 Y 座標求插入槽位（0..Count）：每列以中線分上下半。</summary>

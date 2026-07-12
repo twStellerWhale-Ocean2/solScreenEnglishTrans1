@@ -80,7 +80,7 @@
         Play&#160;&#9654;&#160;&#183;&#160;hold&#160;the&#160;mic&#160;to&#160;record&#160;&#183;&#160;score box = your best
       </TextBlock>
       <Grid Grid.Row="2">
-        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8,0,4,0">
+        <ScrollViewer x:Name="EntryScroll" VerticalScrollBarVisibility="Auto" Padding="8,0,4,0">
           <StackPanel x:Name="EntryPanel"/>
         </ScrollViewer>
         <TextBlock x:Name="EmptyHint" Text="No notes in this folder yet. Use “Add to My Notes” on a result or history entry to save one; right-click folders on the left to manage, drag to move."
