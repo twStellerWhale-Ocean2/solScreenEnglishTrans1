@@ -99,10 +99,9 @@ public partial class NotesPage : UserControl
         _data = _store.LoadEnsured();
 
         NewFolderBtn.Click += (_, _) => CreateFolder(parent: null); // 一律建頂層；子資料夾走節點右鍵選單（檔案總管慣例）
-        SortAscBtn.Click += (_, _) => SortEntries(ascending: true);   // 順向 A→Z（Issue #52）
-        SortDescBtn.Click += (_, _) => SortEntries(ascending: false); // 反向 Z→A
-        SortOldBtn.Click += (_, _) => SortEntriesByTime(ascending: true);   // 依登記時間 舊→新（Issue #104）
-        SortNewBtn.Click += (_, _) => SortEntriesByTime(ascending: false);  // 依登記時間 新→舊
+        AlphaSortBtn.Click += (_, _) => ToggleSort(NoteSortMode.Alpha);   // 字母（#126：同鈕再點翻方向）
+        TimeSortBtn.Click += (_, _) => ToggleSort(NoteSortMode.Time);     // 日期
+        ManualSortBtn.Click += (_, _) => ToggleSort(NoteSortMode.Manual); // 自訂順序（拖曳序 正/反）
         ClearPracticeBtn.Click += (_, _) => OnClearPractice();
         FolderTree.SelectedItemChanged += OnFolderSelected;
         FolderTree.PreviewMouseLeftButtonUp += (_, _) => _pressItem = null; // 放開即清，防殘留按壓被後續拖曳劫持
@@ -247,15 +246,15 @@ public partial class NotesPage : UserControl
         bool any = f is not null && f.Entries.Count > 0;
         EmptyHint.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
         ClearPracticeBtn.IsEnabled = any;
-        SortAscBtn.IsEnabled = any;   // 空夾無可排序（Issue #52）
-        SortDescBtn.IsEnabled = any;
-        SortOldBtn.IsEnabled = any;   // 時間排序同空夾停用（Issue #104）
-        SortNewBtn.IsEnabled = any;
+        AlphaSortBtn.IsEnabled = any;   // 空夾無可排序（#126）
+        TimeSortBtn.IsEnabled = any;
+        ManualSortBtn.IsEnabled = any;
+        UpdateSortButtons(f);           // 依 f.Sort 更新作用中鈕之方向字圖/粗體/深色（#126）
         if (f is null)
         {
             return;
         }
-        foreach (var entry in f.Entries)
+        foreach (var entry in DisplayEntries(f)) // #126：顯示為投影序（非破壞，不改 f.Entries 手動序）
         {
             EntryPanel.Children.Add(EntryRow(entry));
         }
@@ -268,30 +267,71 @@ public partial class NotesPage : UserControl
         BuildTree();
     }
 
-    /// <summary>順向/反向排序目前資料夾條目（Issue #52）：依原文自然排序、即時落地 notes.json、重繪。</summary>
-    private void SortEntries(bool ascending)
+    // ---- 排序（#126：非破壞式檢視投影＋三 toggle＋per-folder 記憶；存於 NoteFolder.Sort（notes.json）） ----
+
+    private static readonly FolderSort DefaultSort = new();
+
+    /// <summary>目前資料夾之顯示序（投影 f.Entries，不改儲存序；#126）。</summary>
+    private static IEnumerable<NoteEntry> DisplayEntries(NoteFolder f)
+    {
+        var s = f.Sort ?? DefaultSort;
+        return NotesStore.ProjectView(f.Entries, s.Mode, s.CurrentAscending);
+    }
+
+    /// <summary>
+    /// 點排序鈕（#126）：同模式再點＝翻該模式方向；點他模式＝切為該模式（沿用其記住之方向）。
+    /// 僅改投影狀態（<see cref="NoteFolder.Sort"/>）、不動 f.Entries 手動序；即時落地 notes.json、重繪。
+    /// </summary>
+    private void ToggleSort(NoteSortMode mode)
     {
         var f = Selected;
         if (f is null || f.Entries.Count == 0)
         {
             return;
         }
-        NotesStore.SortEntries(f, ascending);
+        var s = f.Sort ??= new FolderSort();
+        if (s.Mode == mode)
+        {
+            switch (mode) // 同模式再點 → 翻該模式方向
+            {
+                case NoteSortMode.Alpha: s.AlphaAsc = !s.AlphaAsc; break;
+                case NoteSortMode.Time: s.TimeAsc = !s.TimeAsc; break;
+                default: s.ManualAsc = !s.ManualAsc; break;
+            }
+        }
+        else
+        {
+            s.Mode = mode; // 切模式，方向沿用該模式記住值
+        }
         _store.Save(_data);
         RenderFolder();
     }
 
-    /// <summary>依登記時間正反排序目前資料夾條目（Issue #104）：穩定排序、無值視為最舊、即時落地 notes.json、重繪。</summary>
-    private void SortEntriesByTime(bool ascending)
+    /// <summary>把目前投影序落實為 f.Entries 儲存序並切「自訂」（#126；拖曳重排前呼叫，使拖曳所見即所得、不彈回）。</summary>
+    private static void MaterializeToManual(NoteFolder f)
     {
-        var f = Selected;
-        if (f is null || f.Entries.Count == 0)
-        {
-            return;
-        }
-        NotesStore.SortEntriesByTime(f, ascending);
-        _store.Save(_data);
-        RenderFolder();
+        var s = f.Sort ??= new FolderSort();
+        var projected = NotesStore.ProjectView(f.Entries, s.Mode, s.CurrentAscending);
+        f.Entries.Clear();
+        f.Entries.AddRange(projected);
+        s.Mode = NoteSortMode.Manual;
+        s.ManualAsc = true; // materialize 後手動序即為正向基準
+    }
+
+    /// <summary>依 f.Sort 更新三排序鈕視覺（作用中＝方向字圖 ▲/▼＋粗體＋深色；非作用＝僅標籤。非顏色線索＝字圖存否，#126 色盲友善）。</summary>
+    private void UpdateSortButtons(NoteFolder? f)
+    {
+        var s = f?.Sort ?? DefaultSort;
+        SetSortBtn(AlphaSortBtn, "Abc", s.Mode == NoteSortMode.Alpha, s.AlphaAsc);
+        SetSortBtn(TimeSortBtn, "Date", s.Mode == NoteSortMode.Time, s.TimeAsc);
+        SetSortBtn(ManualSortBtn, "Custom", s.Mode == NoteSortMode.Manual, s.ManualAsc);
+    }
+
+    private void SetSortBtn(Button btn, string label, bool active, bool ascending)
+    {
+        btn.Content = active ? $"{label} {(ascending ? "▲" : "▼")}" : label;
+        btn.FontWeight = active ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
+        btn.Foreground = (System.Windows.Media.Brush)FindResource(active ? "PinkText" : "PinkSub");
     }
 
     /// <summary>右欄[Clear Practice]：清空選取夾內全部筆記之發音練習紀錄（成績框回未練；不刪筆記，spec#10）。</summary>
@@ -981,12 +1021,15 @@ public partial class NotesPage : UserControl
         {
             return;
         }
+        int slot = SlotIndex(e.GetPosition(EntryPanel).Y); // 顯示槽位（依 EntryPanel 子項＝目前投影序）
+        // #126：投影模式（字母/日期或反向自訂）下拖曳 → 先把目前顯示序 materialize 入 f.Entries 並切「自訂」，
+        // 使儲存序＝顯示序、from/slot 索引一致、拖曳所見即所得（檔案總管慣例、不彈回）。
+        MaterializeToManual(f);
         int from = f.Entries.FindIndex(x => x.Id == eid);
         if (from < 0)
         {
             return;
         }
-        int slot = SlotIndex(e.GetPosition(EntryPanel).Y);
         int to = slot > from ? slot - 1 : slot; // 插入槽位 → 最終索引（移除自身後前移一位）
         NotesStore.Reorder(f, from, to);
         _store.Save(_data);

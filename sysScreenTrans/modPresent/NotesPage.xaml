@@ -60,16 +60,15 @@
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
-      <!-- 條目工具列（Issue #52 名稱排序＋#104 時間排序；WrapPanel 換行——右欄壓窄時五鈕全可視可點） -->
+      <!-- 條目工具列（#126：字母／日期／自訂 三顆 toggle 排序鈕＋Clear Practice；WrapPanel 換行——窄欄全可視可點） -->
       <WrapPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,0,0,6">
-        <Button x:Name="SortAscBtn" Content="A→Z" Style="{StaticResource GhostButton}"
-                ToolTip="Sort entries in this folder A→Z by original text" Margin="0,0,6,4"/>
-        <Button x:Name="SortDescBtn" Content="Z→A" Style="{StaticResource GhostButton}"
-                ToolTip="Sort entries in this folder Z→A by original text" Margin="0,0,6,4"/>
-        <Button x:Name="SortOldBtn" Content="Old→New" Style="{StaticResource GhostButton}"
-                ToolTip="Sort entries in this folder oldest→newest by added time" Margin="0,0,6,4"/>
-        <Button x:Name="SortNewBtn" Content="New→Old" Style="{StaticResource GhostButton}"
-                ToolTip="Sort entries in this folder newest→oldest by added time" Margin="0,0,6,4"/>
+        <!-- #126：四排序鈕收為三顆 toggle——內容（含方向字圖 ▲/▼）、粗體、深色由程式依 f.Sort 更新（作用中非顏色線索＝方向字圖存在） -->
+        <Button x:Name="AlphaSortBtn" Content="Abc" Style="{StaticResource GhostButton}" Margin="0,0,6,4"
+                ToolTip="Sort by text (A→Z / Z→A). Click to toggle direction — a view only; your custom drag order is kept."/>
+        <Button x:Name="TimeSortBtn" Content="Date" Style="{StaticResource GhostButton}" Margin="0,0,6,4"
+                ToolTip="Sort by date added (new→old / old→new). Click to toggle direction — a view only; your custom order is kept."/>
+        <Button x:Name="ManualSortBtn" Content="Custom" Style="{StaticResource GhostButton}" Margin="0,0,6,4"
+                ToolTip="Custom order — your own drag order (normal / reversed). Dragging a card switches to this mode."/>
         <Button x:Name="ClearPracticeBtn" Content="Clear Practice"
                 ToolTip="Reset every pronunciation-practice score box in this folder (notes are kept)"
                 Foreground="#8A2B2B" Style="{StaticResource GhostButton}" Margin="0,0,0,4"/>
