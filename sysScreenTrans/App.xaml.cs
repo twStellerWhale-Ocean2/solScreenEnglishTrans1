@@ -456,6 +456,7 @@ public partial class App : System.Windows.Application
             _keyStatusItem.Text = AppStatusText.KeyStatus(keyReady);
         }
         _main?.RefreshStatus(keyReady, HotkeyDisplay());
+        _main?.FlashSaved(); // #125：儲存成功於狀態列輕量閃示「Saved ✓」（取代原「Saved.」模態框；含「存後離開」路徑）
     }
 
     /// <summary>

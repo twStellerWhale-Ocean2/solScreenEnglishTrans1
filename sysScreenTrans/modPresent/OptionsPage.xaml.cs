@@ -20,6 +20,7 @@ public partial class OptionsPage : UserControl
     private ISpeechService? _testSvc;
     private HotKeyBinding _hotkey = HotKeyBinding.Default;
     private bool _listening; // 是否正在監聽擷取喚起快捷鍵
+    private System.Windows.Window? _listenWindow; // 監聽期間掛載擷取事件之宿主視窗（#127：改視窗層擷取、不依賴本頁鍵盤焦點）
 
     /// <summary>目前組態（供 Gather 保留未在本頁呈現之欄位）。</summary>
     public AppConfig Config { get; private set; }
@@ -45,10 +46,11 @@ public partial class OptionsPage : UserControl
         }
 
         ChangeHotkeyBtn.Click += (_, _) => StartListening();
-        PreviewKeyDown += OnListenKeyDown;
-        PreviewMouseDown += OnListenMouseDown;
-        // 監聽中若焦點離開本頁（切分頁/切視窗而未擷取或未按 Esc）→ 視同取消，確保全域熱鍵必恢復（Issue #89）
-        LostKeyboardFocus += (_, _) => StopListening();
+        // 擷取喚起鍵改於宿主視窗層掛載（見 StartListening）——修 #127：Win11 上停用「變更」鈕後
+        // 鍵盤焦點移離本頁、`Keyboard.Focus(this)` 未穩定生效，按鍵不進 OnListenKeyDown 而「按下無效果」；
+        // 且原 LostKeyboardFocus→StopListening 會於焦點抖動時立即取消監聽。改視窗層擷取後不依賴本頁焦點。
+        // 監聽中本頁被切離（切分頁致 Unloaded）→ 視同取消，確保全域熱鍵必恢復（Issue #89）。
+        Unloaded += (_, _) => StopListening();
         SaveBtn.Click += OnSave;
         TestBtn.Click += OnTest;
         // 發音及格門檻：滑桿↔數值框雙向同步（spec#10）
@@ -125,10 +127,23 @@ public partial class OptionsPage : UserControl
 
     private void StartListening()
     {
+        if (_listening)
+        {
+            return; // 已在監聽 → 不重入
+        }
         _listening = true;
         ListeningChanged?.Invoke(true); // 暫停全域熱鍵，避免監聽期間按現行鍵誤觸喚起（Issue #89）
         HotkeyStatus.Text = "Press a hotkey… (Esc to cancel)";
         ChangeHotkeyBtn.IsEnabled = false;
+        // 於宿主視窗層擷取按鍵/滑鼠——不依賴 UserControl 取得鍵盤焦點（修 #127，見建構式註解）。
+        _listenWindow = System.Windows.Window.GetWindow(this);
+        if (_listenWindow is not null)
+        {
+            _listenWindow.PreviewKeyDown += OnListenKeyDown;
+            _listenWindow.PreviewMouseDown += OnListenMouseDown;
+            _listenWindow.Deactivated += OnListenAborted; // 切到他視窗＝取消監聽、恢復全域熱鍵
+        }
+        // 仍嘗試聚焦本頁（利於事件路由與 Esc），但擷取已不依賴之
         Focus();
         Keyboard.Focus(this);
     }
@@ -137,13 +152,22 @@ public partial class OptionsPage : UserControl
     {
         if (!_listening)
         {
-            return; // 已非監聽（如 LostKeyboardFocus 於非監聽時觸發）→ 不重覆恢復
+            return; // 已非監聽 → 不重覆恢復
         }
         _listening = false;
         ChangeHotkeyBtn.IsEnabled = true;
         UpdateHotkeyStatus();
+        if (_listenWindow is not null)
+        {
+            _listenWindow.PreviewKeyDown -= OnListenKeyDown;
+            _listenWindow.PreviewMouseDown -= OnListenMouseDown;
+            _listenWindow.Deactivated -= OnListenAborted;
+            _listenWindow = null;
+        }
         ListeningChanged?.Invoke(false); // 恢復全域熱鍵（Issue #89）
     }
+
+    private void OnListenAborted(object? sender, System.EventArgs e) => StopListening();
 
     private void OnListenKeyDown(object sender, KeyEventArgs e)
     {
@@ -263,7 +287,14 @@ public partial class OptionsPage : UserControl
         }
     }
 
-    private void OnSave(object sender, RoutedEventArgs e)
+    private void OnSave(object sender, RoutedEventArgs e) => TrySave();
+
+    /// <summary>
+    /// 執行儲存（#125）：成功回傳 <c>true</c>——**不彈成功模態**，成功回饋改由呼叫端經
+    /// <see cref="SettingsChanged"/>→App→主視窗狀態列輕量閃示「Saved ✓」；失敗回傳 <c>false</c>
+    /// 並以**持續性**模態報錯（非數秒閃示、免一閃即逝）、留在頁上。供「儲存」鈕與「存後離開」守衛共用。
+    /// </summary>
+    public bool TrySave()
     {
         try
         {
@@ -272,12 +303,13 @@ public partial class OptionsPage : UserControl
             Config.Save(AppConfig.SettingsPath); // %APPDATA%（Issue #51 遷居；exe 旁不再寫）
             KeyBox.Clear();
             SetConfig(Config);
-            SettingsChanged?.Invoke(Config);
-            System.Windows.MessageBox.Show("Saved.", "ScreenTrans Options");
+            SettingsChanged?.Invoke(Config); // 成功回饋走狀態列閃示（#125，取代原「Saved.」模態框）
+            return true;
         }
         catch (Exception ex)
         {
             System.Windows.MessageBox.Show("Save failed: " + ex.Message, "ScreenTrans Options");
+            return false;
         }
     }
 

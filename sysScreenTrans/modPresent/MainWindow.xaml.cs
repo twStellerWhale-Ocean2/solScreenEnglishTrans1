@@ -54,17 +54,23 @@ public partial class MainWindow : Window
         {
             return true;
         }
+        // #125：兩選（OK/Cancel）改三選（Yes/No/Cancel）——存後離開／不存還原離開／取消留頁。
         var r = System.Windows.MessageBox.Show(
-            "You have unsaved changes in Options.\n\nLeave without saving? Your changes will be discarded.",
+            "You have unsaved changes in Options.\n\n" +
+            "Yes — save and leave\nNo — discard changes and leave\nCancel — stay on Options",
             "Unsaved changes",
-            MessageBoxButton.OKCancel,
+            MessageBoxButton.YesNoCancel,
             MessageBoxImage.Warning);
-        if (r == MessageBoxResult.OK)
+        switch (r)
         {
-            _options.RevertChanges(); // 離開＝還原為上次儲存值
-            return true;
+            case MessageBoxResult.Yes:
+                return _options.TrySave(); // 存後離開：存檔成功才離開；失敗（TrySave 已報錯）留在選項頁
+            case MessageBoxResult.No:
+                _options.RevertChanges();  // 不存離開＝還原為上次儲存值
+                return true;
+            default:
+                return false;              // Cancel＝留在選項頁
         }
-        return false; // 取消＝留在選項頁
     }
 
     /// <summary>取消離開後把分頁選取撥回選項頁（設 IsChecked 會觸發 TabOptions.Checked 還原 Host.Content）。</summary>
@@ -90,6 +96,26 @@ public partial class MainWindow : Window
         KeyStatusText.Text = AppStatusText.KeyStatus(keyReady);
         KeyStatusText.Foreground = keyReady ? System.Windows.Media.Brushes.ForestGreen : System.Windows.Media.Brushes.Firebrick;
         HotkeyText.Text = AppStatusText.HotkeyLine(hotkeyDisplay);
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _savedFlashTimer;
+
+    /// <summary>設定儲存成功後於底部狀態列輕量閃示「Saved ✓」數秒（#125，取代原「Saved.」模態對話框）。</summary>
+    public void FlashSaved()
+    {
+        SavedFlashText.Text = "Saved ✓";
+        SavedFlashText.Visibility = Visibility.Visible;
+        _savedFlashTimer ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2.5) };
+        _savedFlashTimer.Stop();
+        _savedFlashTimer.Tick -= OnSavedFlashElapsed; // 重按儲存時重置計時，不累加 handler
+        _savedFlashTimer.Tick += OnSavedFlashElapsed;
+        _savedFlashTimer.Start();
+    }
+
+    private void OnSavedFlashElapsed(object? sender, EventArgs e)
+    {
+        _savedFlashTimer?.Stop();
+        SavedFlashText.Visibility = Visibility.Collapsed;
     }
 
     /// <summary>
