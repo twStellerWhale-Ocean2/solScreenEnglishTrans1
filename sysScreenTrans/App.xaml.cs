@@ -121,10 +121,10 @@ public partial class App : System.Windows.Application
         _dictionaryPage.WordQueryRequested += word => _ = LookupWordAsync(word);   // 點單字＝查該字
         _dictionaryPage.TextReQueryRequested += text => _ = ReTranslateAsync(text); // 編輯原文→重譯
         _dictionaryPage.ManualQueryRequested += text => _ = ManualLookupAsync(text); // 分頁頂部手動輸入查詢
+        _dictionaryPage.HistoryRequested += RefreshDictionaryHistory; // 下拉開啟→以查詢歷史填入（#135 回饋）
 
         _main = new MainWindow(_dictionaryPage, _notesPage, _historyPage, _contextPage, _optionsPage, new AboutPage(_updates));
         _main.RefreshStatus(keyReady, HotkeyDisplay());
-        _main.ResultRequested += SummonResult; // 功能列 Result 鈕（Issue #107）
         // 主視窗取得焦點不關結果卡片（Issue #105：與主視窗共存，關閉時機僅限使用者關閉／新查詢或檢視取代／選項儲存重建）
         _main.WindowState = WindowState.Minimized;
         _main.Show();
@@ -411,6 +411,14 @@ public partial class App : System.Windows.Application
             _dictionaryPage.ShowError(ex.Message);
         }
     }
+
+    /// <summary>刷新 Dictionary 分頁輸入下拉之查詢歷史（英文原文、新在前、去重；#135 回饋，下拉開啟時呼叫）。</summary>
+    private void RefreshDictionaryHistory()
+        => _dictionaryPage?.SetHistory(_historyStore.Load()
+            .Select(h => h.ToResult().Original)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct()
+            .ToList());
 
     /// <summary>目前頂層資料夾名清單（供結果視窗「加入至」下拉，#55）。</summary>
     private List<string> TopFolderNames() => _notesStore.LoadEnsured().Folders.Select(f => f.Name).ToList();

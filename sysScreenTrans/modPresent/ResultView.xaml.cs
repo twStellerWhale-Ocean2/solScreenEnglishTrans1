@@ -428,7 +428,7 @@ public partial class ResultView : UserControl
             Background = Brush("#F4C2D0"),
             Foreground = Brush("#6D3A4D"),
             BorderThickness = new Thickness(0),
-            FontSize = 18,
+            FontSize = 14, // 播音鈕比照一般內文字級（USR 回饋：不特別加大）
             Cursor = Cursors.Hand,
         };
         btn.Click += (_, _) => onPlay();
@@ -439,7 +439,7 @@ public partial class ResultView : UserControl
             Content = "Auto-play",
             IsChecked = autoInit,
             Foreground = Brush("#8A5A6D"),
-            FontSize = 16,
+            FontSize = 14, // 自動播放勾選比照一般內文字級（USR 回饋）
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(14, 0, 0, 0),
         };

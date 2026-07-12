@@ -15,9 +15,6 @@ public partial class MainWindow : Window
 {
     private bool _exiting; // true 時允許真正關閉（結束程式）；否則關閉＝收合。結束由系統匣「結束」觸發。
 
-    /// <summary>功能列 Result 鈕按下（Issue #107）：本視窗僅發事件，喚回三態決策在 App 組合根。</summary>
-    public event Action? ResultRequested;
-
     private readonly DictionaryPage _dictionary;
     private readonly NotesPage _notes;
     private readonly HistoryPage _history;
@@ -47,7 +44,6 @@ public partial class MainWindow : Window
         TabContext.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _context.Reload(); Host.Content = _context; ShowEntryCount(null); };
         TabOptions.Checked += (_, _) => { Host.Content = _options; ShowEntryCount(null); };
         TabAbout.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } Host.Content = _about; ShowEntryCount(null); };
-        ResultBtn.Click += (_, _) => ResultRequested?.Invoke();
 
         Host.Content = _notes; // 預設筆記分頁（XAML IsChecked 於接線前已設，故此處明確帶入）
         ShowEntryCount(_notes.CurrentEntryCount); // #132：初始筆記分頁條目數

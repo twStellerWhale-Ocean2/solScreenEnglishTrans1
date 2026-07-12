@@ -75,16 +75,13 @@
       <!-- 功能列分頁（圖示＋文字；標題僅在 OS 標題列、內容區不重複——Issue #38 Windows 慣例） -->
       <Grid Grid.Row="0">
         <StackPanel Orientation="Horizontal" Margin="12,10,0,6">
-          <RadioButton x:Name="TabDictionary" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE721;" Content="Dictionary"/>
+          <RadioButton x:Name="TabDictionary" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE82D;" Content="Dictionary"/>
           <RadioButton x:Name="TabContext" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xEB9F;" Content="Capture"/>
           <RadioButton x:Name="TabNotes" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE70B;" Content="Notes" IsChecked="True"/>
           <RadioButton x:Name="TabHistory" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE81C;" Content="History"/>
           <RadioButton x:Name="TabOptions" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE713;" Content="Options"/>
           <RadioButton x:Name="TabAbout" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE946;" Content="About"/>
         </StackPanel>
-        <!-- 喚回結果卡動作鈕（Issue #107）：MDL2 E8A7 OpenInNewWindow -->
-        <Button x:Name="ResultBtn" Style="{StaticResource ActionButton}" Tag="&#xE8A7;" Content="Result"
-                ToolTip="Bring back the query result" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,12,6"/>
         <Border Height="1" Background="{StaticResource PinkAccent}" VerticalAlignment="Bottom"/>
       </Grid>
 
