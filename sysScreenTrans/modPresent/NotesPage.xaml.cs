@@ -78,12 +78,20 @@ public partial class NotesPage : UserControl
 
     public event Action<NoteEntry>? ViewRequested;
 
+    /// <summary>目前選取資料夾之條目數（#132，供狀態列顯示）。</summary>
+    public int CurrentEntryCount => Selected?.Entries.Count ?? 0;
+
+    /// <summary>目前檢視條目數變更（#132）：切夾/增/刪/重繪後觸發，供主視窗狀態列即時更新。</summary>
+    public event Action<int>? EntryCountChanged;
+
     private TreeViewItem? _pressItem;
     private Point _pressPoint;
     private NoteEntry? _entryDrag;
     private Point _entryStart;
     private TreeViewItem? _dropHighlight;   // 目前拖曳滑過之目標夾（高亮回饋，Issue #38）
     private InsertionAdorner? _insertLine;  // 條目拖曳之插入位置指示線（Issue #38）
+    private System.Windows.Threading.DispatcherTimer? _edgeScrollTimer; // #128：拖曳邊緣自動捲動計時器
+    private double _edgeScrollDelta;                                    // 每 tick 垂直捲動量（含方向）；0＝不捲
 
     public NotesPage(NotesStore store, Func<ISpeechService?> speechProvider,
         Func<IPronunciationAssessor?> assessorProvider, Func<IAudioRecorder> recorderFactory, Func<int> passThreshold,
@@ -99,10 +107,9 @@ public partial class NotesPage : UserControl
         _data = _store.LoadEnsured();
 
         NewFolderBtn.Click += (_, _) => CreateFolder(parent: null); // 一律建頂層；子資料夾走節點右鍵選單（檔案總管慣例）
-        SortAscBtn.Click += (_, _) => SortEntries(ascending: true);   // 順向 A→Z（Issue #52）
-        SortDescBtn.Click += (_, _) => SortEntries(ascending: false); // 反向 Z→A
-        SortOldBtn.Click += (_, _) => SortEntriesByTime(ascending: true);   // 依登記時間 舊→新（Issue #104）
-        SortNewBtn.Click += (_, _) => SortEntriesByTime(ascending: false);  // 依登記時間 新→舊
+        AlphaSortBtn.Click += (_, _) => ToggleSort(NoteSortMode.Alpha);   // 字母（#126：同鈕再點翻方向）
+        TimeSortBtn.Click += (_, _) => ToggleSort(NoteSortMode.Time);     // 日期
+        ManualSortBtn.Click += (_, _) => ToggleSort(NoteSortMode.Manual); // 自訂順序（拖曳序 正/反）
         ClearPracticeBtn.Click += (_, _) => OnClearPractice();
         FolderTree.SelectedItemChanged += OnFolderSelected;
         FolderTree.PreviewMouseLeftButtonUp += (_, _) => _pressItem = null; // 放開即清，防殘留按壓被後續拖曳劫持
@@ -113,7 +120,7 @@ public partial class NotesPage : UserControl
 
         EntryPanel.AllowDrop = true;
         EntryPanel.DragOver += OnEntryAreaDragOver;
-        EntryPanel.DragLeave += (_, _) => HideInsertLine();
+        EntryPanel.DragLeave += (_, _) => { HideInsertLine(); StopEdgeScroll(); }; // #128：離開清單即停自動捲動
         EntryPanel.Drop += OnEntryAreaDrop;
 
         BuildTree();
@@ -247,15 +254,16 @@ public partial class NotesPage : UserControl
         bool any = f is not null && f.Entries.Count > 0;
         EmptyHint.Visibility = any ? Visibility.Collapsed : Visibility.Visible;
         ClearPracticeBtn.IsEnabled = any;
-        SortAscBtn.IsEnabled = any;   // 空夾無可排序（Issue #52）
-        SortDescBtn.IsEnabled = any;
-        SortOldBtn.IsEnabled = any;   // 時間排序同空夾停用（Issue #104）
-        SortNewBtn.IsEnabled = any;
+        AlphaSortBtn.IsEnabled = any;   // 空夾無可排序（#126）
+        TimeSortBtn.IsEnabled = any;
+        ManualSortBtn.IsEnabled = any;
+        UpdateSortButtons(f);           // 依 f.Sort 更新作用中鈕之方向字圖/粗體/深色（#126）
+        EntryCountChanged?.Invoke(f?.Entries.Count ?? 0); // #132：條目數變更通知狀態列
         if (f is null)
         {
             return;
         }
-        foreach (var entry in f.Entries)
+        foreach (var entry in DisplayEntries(f)) // #126：顯示為投影序（非破壞，不改 f.Entries 手動序）
         {
             EntryPanel.Children.Add(EntryRow(entry));
         }
@@ -268,30 +276,69 @@ public partial class NotesPage : UserControl
         BuildTree();
     }
 
-    /// <summary>順向/反向排序目前資料夾條目（Issue #52）：依原文自然排序、即時落地 notes.json、重繪。</summary>
-    private void SortEntries(bool ascending)
+    // ---- 排序（#126：非破壞式檢視投影＋三 toggle＋per-folder 記憶；存於 NoteFolder.Sort（notes.json）） ----
+
+    /// <summary>目前資料夾之顯示序（投影 f.Entries，不改儲存序；#126）。</summary>
+    private static IEnumerable<NoteEntry> DisplayEntries(NoteFolder f)
+    {
+        var s = f.Sort ?? new FolderSort(); // 唯讀預設（Manual／正向）：就地建立、不共用可變實例（審查 NIT②）
+        return NotesStore.ProjectView(f.Entries, s.Mode, s.CurrentAscending);
+    }
+
+    /// <summary>
+    /// 點排序鈕（#126）：同模式再點＝翻該模式方向；點他模式＝切為該模式（沿用其記住之方向）。
+    /// 僅改投影狀態（<see cref="NoteFolder.Sort"/>）、不動 f.Entries 手動序；即時落地 notes.json、重繪。
+    /// </summary>
+    private void ToggleSort(NoteSortMode mode)
     {
         var f = Selected;
         if (f is null || f.Entries.Count == 0)
         {
             return;
         }
-        NotesStore.SortEntries(f, ascending);
+        var s = f.Sort ??= new FolderSort();
+        if (s.Mode == mode)
+        {
+            switch (mode) // 同模式再點 → 翻該模式方向
+            {
+                case NoteSortMode.Alpha: s.AlphaAsc = !s.AlphaAsc; break;
+                case NoteSortMode.Time: s.TimeAsc = !s.TimeAsc; break;
+                default: s.ManualAsc = !s.ManualAsc; break;
+            }
+        }
+        else
+        {
+            s.Mode = mode; // 切模式，方向沿用該模式記住值
+        }
         _store.Save(_data);
         RenderFolder();
     }
 
-    /// <summary>依登記時間正反排序目前資料夾條目（Issue #104）：穩定排序、無值視為最舊、即時落地 notes.json、重繪。</summary>
-    private void SortEntriesByTime(bool ascending)
+    /// <summary>把目前投影序落實為 f.Entries 儲存序並切「自訂」（#126；拖曳重排前呼叫，使拖曳所見即所得、不彈回）。</summary>
+    private static void MaterializeToManual(NoteFolder f)
     {
-        var f = Selected;
-        if (f is null || f.Entries.Count == 0)
-        {
-            return;
-        }
-        NotesStore.SortEntriesByTime(f, ascending);
-        _store.Save(_data);
-        RenderFolder();
+        var s = f.Sort ??= new FolderSort();
+        var projected = NotesStore.ProjectView(f.Entries, s.Mode, s.CurrentAscending);
+        f.Entries.Clear();
+        f.Entries.AddRange(projected);
+        s.Mode = NoteSortMode.Manual;
+        s.ManualAsc = true; // materialize 後手動序即為正向基準
+    }
+
+    /// <summary>依 f.Sort 更新三排序鈕視覺（作用中＝方向字圖 ▲/▼＋粗體＋深色；非作用＝僅標籤。非顏色線索＝字圖存否，#126 色盲友善）。</summary>
+    private void UpdateSortButtons(NoteFolder? f)
+    {
+        var s = f?.Sort ?? new FolderSort(); // 唯讀預設值、不共用可變實例（審查 NIT②）
+        SetSortBtn(AlphaSortBtn, "Abc", s.Mode == NoteSortMode.Alpha, s.AlphaAsc);
+        SetSortBtn(TimeSortBtn, "Date", s.Mode == NoteSortMode.Time, s.TimeAsc);
+        SetSortBtn(ManualSortBtn, "Custom", s.Mode == NoteSortMode.Manual, s.ManualAsc);
+    }
+
+    private void SetSortBtn(Button btn, string label, bool active, bool ascending)
+    {
+        btn.Content = active ? $"{label} {(ascending ? "▲" : "▼")}" : label;
+        btn.FontWeight = active ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
+        btn.Foreground = (System.Windows.Media.Brush)FindResource(active ? "PinkText" : "PinkSub");
     }
 
     /// <summary>右欄[Clear Practice]：清空選取夾內全部筆記之發音練習紀錄（成績框回未練；不刪筆記，spec#10）。</summary>
@@ -516,15 +563,18 @@ public partial class NotesPage : UserControl
         var handle = new TextBlock
         {
             Text = "≡",
-            FontSize = 16,
+            FontSize = 22, // #131：加大拖曳握把圖示（原 16 偏小、更好辨識與抓取）
+            FontWeight = System.Windows.FontWeights.Bold,
             Foreground = Brush("#C77D9A"),
             Cursor = Cursors.SizeAll, // 四向移動：可上下排序亦可拖入左樹資料夾（Issue #46）
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(2, 0, 8, 0),
             ToolTip = "Drag to reorder / drag onto a folder to move",
         };
-        handle.PreviewMouseLeftButtonDown += (_, ev) => { _entryDrag = entry; _entryStart = ev.GetPosition(null); };
-        handle.PreviewMouseLeftButtonUp += (_, _) => _entryDrag = null; // 放開即清（對稱防殘留）
+        // #130：按下即擷取滑鼠——指標離開窄握把後仍收 PreviewMouseMove，直接往左橫移至左樹資料夾亦能起拖
+        //（原先未擷取，往左一離開握把即收不到移動事件、門檻跨不過，須先上下拖曳才生效）。
+        handle.PreviewMouseLeftButtonDown += (_, ev) => { _entryDrag = entry; _entryStart = ev.GetPosition(null); handle.CaptureMouse(); };
+        handle.PreviewMouseLeftButtonUp += (_, _) => { _entryDrag = null; handle.ReleaseMouseCapture(); }; // 放開即清＋釋放擷取（對稱防殘留）
         handle.PreviewMouseMove += OnEntryHandleMove;
         Grid.SetColumn(handle, 0);
         grid.Children.Add(handle);
@@ -954,8 +1004,10 @@ public partial class NotesPage : UserControl
         }
         var moving = _entryDrag;
         _entryDrag = null;
+        (sender as UIElement)?.ReleaseMouseCapture(); // #130：起拖前釋放握把擷取，讓 DoDragDrop 自行接管拖放
         DragDrop.DoDragDrop(EntryPanel, new DataObject(FmtEntry, moving.Id), DragDropEffects.Move);
-        HideInsertLine(); // 拖曳結束（含取消／落在樹側）清除指示線
+        HideInsertLine();  // 拖曳結束（含取消／落在樹側）清除指示線
+        StopEdgeScroll();  // #128：拖曳結束（放開/Esc/取消）即停自動捲動
     }
 
     /// <summary>條目拖曳滑過右側清單 → 於預定落點顯示插入位置指示線（標準拖放回饋）。</summary>
@@ -965,11 +1017,13 @@ public partial class NotesPage : UserControl
         {
             e.Effects = DragDropEffects.None; // 資料夾拖入右側無意義 → 標準「不可放置」回饋
             e.Handled = true;
+            StopEdgeScroll();
             return;
         }
         e.Effects = DragDropEffects.Move;
         e.Handled = true;
         ShowInsertLine(SlotIndex(e.GetPosition(EntryPanel).Y));
+        UpdateEdgeScroll(e.GetPosition(EntryScroll).Y); // #128：以視口 Y 判上/下緣感應帶、驅動自動捲動
     }
 
     // 條目落下 → 同夾排序（插入槽位所見即所得；來自他夾之條目交由左側資料夾 drop 處理移動）
@@ -981,17 +1035,72 @@ public partial class NotesPage : UserControl
         {
             return;
         }
+        int slot = SlotIndex(e.GetPosition(EntryPanel).Y); // 顯示槽位（依 EntryPanel 子項＝目前投影序）
+        // #126：投影模式（字母/日期或反向自訂）下拖曳 → 先把目前顯示序 materialize 入 f.Entries 並切「自訂」，
+        // 使儲存序＝顯示序、from/slot 索引一致、拖曳所見即所得（檔案總管慣例、不彈回）。
+        MaterializeToManual(f);
         int from = f.Entries.FindIndex(x => x.Id == eid);
         if (from < 0)
         {
             return;
         }
-        int slot = SlotIndex(e.GetPosition(EntryPanel).Y);
         int to = slot > from ? slot - 1 : slot; // 插入槽位 → 最終索引（移除自身後前移一位）
         NotesStore.Reorder(f, from, to);
         _store.Save(_data);
         RenderFolder();
         e.Handled = true;
+    }
+
+    // ---- #128：拖曳邊緣自動捲動（指標近清單上/下緣時 ScrollViewer 自動捲動、長清單重排免中斷） ----
+
+    /// <summary>
+    /// 依指標於 <see cref="EntryScroll"/> 視口之 Y 判上/下緣感應帶（≈16px），設每 tick 捲動量（速度隨貼近遞增）並驅動計時器；
+    /// 另立即捲一步（`DragOver` 驅動、不依賴計時器於拖放 modal 迴圈是否 tick）。以 `DragOver` 視口 Y 判定、非靠 `DragLeave` 邊緣抖動。
+    /// </summary>
+    private void UpdateEdgeScroll(double viewportY)
+    {
+        const double band = 16;    // 感應帶厚（px）
+        const double maxStep = 22; // 最大每 tick 捲動量（px；約 1–2 行高）
+        double h = EntryScroll.ActualHeight;
+        double delta = 0;
+        if (viewportY < band)
+        {
+            delta = -maxStep * (1 - viewportY / band);      // 近頂 → 上捲，越近越快
+        }
+        else if (viewportY > h - band)
+        {
+            delta = maxStep * (1 - (h - viewportY) / band); // 近底 → 下捲
+        }
+        _edgeScrollDelta = delta;
+        if (delta == 0)
+        {
+            StopEdgeScroll();
+            return;
+        }
+        EntryScroll.ScrollToVerticalOffset(EntryScroll.VerticalOffset + delta); // 立即捲一步（自動鉗制 0..ScrollableHeight）
+        if (_edgeScrollTimer is null)
+        {
+            _edgeScrollTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(30) };
+            _edgeScrollTimer.Tick += OnEdgeScrollTick;
+        }
+        _edgeScrollTimer.Start();
+    }
+
+    private void OnEdgeScrollTick(object? sender, EventArgs e)
+    {
+        if (_edgeScrollDelta == 0)
+        {
+            StopEdgeScroll();
+            return;
+        }
+        EntryScroll.ScrollToVerticalOffset(EntryScroll.VerticalOffset + _edgeScrollDelta); // 到頂/底 ScrollViewer 自動鉗制不再捲
+    }
+
+    /// <summary>停止拖曳邊緣自動捲動（放開/離開清單/Esc/離開感應帶；不殘留計時器）。</summary>
+    private void StopEdgeScroll()
+    {
+        _edgeScrollTimer?.Stop();
+        _edgeScrollDelta = 0;
     }
 
     /// <summary>以 Y 座標求插入槽位（0..Count）：每列以中線分上下半。</summary>

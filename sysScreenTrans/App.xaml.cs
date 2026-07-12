@@ -76,7 +76,7 @@ public partial class App : System.Windows.Application
         menu.Items.Add("Result", null, (_, _) => SummonResult()); // 喚回結果卡（Issue #107：與主視窗 Result 鈕兩入口鏡像）
         menu.Items.Add("Query History", null, (_, _) => OpenMain(MainTab.History));
         menu.Items.Add("My Notes", null, (_, _) => OpenMain(MainTab.Notes));
-        menu.Items.Add("Context", null, (_, _) => OpenMain(MainTab.Context));
+        menu.Items.Add("Capture", null, (_, _) => OpenMain(MainTab.Context)); // #133：分頁改名 Capture（enum 內部名沿用 Context）
         menu.Items.Add("Options", null, (_, _) => OpenMain(MainTab.Options));
         menu.Items.Add("About", null, (_, _) => OpenMain(MainTab.About));
         menu.Items.Add(new WinForms.ToolStripSeparator());
@@ -102,10 +102,14 @@ public partial class App : System.Windows.Application
         _listenGuard = new HotkeyListenGuard(
             suspend: () => _hotkey?.Unregister(),
             resume: RegisterHotkeyOrWarn);
-        _optionsPage.ListeningChanged += _listenGuard.OnListeningChanged;
         _contextStore.LoadMigrated(_config.Context); // #14 單一情境提示相容遷移為一則命名情境
         _contextPage = new ContextPage(_contextStore,
-            bytes => new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries).DescribeImageAsync(bytes));
+            bytes => new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries).DescribeImageAsync(bytes),
+            _config.Hotkey); // 目前喚起快捷鍵初值（#133：#3 設定整塊搬至擷取頁）
+        // 喚起快捷鍵設定＋監聽暫停守衛＋手動擷取皆由擷取頁承載（#133：#3 快捷鍵搬遷、#5 手動擷取）
+        _contextPage.ListeningChanged += _listenGuard.OnListeningChanged;
+        _contextPage.HotkeyChanged += OnHotkeyChanged;
+        _contextPage.CaptureRequested += TriggerManualCapture;
 
         _updates = new UpdateService();
         _updates.UpdateReady += v => Dispatcher.BeginInvoke(() => _main?.ShowUpdateReady(v));
@@ -149,6 +153,25 @@ public partial class App : System.Windows.Application
 
     private string HotkeyDisplay() => HotKeyBinding.Parse(_config.Hotkey).DisplayName;
 
+    /// <summary>
+    /// 擷取頁改定喚起快捷鍵後（#133：#3）：立即持久化並重註冊全域熱鍵、同步狀態列與系統匣。
+    /// 以 <see cref="OptionsPage.SetConfig"/> 把新組態灌回選項頁快照——App 為 AppConfig 單一擁有者，
+    /// 令選項頁 Gather 保留新快捷鍵、避免兩頁各自 Save 互相覆寫（單一 config 擁有者防覆寫）。
+    /// </summary>
+    private void OnHotkeyChanged(HotKeyBinding binding)
+    {
+        _config = _config with { Hotkey = binding.Serialize() }; // AppConfig 為 record，with 複製改單一欄位
+        _config.Save(AppConfig.SettingsPath);
+        RegisterHotkeyOrWarn();
+        _optionsPage?.SetConfig(_config); // resync 選項頁快照，令其 Gather 保留新快捷鍵、避免兩頁各存 AppConfig 互相覆寫
+        var keyReady = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
+        if (_tray is not null)
+        {
+            _tray.Text = TrayText(); // 系統匣提示同步新快捷鍵
+        }
+        _main?.RefreshStatus(keyReady, HotkeyDisplay());
+    }
+
     private string TrayText() => AppStatusText.TrayTip(HotkeyDisplay());
 
     private static Icon LoadAppIcon(System.Drawing.Size size)
@@ -173,6 +196,23 @@ public partial class App : System.Windows.Application
         System.Windows.MessageBox.Show(
             "An error occurred (logged to " + LogPath + "):\n\n" + args.Exception.Message, "ScreenTrans Error");
         args.Handled = true;
+    }
+
+    /// <summary>手動觸發擷取（#133：#5 擷取頁「Capture Screen」鈕）：查詢進行中則忽略；否則先收合主視窗、
+    /// <b>待其真正淡出後</b>再走既有喚起主動線——同步立即擷取會在最小化動畫／DWM 重組完成前就凍結桌面，
+    /// 把主視窗自身烙進畫格、使用者反而選不到它原本遮住的區域（業界審查 #133 MAJOR）。</summary>
+    private async void TriggerManualCapture()
+    {
+        if (_busy)
+        {
+            return; // 查詢進行中：不收合（否則視窗消失卻無擷取、無回饋），忽略本次手動觸發（審查 NIT③）
+        }
+        if (_main is not null)
+        {
+            _main.WindowState = WindowState.Minimized; // 先最小化（留工作列可還原、不致「消失」）
+        }
+        await Task.Delay(200); // 待最小化動畫／DWM 重組完成、視窗真正離開畫面後再擷取，免截到主視窗自身
+        OnHotKey();            // 既有喚起主動線（遮罩擷取→查詢→結果）
     }
 
     /// <summary>喚起（第一熱鍵）：遮罩選區/雙擊點選截圖 → vision 查詢 → 結果視窗＋朗讀＋歷史留存。</summary>
@@ -456,6 +496,7 @@ public partial class App : System.Windows.Application
             _keyStatusItem.Text = AppStatusText.KeyStatus(keyReady);
         }
         _main?.RefreshStatus(keyReady, HotkeyDisplay());
+        _main?.FlashSaved(); // #125：儲存成功於狀態列輕量閃示「Saved ✓」（取代原「Saved.」模態框；含「存後離開」路徑）
     }
 
     /// <summary>

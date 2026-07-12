@@ -3,6 +3,29 @@ using System.Text.Json;
 
 namespace ScreenTrans.Query;
 
+/// <summary>條目排序模式（#126）：Manual＝使用者拖曳之手動序（＝「自訂順序」SSOT）；Alpha＝依原文；Time＝依登記時間。</summary>
+public enum NoteSortMode { Manual, Alpha, Time }
+
+/// <summary>
+/// 單一資料夾之條目排序狀態（#126；隨夾存 notes.json、per-folder）：作用中模式＋<b>每模式各自方向</b>。
+/// 排序為**非破壞式檢視投影**（<see cref="NotesStore.ProjectView"/>）之狀態，不改 <see cref="NoteFolder.Entries"/> 手動序。
+/// </summary>
+public sealed class FolderSort
+{
+    public NoteSortMode Mode { get; set; } = NoteSortMode.Manual;
+    public bool AlphaAsc { get; set; } = true;   // 字母：預設 A→Z（順向）
+    public bool TimeAsc { get; set; } = false;   // 日期：預設 New→Old（新在上，順「新在前」慣例）
+    public bool ManualAsc { get; set; } = true;  // 自訂：預設正向（＝Entries 現行序）
+
+    /// <summary>目前作用中模式對應之方向（升／降）。</summary>
+    public bool CurrentAscending => Mode switch
+    {
+        NoteSortMode.Alpha => AlphaAsc,
+        NoteSortMode.Time => TimeAsc,
+        _ => ManualAsc,
+    };
+}
+
 /// <summary>一個自訂類別資料夾：Id＋名稱＋<b>子資料夾</b>（多層）＋有序條目清單（新在前）。</summary>
 public sealed class NoteFolder
 {
@@ -11,6 +34,8 @@ public sealed class NoteFolder
     /// <summary>子資料夾（多層樹；Issue #34）。舊平面 notes.json 無此鍵 → 反序列化為空、即單層。</summary>
     public List<NoteFolder> Folders { get; set; } = new();
     public List<NoteEntry> Entries { get; set; } = new();
+    /// <summary>條目排序狀態（#126；非破壞式投影之記憶）。舊 notes.json 無此鍵 → null → 視為預設（Manual/依各模式預設方向）。</summary>
+    public FolderSort? Sort { get; set; }
 }
 
 /// <summary>我的筆記根結構：頂層資料夾清單（每個可再含子資料夾）。</summary>
@@ -480,6 +505,8 @@ public sealed class NotesStore
     /// 依英文原文自然排序目前資料夾之條目（Issue #52）：<paramref name="ascending"/>＝順向（A→Z）、否則反向（Z→A）。
     /// 沿用 <see cref="NaturalCompare"/>（大小寫不敏感、數字段依數值），與資料夾排序一致；重排後由呼叫端 Save 持久化。
     /// 空夾即無為。純函式、可單元測試。
+    /// <para><b>#126 起已由 <see cref="ProjectView"/> 非破壞式投影取代、生產不再呼叫</b>；僅存單元測試佐證自然排序語義。
+    /// <b>切勿</b>用於筆記檢視——就地變異 <c>f.Entries</c> 會覆寫使用者手動序（#126 刻意移除之破壞式行為）。</para>
     /// </summary>
     public static void SortEntries(NoteFolder f, bool ascending)
     {
@@ -491,10 +518,43 @@ public sealed class NotesStore
     }
 
     /// <summary>
+    /// **非破壞式**檢視投影（#126）：依 <paramref name="mode"/>＋<paramref name="ascending"/> 產出**顯示序之新清單**，
+    /// **不改動** <paramref name="entries"/>（手動序＝「自訂順序」SSOT，恆為傳入序）。Alpha 依原文 <see cref="NaturalCompare"/>；
+    /// Time 以**穩定排序**依 <see cref="NoteEntry.AddedAt"/>（無值 <c>default</c> 視為最舊）；Manual 直接用手動序（asc）或其反序（desc）。
+    /// 純函式、可單元測試——排序改為此投影後，字母／日期不再覆寫使用者拖曳之手動序。
+    /// </summary>
+    public static List<NoteEntry> ProjectView(IEnumerable<NoteEntry> entries, NoteSortMode mode, bool ascending)
+    {
+        var list = entries.ToList();
+        switch (mode)
+        {
+            case NoteSortMode.Alpha:
+                list.Sort((x, y) =>
+                {
+                    var c = NaturalCompare(x.Original ?? "", y.Original ?? "");
+                    return ascending ? c : -c;
+                });
+                return list;
+            case NoteSortMode.Time:
+                return (ascending
+                    ? list.OrderBy(e => e.AddedAt)
+                    : list.OrderByDescending(e => e.AddedAt)).ToList();
+            default: // Manual：手動序（正向）或其反序
+                if (!ascending)
+                {
+                    list.Reverse();
+                }
+                return list;
+        }
+    }
+
+    /// <summary>
     /// 依登記時間排序目前資料夾之條目（Issue #104）：<paramref name="ascending"/>＝舊→新（Old→New）、否則新→舊。
     /// 以 OrderBy **穩定排序**（同時刻多筆維持相對順序；穩定性條款限本時間排序）；
     /// `AddedAt == default`（極舊資料無值）視為最舊——Old→New 排最前、New→Old 排最後。
     /// 空夾即無為；重排後由呼叫端 Save 持久化。純函式、可單元測試。
+    /// <para><b>#126 起已由 <see cref="ProjectView"/> 非破壞式投影取代、生產不再呼叫</b>；僅存單元測試佐證穩定時間排序語義。
+    /// <b>切勿</b>用於筆記檢視——就地變異 <c>f.Entries</c> 會覆寫使用者手動序（#126 刻意移除之破壞式行為）。</para>
     /// </summary>
     public static void SortEntriesByTime(NoteFolder f, bool ascending)
     {

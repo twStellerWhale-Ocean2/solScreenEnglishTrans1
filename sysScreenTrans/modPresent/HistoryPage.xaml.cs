@@ -49,6 +49,12 @@ public partial class HistoryPage : UserControl
     public event Action<HistoryEntry>? ViewRequested;
     public event Action<HistoryEntry>? AddToNotesRequested;
 
+    /// <summary>目前檢視（選取日期）之條目數（#132，供狀態列顯示）。</summary>
+    public int CurrentEntryCount { get; private set; }
+
+    /// <summary>目前檢視條目數變更（#132）：切日/清除/重繪後觸發。</summary>
+    public event Action<int>? EntryCountChanged;
+
     private sealed record DateGroup(DateTime Date, List<HistoryEntry> Entries);
 
     public HistoryPage(HistoryStore store, Func<ISpeechService?> speechProvider)
@@ -84,6 +90,8 @@ public partial class HistoryPage : UserControl
         if (!any)
         {
             EntryPanel.Children.Clear();
+            CurrentEntryCount = 0;
+            EntryCountChanged?.Invoke(0); // #132
             return;
         }
         int idx = keep is null ? 0 : Math.Max(0, groups.FindIndex(g => g.Date == keep));
@@ -101,12 +109,16 @@ public partial class HistoryPage : UserControl
         EntryPanel.Children.Clear();
         if ((DateList.SelectedItem as ListBoxItem)?.Tag is not DateGroup g)
         {
+            CurrentEntryCount = 0;
+            EntryCountChanged?.Invoke(0); // #132
             return;
         }
         foreach (var entry in g.Entries)
         {
             EntryPanel.Children.Add(EntryRow(entry));
         }
+        CurrentEntryCount = g.Entries.Count; // #132
+        EntryCountChanged?.Invoke(CurrentEntryCount);
     }
 
     private void OnClearAll(object? sender, RoutedEventArgs e)

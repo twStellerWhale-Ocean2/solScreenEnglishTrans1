@@ -75,7 +75,7 @@
       <!-- 功能列分頁（圖示＋文字；標題僅在 OS 標題列、內容區不重複——Issue #38 Windows 慣例） -->
       <Grid Grid.Row="0">
         <StackPanel Orientation="Horizontal" Margin="12,10,0,6">
-          <RadioButton x:Name="TabContext" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xEB9F;" Content="Context"/>
+          <RadioButton x:Name="TabContext" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xEB9F;" Content="Capture"/>
           <RadioButton x:Name="TabNotes" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE70B;" Content="Notes" IsChecked="True"/>
           <RadioButton x:Name="TabHistory" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE81C;" Content="History"/>
           <RadioButton x:Name="TabOptions" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE713;" Content="Options"/>
@@ -99,10 +99,19 @@
         <StatusBarItem>
           <TextBlock x:Name="HotkeyText" FontSize="12" Foreground="#8A5A6D"/>
         </StatusBarItem>
+        <Separator x:Name="CountSeparator" Background="{StaticResource PinkAccent}" Visibility="Collapsed"/>
+        <StatusBarItem>
+          <!-- 目前檢視之條目列數（#132）：筆記=目前夾條目數／歷史=目前檢視條目數；非該二分頁隱藏 -->
+          <TextBlock x:Name="CountText" FontSize="12" Foreground="#8A5A6D" Visibility="Collapsed"/>
+        </StatusBarItem>
         <Separator x:Name="UpdateSeparator" Background="{StaticResource PinkAccent}" Visibility="Collapsed"/>
         <StatusBarItem>
           <!-- 更新就緒提示（Issue #51）：新版靜默下載完成才顯示，平時隱藏 -->
           <TextBlock x:Name="UpdateText" FontSize="12" Foreground="#2F6FED" Visibility="Collapsed"/>
+        </StatusBarItem>
+        <StatusBarItem>
+          <!-- 儲存成功輕量閃示（#125）：數秒後自動隱藏，取代原「Saved.」模態對話框 -->
+          <TextBlock x:Name="SavedFlashText" FontSize="12" FontWeight="SemiBold" Foreground="#2E7D46" Visibility="Collapsed"/>
         </StatusBarItem>
       </StatusBar>
     </Grid>
