@@ -467,7 +467,7 @@ public class AppConfigTests
             Assert.False(cfg.EntryWrap);
             Assert.Equal(28, cfg.ResultFontSize);
             Assert.False(cfg.ResultHideOnBlur);
-            Assert.True(cfg.PassedCardTransparent); // 缺欄預設 true（維持 #118）
+            Assert.Equal(AppConfig.DefaultEntryCardOpacity, cfg.EntryCardOpacity); // 缺欄回預設 40（v1.0.1）
         }
         finally { File.Delete(path); }
     }
@@ -481,21 +481,21 @@ public class AppConfigTests
         {
             new AppConfig("gpt-4o-mini", 15, "", 2, "Alt+L", 200, "", 80, "gpt-audio-1.5",
                 EntryFontSize: 24, EntryBold: false, EntryWrap: true,
-                ResultFontSize: 34, ResultHideOnBlur: true, PassedCardTransparent: false).Save(path);
+                ResultFontSize: 34, ResultHideOnBlur: true, EntryCardOpacity: 25).Save(path);
             var json = File.ReadAllText(path);
             Assert.Contains("paramEntryFontSize", json);
             Assert.Contains("paramEntryBold", json);
             Assert.Contains("paramEntryWrap", json);
             Assert.Contains("paramResultFontSize", json);
             Assert.Contains("paramResultHideOnBlur", json);
-            Assert.Contains("paramPassedCardTransparent", json);
+            Assert.Contains("paramEntryCardOpacity", json);
             var cfg = AppConfig.Load(path);
             Assert.Equal(24, cfg.EntryFontSize);
             Assert.False(cfg.EntryBold);   // 明確 false 須被讀回（缺欄才預設 true）
             Assert.True(cfg.EntryWrap);
             Assert.Equal(34, cfg.ResultFontSize);
             Assert.True(cfg.ResultHideOnBlur);
-            Assert.False(cfg.PassedCardTransparent); // 明確 false 須被讀回（缺欄才預設 true）
+            Assert.Equal(25, cfg.EntryCardOpacity); // 明確值須被讀回（缺欄才回預設 40）
         }
         finally { File.Delete(path); }
     }

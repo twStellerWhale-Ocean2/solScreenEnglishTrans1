@@ -1,15 +1,14 @@
 using ScreenTrans.Query;
-using Key = System.Windows.Input.Key;
-using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using UserControl = System.Windows.Controls.UserControl;
 
 namespace ScreenTrans.Present;
 
 /// <summary>
-/// Dictionary 分頁（#135）：查詢結果併入主視窗成為一個分頁，取代原浮動 <c>ResultWindow</c>。頂部**可編輯下拉**可
-/// 手動輸入英文查詢（觸發 <see cref="ManualQueryRequested"/>，App 依單字/整句走查字義或翻譯），下拉並列出查詢歷史
-/// （開啟時經 <see cref="HistoryRequested"/> 向 App 取得）。下方宿共用 <see cref="ResultView"/> 呈現三欄結果、逐字查字、
-/// 編輯重譯、加入筆記。整頁**透明底**＝透出主視窗粉底與浮水印、控制項採全域半透明白樣式，與其他分頁一致（USR 回饋）。
+/// Dictionary 分頁（#135）：取代原浮動 <c>ResultWindow</c>，宿於獨立字典視窗。<b>薄殼</b>——實際內容全在共用
+/// <see cref="ResultView"/>：頂部工具列（導航/編輯/加入至）、其下**可編輯下拉查詢輸入列**（v1.0.1 兩列對調後移入 ResultView，
+/// 觸發 <see cref="ManualQueryRequested"/>／<see cref="HistoryRequested"/>）、三欄結果、逐字查字、編輯重譯、加入筆記。
+/// 本頁僅將 ResultView 的事件轉發給 App、並把 App 呼叫委派給 ResultView，維持既有對外介面不變（App 端不受重排影響）。
+/// 整頁**透明底**＝透出主視窗粉底與浮水印、控制項採全域半透明白樣式，與其他分頁一致（USR 回饋）。
 /// </summary>
 public partial class DictionaryPage : UserControl
 {
@@ -22,51 +21,25 @@ public partial class DictionaryPage : UserControl
     /// <summary>編輯原文重譯時觸發（轉發自 <see cref="ResultView"/>）。</summary>
     public event Action<string>? TextReQueryRequested;
 
-    /// <summary>頂部輸入框按「Look up」或 Enter 時觸發（帶輸入之英文原文，App 依單字/整句決定查字義或翻譯）。</summary>
+    /// <summary>頂部輸入框按「Look up」或 Enter 時觸發（帶輸入之英文原文，App 依單字/整句決定查字義或翻譯；轉發自 <see cref="ResultView"/>）。</summary>
     public event Action<string>? ManualQueryRequested;
 
-    /// <summary>輸入下拉開啟時觸發（#135 回饋）：App 據此以查詢歷史填入下拉選單。</summary>
+    /// <summary>輸入下拉開啟時觸發（#135 回饋）：App 據此以查詢歷史填入下拉選單（轉發自 <see cref="ResultView"/>）。</summary>
     public event Action? HistoryRequested;
 
     public DictionaryPage()
     {
         InitializeComponent();
-        // 轉發內層 ResultView 事件給 App（單一接線點）
+        // 轉發內層 ResultView 事件給 App（單一接線點；輸入列 v1.0.1 已移入 ResultView，故查詢/歷史事件亦自此轉發）
         Result.AddToNotesRequested += r => AddToNotesRequested?.Invoke(r);
         Result.WordQueryRequested += w => WordQueryRequested?.Invoke(w);
         Result.TextReQueryRequested += t => TextReQueryRequested?.Invoke(t);
-
-        LookupBtn.Click += (_, _) => DoLookup();
-        InputBox.KeyDown += OnInputKeyDown;
-        InputBox.DropDownOpened += (_, _) => HistoryRequested?.Invoke(); // 開下拉即向 App 取查詢歷史填入
+        Result.ManualQueryRequested += t => ManualQueryRequested?.Invoke(t);
+        Result.HistoryRequested += () => HistoryRequested?.Invoke();
     }
 
-    private void OnInputKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-        {
-            DoLookup();
-            e.Handled = true;
-        }
-    }
-
-    private void DoLookup()
-    {
-        var t = (InputBox.Text ?? "").Trim();
-        if (t.Length == 0)
-        {
-            return;
-        }
-        ManualQueryRequested?.Invoke(t);
-    }
-
-    /// <summary>以查詢歷史（英文原文、新在前、去重）填入輸入下拉；保留使用者當前已鍵入文字（#135 回饋）。</summary>
-    public void SetHistory(IEnumerable<string> originals)
-    {
-        var text = InputBox.Text;
-        InputBox.ItemsSource = originals?.ToList();
-        InputBox.Text = text; // 換 ItemsSource 不清掉使用者已輸入內容
-    }
+    /// <summary>以查詢歷史（英文原文、新在前、去重）填入輸入下拉；保留使用者當前已鍵入文字（委派 <see cref="ResultView"/>）。</summary>
+    public void SetHistory(IEnumerable<string> originals) => Result.SetHistory(originals);
 
     /// <summary>是否已顯示過非空結果（供 App「喚回」判斷分頁是否已有內容）。</summary>
     public bool HasResult => Result.HasResult;

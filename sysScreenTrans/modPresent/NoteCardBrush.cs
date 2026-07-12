@@ -2,7 +2,6 @@ using System.Windows.Media;
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
 using ColorConverter = System.Windows.Media.ColorConverter;
-using Brushes = System.Windows.Media.Brushes;
 
 namespace ScreenTrans.Present;
 
@@ -41,23 +40,22 @@ public static class NoteCardBrush
     private static readonly Dictionary<string, Brush> BorderCache = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// 卡片底刷：通過且 <paramref name="passedTransparent"/>＝Transparent（透浮水印）、否則素色。無效/空 hex 退白。
-    /// <paramref name="passedTransparent"/>（#123 選項頁可關）為 false 時，通過卡維持素底、不透明。
+    /// 卡片底刷（v1.0.1 改制，USR 回饋）：以 <paramref name="opacityPercent"/>（0–100，筆記/歷史共用之可調透明度）
+    /// 套為底色 alpha——筆記＝該筆記色、歷史＝白（無效/空 hex 退白）。取代原「過關→透明」二值行為（過關改由綠色成績框表示）。
+    /// alpha 0（完全透明）仍為非 null <see cref="SolidColorBrush"/>、卡片可點選/拖曳命中。刷依「色:alpha」快取並 Freeze。
     /// </summary>
-    public static Brush For(string? colorHex, bool passed, bool passedTransparent = true)
+    public static Brush For(string? colorHex, int opacityPercent)
     {
-        if (passed && passedTransparent)
-        {
-            return Brushes.Transparent; // 系統刷已 Frozen；非 null、卡片仍可點選/拖曳命中
-        }
         var (key, color) = Normalize(colorHex);
-        if (BaseCache.TryGetValue(key, out var cached))
+        byte a = (byte)Math.Clamp((int)Math.Round(opacityPercent * 255.0 / 100.0), 0, 255);
+        var cacheKey = key + ":" + a;
+        if (BaseCache.TryGetValue(cacheKey, out var cached))
         {
             return cached;
         }
-        var solid = new SolidColorBrush(color);
+        var solid = new SolidColorBrush(Color.FromArgb(a, color.R, color.G, color.B));
         solid.Freeze();
-        BaseCache[key] = solid;
+        BaseCache[cacheKey] = solid;
         return solid;
     }
 

@@ -36,6 +36,7 @@ public sealed class SpeechService : ISpeechService, IDisposable
         {
             return;
         }
+        _synth.Rate = SpeechRateSettings.SapiRate; // v1.0.1（USR 回饋）：每次朗讀套用工具列 Speed（50–200%→SAPI Rate）
 
         try
         {

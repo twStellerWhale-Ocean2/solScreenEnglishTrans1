@@ -38,9 +38,10 @@
        逐字可點查單字、鉛筆編輯重譯、中英各自播放/自動播放、加入我的筆記＋底色。宿於 Dictionary 分頁。 -->
   <Grid>
     <Grid.RowDefinitions>
-      <RowDefinition Height="Auto"/>
-      <RowDefinition Height="*"/>
-      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/>  <!-- 頂部工具列（導航/編輯/加入至） -->
+      <RowDefinition Height="Auto"/>  <!-- 手動查詢輸入列（v1.0.1：兩列對調，移到頂部工具列下方，USR 回饋） -->
+      <RowDefinition Height="*"/>      <!-- 內容區 -->
+      <RowDefinition Height="Auto"/>  <!-- 底部工具列（加入我的筆記/底色） -->
     </Grid.RowDefinitions>
 
     <!-- 頂部工具列：往前/往後（單字查詢導航，快速返回原句）＋編輯（鉛筆）＋「加入至」資料夾 -->
@@ -52,17 +53,55 @@
         <Button x:Name="EditBtn" Style="{StaticResource NavButton}" Content="&#xE70F;" Margin="16,0,0,0"
                 ToolTip="Edit the English text and re-translate"/>
         <TextBlock Text="Add to" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="16,0,6,0"/>
-        <ComboBox x:Name="FolderCombo" MinWidth="118" MaxWidth="200" FontSize="12.5" VerticalAlignment="Center"/>
+        <ComboBox x:Name="FolderCombo" MinWidth="110" MaxWidth="160" FontSize="12.5" VerticalAlignment="Center"/>
+        <!-- 播音速度（v1.0.1，USR 回饋）：50–150% 下拉、每 10% 一階，套用於 Play／單字發音；session 內記憶（比照 AutoPlaySettings） -->
+        <TextBlock Text="Speed" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="12,0,5,0"/>
+        <ComboBox x:Name="SpeedCombo" AutomationProperties.AutomationId="SpeedCombo" Width="64" FontSize="12.5" VerticalAlignment="Center"
+                  ToolTip="Playback speed for Play and word pronunciation (50–150%)">
+          <ComboBoxItem Content="50%"/>
+          <ComboBoxItem Content="60%"/>
+          <ComboBoxItem Content="70%"/>
+          <ComboBoxItem Content="80%"/>
+          <ComboBoxItem Content="90%"/>
+          <ComboBoxItem Content="100%" IsSelected="True"/>
+          <ComboBoxItem Content="110%"/>
+          <ComboBoxItem Content="120%"/>
+          <ComboBoxItem Content="130%"/>
+          <ComboBoxItem Content="140%"/>
+          <ComboBoxItem Content="150%"/>
+        </ComboBox>
       </StackPanel>
     </Grid>
 
+    <!-- 手動查詢輸入列（v1.0.1：自 DictionaryPage 移入；USR 回饋「兩列對調」——頂部工具列在上、輸入列在下）。
+         原生可編輯 ComboBox（不自訂 template）：下拉寬度＝輸入框（見 code-behind ConstrainDropDownWidth）；
+         HorizontalContentAlignment=Stretch＋ItemTemplate 省略號：歷史整句過長時填滿寬度並以「…」截斷，不撐寬、不出水平捲軸 -->
+    <Grid Grid.Row="1" Margin="14,10,14,8">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*"/>
+        <ColumnDefinition Width="Auto"/>
+      </Grid.ColumnDefinitions>
+      <ComboBox x:Name="InputBox" Grid.Column="0" FontSize="16" IsEditable="True"
+                StaysOpenOnEdit="True" IsTextSearchEnabled="True" VerticalContentAlignment="Center"
+                HorizontalContentAlignment="Stretch"
+                ToolTip="Type English or pick from history, then Look up (Enter)">
+        <ComboBox.ItemTemplate>
+          <DataTemplate>
+            <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"/>
+          </DataTemplate>
+        </ComboBox.ItemTemplate>
+      </ComboBox>
+      <Button x:Name="LookupBtn" Grid.Column="1" Content="Look up" Margin="8,0,0,0"
+              Padding="16,5" FontSize="14" Style="{StaticResource GhostButton}"/>
+    </Grid>
+
     <!-- 內容區：過長可捲動 -->
-    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
       <StackPanel x:Name="BodyPanel" Margin="18,14,18,10"/>
     </ScrollViewer>
 
     <!-- 底部工具列：加入我的筆記＋自動加入筆記＋底色色塊列 -->
-    <Grid Grid.Row="2">
+    <Grid Grid.Row="3">
       <Border Height="1" Background="#F4C2D0" VerticalAlignment="Top"/>
       <StackPanel Margin="16,10,16,12">
         <StackPanel Orientation="Horizontal">

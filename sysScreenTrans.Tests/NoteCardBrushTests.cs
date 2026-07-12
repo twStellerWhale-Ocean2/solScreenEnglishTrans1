@@ -33,13 +33,15 @@ public class NoteCardBrushTests
     }
 
     [Theory]
-    [InlineData(true, true)]   // 通過＋透明開 → 透明底
-    [InlineData(true, false)]  // 通過＋透明關 → 素底（#123 可選）
-    [InlineData(false, true)]  // 未過 → 素底
-    public void For_PassedTransparentToggle(bool passed, bool passedTransparent)
+    [InlineData(0, 0)]      // 0% → alpha 0（完全透明，仍為非 null 刷、卡片可命中）
+    [InlineData(40, 102)]   // 40% → alpha 102（≈ 原 #66FFFFFF 半透明白，v1.0.1 預設）
+    [InlineData(100, 255)]  // 100% → alpha 255（不透明）
+    public void For_AppliesOpacityAlpha(int opacityPercent, byte expectedAlpha)
     {
-        var brush = NoteCardBrush.For("#FBE4EC", passed, passedTransparent);
-        bool isTransparent = ReferenceEquals(brush, System.Windows.Media.Brushes.Transparent);
-        Assert.Equal(passed && passedTransparent, isTransparent);
+        var brush = (System.Windows.Media.SolidColorBrush)NoteCardBrush.For("#FBE4EC", opacityPercent);
+        Assert.Equal(expectedAlpha, brush.Color.A);  // 透明度套為 alpha
+        Assert.Equal(0xFB, brush.Color.R);           // 色相不變（僅套 alpha）
+        Assert.Equal(0xE4, brush.Color.G);
+        Assert.Equal(0xEC, brush.Color.B);
     }
 }

@@ -76,10 +76,17 @@
           <CheckBox x:Name="EntryBoldChk" Content="Bold" Margin="0,10,0,0" Foreground="{StaticResource PinkText}"/>
           <CheckBox x:Name="EntryWrapChk" Content="Wrap long text (otherwise show one line with …)"
                     Margin="0,6,0,0" Foreground="{StaticResource PinkText}"/>
-          <CheckBox x:Name="PassedTransparentChk" Content="Passed cards go transparent (show mascot behind)"
-                    Margin="0,6,0,0" Foreground="{StaticResource PinkText}"/>
-          <TextBlock Text="When off, a passed practice card keeps its solid colour instead of turning transparent."
-                     FontSize="12" Foreground="{StaticResource PinkSub}" Margin="24,2,0,0" TextWrapping="Wrap"/>
+          <StackPanel Orientation="Horizontal" Margin="0,10,0,0" VerticalAlignment="Center">
+            <TextBlock Text="Background opacity" FontSize="12.5" Foreground="{StaticResource PinkSub}"
+                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <Slider x:Name="EntryOpacitySlider" Minimum="0" Maximum="100" Width="200"
+                    IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+            <TextBox x:Name="EntryOpacityBox" Width="46" Margin="10,0,4,0" Padding="4,2"
+                     TextAlignment="Center" VerticalAlignment="Center"/>
+            <TextBlock Text="%" FontSize="12" Foreground="{StaticResource PinkSub}" VerticalAlignment="Center"/>
+          </StackPanel>
+          <TextBlock Text="Card background opacity, applied the same to both My Notes and History entries. 0% = fully transparent (mascot shows through); 100% = solid."
+                     FontSize="12" Foreground="{StaticResource PinkSub}" Margin="0,4,0,0" TextWrapping="Wrap"/>
         </StackPanel>
       </Border>
 

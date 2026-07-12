@@ -7,55 +7,80 @@
       <RowDefinition Height="*"/>     <!-- 情境管理（原內容） -->
     </Grid.RowDefinitions>
 
-    <!-- 擷取管理（#133）：喚起快捷鍵（Change，#3 自選項頁搬入）＋手動擷取（Capture Screen，#5），置於情境管理之上 -->
+    <!-- 擷圖管理（#133／v1.0.1 重排）：粗體略大標題；兩種擷圖方式各一行——By button＝手動擷取鈕、By hotkey＝喚起快捷鍵；按鈕統一 GhostButton（不特別搶眼） -->
     <Border Grid.Row="0" Style="{StaticResource Card}" Padding="12" Margin="10,10,10,2">
       <StackPanel>
-        <TextBlock Text="Screen capture" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-        <StackPanel Orientation="Horizontal" Margin="0,6,0,0" VerticalAlignment="Center">
-          <TextBlock x:Name="HotkeyStatus" MinWidth="150" VerticalAlignment="Center"
-                     Foreground="{StaticResource PinkText}" FontWeight="SemiBold"/>
-          <Button x:Name="ChangeHotkeyBtn" Content="Change" Style="{StaticResource GhostButton}" Margin="10,0,0,0"/>
-          <Button x:Name="CaptureScreenBtn" Content="Capture Screen" Style="{StaticResource PinkButton}" Margin="10,0,0,0"/>
-        </StackPanel>
-        <TextBlock Text="After clicking Change, press the key/mouse button; Esc to cancel."
-                   FontSize="12" Foreground="#9A6A82" TextWrapping="Wrap" Margin="0,4,0,0"/>
+        <TextBlock Text="Screen capture" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}"/>
+        <Grid Margin="0,8,0,0">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="96"/>
+            <ColumnDefinition Width="*"/>
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <!-- 第二行：按鈕擷圖 -->
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="By button" VerticalAlignment="Center" Foreground="{StaticResource PinkText}"/>
+          <Button Grid.Row="0" Grid.Column="1" x:Name="CaptureScreenBtn" Content="Capture Screen"
+                  Style="{StaticResource GhostButton}" HorizontalAlignment="Left"/>
+          <!-- 第三行：鍵盤擷圖（快捷鍵設定） -->
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="By hotkey" VerticalAlignment="Center"
+                     Foreground="{StaticResource PinkText}" Margin="0,8,0,0"/>
+          <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
+            <TextBlock x:Name="HotkeyStatus" MinWidth="90" VerticalAlignment="Center"
+                       Foreground="{StaticResource PinkText}" FontWeight="SemiBold"/>
+            <Button x:Name="ChangeHotkeyBtn" Content="Change" Style="{StaticResource GhostButton}" Margin="10,0,0,0"/>
+          </StackPanel>
+        </Grid>
       </StackPanel>
     </Border>
 
-    <!-- 情境管理（Issue #36，原內容不動）：左命名情境清單、右編輯區 -->
-    <Grid Grid.Row="1">
-    <!-- 左側情境清單欄寬可拖拉調整（Issue #58） -->
-    <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="224" MinWidth="160"/>
-      <ColumnDefinition Width="Auto"/>
-      <ColumnDefinition Width="*" MinWidth="260"/>
-    </Grid.ColumnDefinitions>
+    <!-- 情境管理（Issue #36）：整區為一個「Contexts」區塊——標題其下含左命名清單與右編輯區
+         （v1.0.1：USR 回饋——Contexts 改為整區區塊標題、以 Card 包住左右兩欄，非僅清單標題） -->
+    <Border Grid.Row="1" Style="{StaticResource Card}" Padding="12" Margin="10,6,10,10">
+      <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>  <!-- Contexts 區塊標題 -->
+          <RowDefinition Height="*"/>      <!-- 左清單 | splitter | 右編輯區 -->
+        </Grid.RowDefinitions>
+        <TextBlock Grid.Row="0" Text="Contexts" FontWeight="Bold" FontSize="14"
+                   Foreground="{StaticResource PinkText}" Margin="0,0,0,8"/>
 
-    <!-- 左：命名情境清單 -->
-    <Grid Grid.Column="0" Margin="10,8,4,10">
-      <Grid.RowDefinitions>
-        <RowDefinition Height="*"/>
-        <RowDefinition Height="Auto"/>
-      </Grid.RowDefinitions>
-      <Border Grid.Row="0" Style="{StaticResource Card}">
-        <ListBox x:Name="List" BorderThickness="0" Background="Transparent" Margin="4"
-                 HorizontalContentAlignment="Stretch"/>
-      </Border>
-      <Button Grid.Row="1" x:Name="AddBtn" Content="＋ New Context" Style="{StaticResource PinkButton}" Margin="0,6,0,0"/>
-    </Grid>
+        <!-- 左側情境清單欄寬可拖拉調整（Issue #58） -->
+        <Grid Grid.Row="1">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="216" MinWidth="160"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="*" MinWidth="260"/>
+          </Grid.ColumnDefinitions>
 
-    <GridSplitter Grid.Column="1" Style="{StaticResource ColSplitter}"/>
+          <!-- 左：命名情境清單（New Context 於清單上方、統一 GhostButton；區塊標題已上移為整區標題） -->
+          <Grid Grid.Column="0" Margin="0,0,4,0">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Button Grid.Row="0" x:Name="AddBtn" Content="＋ New Context" Style="{StaticResource GhostButton}"
+                    HorizontalAlignment="Left" Margin="0,0,0,6"/>
+            <Border Grid.Row="1" Style="{StaticResource Card}">
+              <ListBox x:Name="List" BorderThickness="0" Background="Transparent" Margin="4"
+                       HorizontalContentAlignment="Stretch"/>
+            </Border>
+          </Grid>
 
-    <!-- 右：編輯區（Issue #73：描述框隨空間加高、動作鈕釘底與左欄鈕對齊；空間不足時捲動） -->
-    <Grid Grid.Column="2" Margin="6,8,10,10">
+          <GridSplitter Grid.Column="1" Style="{StaticResource ColSplitter}"/>
+
+          <!-- 右：編輯區（Issue #73：描述框隨空間加高、動作鈕釘底；空間不足時捲動） -->
+          <Grid Grid.Column="2" Margin="6,0,0,0">
       <ScrollViewer x:Name="EditorScroll" VerticalScrollBarVisibility="Auto" Padding="4,0,4,0">
-        <!-- MinHeight 綁 ViewportHeight：空間足→Grid 撐滿、描述框(*)成長、鈕釘底；不足→依內容捲動、描述框回 MinHeight -->
         <Grid x:Name="Editor" MinHeight="{Binding ViewportHeight, ElementName=EditorScroll}">
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>  <!-- 名稱 label -->
             <RowDefinition Height="Auto"/>  <!-- NameBox -->
             <RowDefinition Height="Auto"/>  <!-- 描述 label -->
             <RowDefinition Height="*"/>     <!-- DescBox 成長 -->
+            <RowDefinition Height="Auto"/>  <!-- 自動解釋圖片鈕（移至說明框尾端，v1.0.1） -->
             <RowDefinition Height="Auto"/>  <!-- 圖片卡 -->
             <RowDefinition Height="Auto"/>  <!-- 配色規則 -->
             <RowDefinition Height="Auto"/>  <!-- 狀態列 -->
@@ -66,12 +91,16 @@
           <TextBox Grid.Row="1" x:Name="NameBox" Padding="6" Margin="0,4,0,10"/>
 
           <TextBlock Grid.Row="2" Text="Context description (injected as reference for queries)" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
-          <TextBox Grid.Row="3" x:Name="DescBox" Padding="6" Margin="0,4,0,6" TextWrapping="Wrap"
+          <TextBox Grid.Row="3" x:Name="DescBox" Padding="6" Margin="0,4,0,4" TextWrapping="Wrap"
                    AcceptsReturn="True" MinHeight="80" VerticalAlignment="Stretch"
                    VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto"/>
 
-          <!-- 圖片卡：支援拖放圖片檔（Issue #69）；貼上/上傳鈕各半填滿、自動解釋鈕獨立一列填滿 -->
-          <Border Grid.Row="4" x:Name="ImageDropCard" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8" AllowDrop="True">
+          <!-- 自動解釋圖片鈕移至說明文字方塊尾端（v1.0.1）：以載入之圖片 vision 產描述、填入上方說明框 -->
+          <Button Grid.Row="4" x:Name="DescribeBtn" Content="🔎 Auto-explain from Image" Style="{StaticResource GhostButton}"
+                  HorizontalAlignment="Right" Margin="0,0,0,8"/>
+
+          <!-- 圖片卡：支援拖放圖片檔（Issue #69）；貼上/上傳鈕各半填滿 -->
+          <Border Grid.Row="5" x:Name="ImageDropCard" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8" AllowDrop="True">
             <StackPanel>
               <Image x:Name="Preview" MaxHeight="150" HorizontalAlignment="Left" Stretch="Uniform" Margin="0,0,0,6"/>
               <TextBlock x:Name="NoImageHint" Text="(No image yet; paste, upload, or drag an image file here)"
@@ -84,13 +113,11 @@
                 <Button x:Name="PasteBtn" Grid.Column="0" Content="Paste from Clipboard" Style="{StaticResource GhostButton}" Margin="0,0,3,0"/>
                 <Button x:Name="UploadBtn" Grid.Column="1" Content="Upload File" Style="{StaticResource GhostButton}" Margin="3,0,0,0"/>
               </Grid>
-              <Button x:Name="DescribeBtn" Content="🔎 Auto-explain from Image" Style="{StaticResource PinkButton}"
-                      HorizontalAlignment="Stretch" Margin="0,6,0,0"/>
             </StackPanel>
           </Border>
 
           <!-- 配色規則（Issue #69）：各色一格描述；台詞符合哪格即用該色、都不符合＝白 -->
-          <Border Grid.Row="5" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8">
+          <Border Grid.Row="6" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8">
             <StackPanel>
               <TextBlock Text="Color rules (note background)" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
               <TextBlock Text="If a line matches a box's description, use that color; none matches = white. Leave a color blank to disable it."
@@ -99,9 +126,9 @@
             </StackPanel>
           </Border>
 
-          <TextBlock Grid.Row="6" x:Name="StatusLine" Foreground="#2E7D46" FontSize="12" Margin="0,0,0,8"/>
+          <TextBlock Grid.Row="7" x:Name="StatusLine" Foreground="#2E7D46" FontSize="12" Margin="0,0,0,8"/>
 
-          <WrapPanel Grid.Row="7">
+          <WrapPanel Grid.Row="8">
             <Button x:Name="ActiveBtn" Content="Set Active" Style="{StaticResource PinkButton}" Margin="0,0,8,0"/>
             <Button x:Name="SaveBtn" Content="Save" Style="{StaticResource GhostButton}" Margin="0,0,8,0"/>
             <Button x:Name="DeleteBtn" Content="Delete" Foreground="#B23B3B" Style="{StaticResource GhostButton}"/>
@@ -111,7 +138,9 @@
       <TextBlock x:Name="EmptyHint" Text="No contexts yet. Click “+ New Context” to create one; type text, or paste/upload a game screenshot for AI to auto-explain."
                  Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="320"
                  TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
-    </Grid>
-    </Grid>
+          </Grid>
+        </Grid>
+      </Grid>
+    </Border>
   </Grid>
 </UserControl>

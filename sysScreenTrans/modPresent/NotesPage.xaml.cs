@@ -542,15 +542,27 @@ public partial class NotesPage : UserControl
         {
             // #111→#118：通過卡透明底（透浮水印；導出態＝最佳分≥門檻）、未過素色；
             // 未選框＝底色×0.80 加深（#118、色彩身份延伸）——底刷/框刷單一來源 NoteCardBrush
-            Background = NoteCardBrush.For(entry.Color, entry.PracticeScore >= _threshold(), EntryDisplaySettings.PassedCardTransparent),
+            Background = NoteCardBrush.For(entry.Color, EntryDisplaySettings.CardOpacity), // v1.0.1：底＝該筆記色×可調透明度（筆記/歷史共用；過關不再改底）
             BorderBrush = NoteCardBrush.BorderFor(entry.Color),
             BorderThickness = new Thickness(2), // #110：框厚恆定 2px（選取只換色不跳版）
             CornerRadius = new CornerRadius(8),
             Padding = new Thickness(8, 3, 10, 3), // #複查：比照歷史條目之緊湊內距（單行、時間 inline）
             Margin = new Thickness(0, 0, 0, 5),   // #複查：比照歷史條目卡間距（原 8）
             AllowDrop = true, // 事件交由 EntryPanel 統一處理（冒泡），卡片僅作為有效放置目標
+            Focusable = true,        // v1.0.1（USR 回饋）：選取後可接收 Delete 鍵刪除本條目
+            FocusVisualStyle = null, // 選取已以框色表示，免預設虛線焦點框
         };
-        card.MouseRightButtonDown += (_, _) => _selector.Select(card); // 右鍵開選單亦設選取（Windows 慣例，#110）
+        card.MouseRightButtonDown += (_, _) => { _selector.Select(card); card.Focus(); }; // 右鍵開選單亦設選取（Windows 慣例，#110）＋取焦點
+        // v1.0.1（USR 回饋）：選取後按 Delete 直接刪除本條目（比照右鍵選單 Delete、與其一致不另確認）
+        card.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Delete)
+            {
+                NotesStore.RemoveEntry(_data, entry.Id);
+                Persist();
+                e.Handled = true;
+            }
+        };
 
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                        // 0 拖曳握把
@@ -560,14 +572,23 @@ public partial class NotesPage : UserControl
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 4 行尾麥克風錄音鈕（spec#10）
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // 5 行尾發音成績框（spec#10）
 
-        var handle = new TextBlock
+        // #131 → v1.0.1（USR 回饋）：拖曳握把改用 Google Material「drag_pan」四向移動向量圖示（取代原「≡」字元）。
+        // 以 Path 繪製（Material Symbols 960 網格、Stretch 縮放至握把尺寸）；外包透明底 Border 擴大命中區、窄握把也好抓。
+        var handle = new System.Windows.Controls.Border
         {
-            Text = "≡",
-            FontSize = 22, // #131：加大拖曳握把圖示（原 16 偏小、更好辨識與抓取）
-            FontWeight = System.Windows.FontWeights.Bold,
-            Foreground = Brush("#C77D9A"),
+            Child = new System.Windows.Shapes.Path
+            {
+                Data = System.Windows.Media.Geometry.Parse(
+                    "M480-80 310-250l57-57 73 73v-206H235l73 72-58 58L80-480l169-169 57 57-72 72h206v-206l-73 73-57-57 170-170 170 170-57 57-73-73v206h205l-73-72 58-58 170 170-170 170-57-57 73-73H520v205l72-73 58 58L480-80Z"),
+                Fill = Brush("#C77D9A"),
+                Stretch = System.Windows.Media.Stretch.Uniform,
+                Width = 19,
+                Height = 19,
+            },
+            Background = System.Windows.Media.Brushes.Transparent, // 整塊（含留白）可命中，便於抓取
             Cursor = Cursors.SizeAll, // 四向移動：可上下排序亦可拖入左樹資料夾（Issue #46）
             VerticalAlignment = VerticalAlignment.Center,
+            Padding = new Thickness(2, 3, 2, 3),
             Margin = new Thickness(2, 0, 8, 0),
             ToolTip = "Drag to reorder / drag onto a folder to move",
         };
@@ -635,6 +656,7 @@ public partial class NotesPage : UserControl
         card.MouseLeftButtonDown += (_, e) =>
         {
             _selector.Select(card); // 單擊即選取（#110；不設 Handled——雙擊首擊選取、再擊開檢視）
+            card.Focus();           // v1.0.1：取鍵盤焦點，使 Delete 鍵路由至本卡（刪除本條目）
             if (e.ClickCount == 2) // 雙擊＝檢視（Windows 清單慣例）
             {
                 ViewRequested?.Invoke(entry);
@@ -801,8 +823,7 @@ public partial class NotesPage : UserControl
             if (IsBoxLive(cell.Box))
             {
                 cell.Box.FlashScore(result.Score, CurrentScore(cell.Entry.Id)); // 閃這次分 → 回落最佳分
-                // #111→#118：達標當下就地點亮（底改透明透浮水印）——判定用 store 現值（cell.Entry 為 record 舊值快照，誤用即首次通過漏亮）
-                cell.Card.Background = NoteCardBrush.For(cell.Entry.Color, CurrentScore(cell.Entry.Id) >= threshold, EntryDisplaySettings.PassedCardTransparent);
+                // v1.0.1（USR 回饋）：條目卡底色改為統一「可調透明度」、與過關無關 → 達標不再改底（過關仍由綠色成績框表示）
             }
             else
             {

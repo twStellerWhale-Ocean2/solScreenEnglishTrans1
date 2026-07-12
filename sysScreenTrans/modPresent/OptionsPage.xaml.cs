@@ -40,6 +40,9 @@ public partial class OptionsPage : UserControl
         // 條目字級：滑桿↔數值框雙向同步（#複查）
         EntryFontSlider.ValueChanged += (_, e) => EntryFontBox.Text = ((int)e.NewValue).ToString();
         EntryFontBox.LostFocus += (_, _) => SyncEntryFontFromBox();
+        // 條目卡底色透明度：滑桿↔數值框雙向同步（v1.0.1）
+        EntryOpacitySlider.ValueChanged += (_, e) => EntryOpacityBox.Text = ((int)e.NewValue).ToString();
+        EntryOpacityBox.LostFocus += (_, _) => SyncEntryOpacityFromBox();
         // 查詢視窗字級：滑桿↔數值框雙向同步（#複查）
         ResultFontSlider.ValueChanged += (_, e) => ResultFontBox.Text = ((int)e.NewValue).ToString();
         ResultFontBox.LostFocus += (_, _) => SyncResultFontFromBox();
@@ -62,7 +65,8 @@ public partial class OptionsPage : UserControl
         EntryFontBox.Text = ((int)c.EntryFontSize).ToString();
         EntryBoldChk.IsChecked = c.EntryBold;
         EntryWrapChk.IsChecked = c.EntryWrap;
-        PassedTransparentChk.IsChecked = c.PassedCardTransparent; // 過關卡透明底（#123）
+        EntryOpacitySlider.Value = c.EntryCardOpacity; // 條目卡底色透明度（v1.0.1；ValueChanged 同步數值框）
+        EntryOpacityBox.Text = c.EntryCardOpacity.ToString();
         ResultFontSlider.Value = c.ResultFontSize; // ValueChanged 同步數值框（#複查）
         ResultFontBox.Text = ((int)c.ResultFontSize).ToString();
     }
@@ -85,6 +89,13 @@ public partial class OptionsPage : UserControl
     {
         var v = int.TryParse(EntryFontBox.Text?.Trim(), out var n) ? Math.Clamp(n, 12, 32) : (int)AppConfig.DefaultEntryFontSize;
         EntryFontSlider.Value = v;
+    }
+
+    /// <summary>條目卡底色透明度數值框 → 滑桿同步（鉗制 0–100；空/非數字回預設）。</summary>
+    private void SyncEntryOpacityFromBox()
+    {
+        var v = int.TryParse(EntryOpacityBox.Text?.Trim(), out var n) ? Math.Clamp(n, 0, 100) : AppConfig.DefaultEntryCardOpacity;
+        EntryOpacitySlider.Value = v;
     }
 
     /// <summary>查詢視窗字級數值框 → 滑桿同步（鉗制 16–40；空/非數字回預設）。</summary>
@@ -127,7 +138,7 @@ public partial class OptionsPage : UserControl
         EntryWrapChk.IsChecked == true, // 條目自動換行
         ResultFontSlider.Value,          // Dictionary 分頁結果基準字級（#複查）
         Config.ResultHideOnBlur, // #135：失焦自動隱藏已移除（浮窗移除）——保留 AppConfig 欄位、UI 不再呈現
-        PassedTransparentChk.IsChecked == true); // 過關卡透明底（#123）
+        (int)EntryOpacitySlider.Value); // 條目卡底色透明度（v1.0.1，0–100）
 
     /// <summary>數值框 → 滑桿同步（鉗制 0–100；空/非數字回門檻預設）。</summary>
     private void SyncThresholdFromBox()

@@ -50,7 +50,15 @@ public partial class AboutPage : UserControl
                 return "(No change log found)";
             }
             using var r = new StreamReader(s);
-            return r.ReadToEnd();
+            // #複查（USR 回饋）：About 已自有「Change Log」標題——略去檔首「# Changelog」H1 與 SemVer 註解，
+            // 自首個版本條目（行首「## 」）起顯示，免與 UI 標題重複、免多餘註解。
+            var text = r.ReadToEnd().TrimStart();
+            if (text.StartsWith("## ", StringComparison.Ordinal))
+            {
+                return text; // 檔首已是版本條目（無 H1）
+            }
+            int idx = text.IndexOf("\n## ", StringComparison.Ordinal);
+            return idx >= 0 ? text[(idx + 1)..] : text;
         }
         catch
         {

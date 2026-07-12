@@ -3,35 +3,8 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:ScreenTrans.Present"
         Background="Transparent">
-  <!-- Dictionary 分頁（#135）：查詢結果併入主視窗。頂部可編輯下拉（打字查詢＋下拉看查詢歷史），下方共用 ResultView。
-       維持透明底＝透出主視窗粉底與小女孩浮水印，控制項採全域半透明白樣式（#66FFFFFF），與其他分頁一致（USR 回饋）。 -->
-  <Grid>
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto"/>
-      <RowDefinition Height="*"/>
-    </Grid.RowDefinitions>
-
-    <!-- 手動查詢輸入列 -->
-    <Grid Grid.Row="0" Margin="14,12,14,8">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="*"/>
-        <ColumnDefinition Width="Auto"/>
-      </Grid.ColumnDefinitions>
-      <ComboBox x:Name="InputBox" Grid.Column="0" FontSize="16" IsEditable="True" Padding="6,3"
-                StaysOpenOnEdit="True" IsTextSearchEnabled="True" VerticalContentAlignment="Center"
-                ToolTip="Type English or pick from history, then Look up (Enter)">
-        <ComboBox.ItemContainerStyle>
-          <!-- 下拉項左內距對齊輸入框文字（USR 回饋：下拉左側對齊控制項） -->
-          <Style TargetType="ComboBoxItem">
-            <Setter Property="Padding" Value="6,3"/>
-          </Style>
-        </ComboBox.ItemContainerStyle>
-      </ComboBox>
-      <Button x:Name="LookupBtn" Grid.Column="1" Content="Look up" Margin="8,0,0,0"
-              Padding="16,5" FontSize="14" Style="{StaticResource GhostButton}"/>
-    </Grid>
-
-    <!-- 結果檢視（自 ResultWindow 抽出之共用組件） -->
-    <local:ResultView x:Name="Result" Grid.Row="1"/>
-  </Grid>
+  <!-- Dictionary 內容（#135；v1.0.1：查詢輸入列已移入 ResultView，位於頂部工具列下方——USR 回饋「兩列對調」）。
+       本頁為薄殼：僅宿共用 ResultView，並將其 ManualQueryRequested／HistoryRequested／加入筆記等事件轉發給 App。
+       透明底＝透出主視窗粉底與小女孩浮水印，控制項採全域半透明白樣式（#66FFFFFF），與其他分頁一致（USR 回饋）。 -->
+  <local:ResultView x:Name="Result"/>
 </UserControl>

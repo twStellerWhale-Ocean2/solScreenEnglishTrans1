@@ -7,6 +7,9 @@ write-host "* 工法：UI Automation（UIA）驅動實際執行中之 ScreenTran
 write-host "  關鍵狀態以 CopyFromScreen 截圖存證（docs/manual-assets/）。"
 write-host "* 前置要件：%APPDATA%\ScreenTrans\notes.json 至少一個資料夾含 >=2 條筆記（檢視動線唯讀、不改使用者資料）。"
 write-host "* 日期版本：2026-07-10 v1"
+write-host "* 【已淘汰 OBSOLETE（#135）】查詢結果已自浮動視窗改入主視窗 Dictionary 分頁——本案所測之『浮動結果視窗與主視窗共存』行為已不存在。" -ForegroundColor Yellow
+write-host "  對應新驗收見 design intTest#48（Dictionary 分頁查詢/擷取顯示/透明底），待發車環（release train）對成品以 UIA 重寫。本腳本停用、不執行。" -ForegroundColor Yellow
+exit 0
 
 #endregion
 

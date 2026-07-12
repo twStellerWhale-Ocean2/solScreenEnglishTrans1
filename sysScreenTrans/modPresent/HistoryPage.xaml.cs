@@ -152,14 +152,26 @@ public partial class HistoryPage : UserControl
     {
         var card = new Border
         {
-            Background = Brush("#FFFFFF"),
+            Background = NoteCardBrush.For(null, EntryDisplaySettings.CardOpacity), // v1.0.1（USR 回饋）：底＝白×可調透明度（與筆記頁共用同一設定值）
             BorderBrush = Brush(CardSelector.IdleBorder),
             BorderThickness = new Thickness(2), // #110：框厚恆定 2px（選取只換色不跳版）
             CornerRadius = new CornerRadius(6),
             Padding = new Thickness(10, 3, 10, 3), // #複查：內距縮小、免浪費空間（原 6 上下）
             Margin = new Thickness(0, 0, 0, 5),
+            Focusable = true,        // v1.0.1（USR 回饋）：選取後可接收 Delete 鍵刪除本條目
+            FocusVisualStyle = null, // 選取已以框色表示，免預設虛線焦點框
         };
-        card.MouseRightButtonDown += (_, _) => _selector.Select(card); // 右鍵亦設選取（#110）
+        card.MouseRightButtonDown += (_, _) => { _selector.Select(card); card.Focus(); }; // 右鍵亦設選取（#110）＋取焦點
+        // v1.0.1（USR 回饋）：選取後按 Delete 直接刪除本條目（比照右鍵選單 Delete、與其一致不另確認）
+        card.KeyDown += (_, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.Delete)
+            {
+                _store.Delete(entry.Id);
+                Reload();
+                e.Handled = true;
+            }
+        };
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // 原文
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                     // 時刻
@@ -208,6 +220,7 @@ public partial class HistoryPage : UserControl
         card.MouseLeftButtonDown += (_, e) =>
         {
             _selector.Select(card); // 單擊即選取（#110）
+            card.Focus();           // v1.0.1：取鍵盤焦點，使 Delete 鍵路由至本卡（刪除本條目）
             if (e.ClickCount == 2) // 雙擊＝檢視（比照筆記）
             {
                 ViewRequested?.Invoke(entry);
