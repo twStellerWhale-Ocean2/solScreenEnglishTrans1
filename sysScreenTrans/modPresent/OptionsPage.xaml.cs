@@ -1,7 +1,3 @@
-using System.Windows.Input;
-using ScreenTrans.Capture;
-using KeyEventArgs = System.Windows.Input.KeyEventArgs;
-using MouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
 using UserControl = System.Windows.Controls.UserControl;
 using ComboBox = System.Windows.Controls.ComboBox;
 using ComboBoxItem = System.Windows.Controls.ComboBoxItem;
@@ -10,29 +6,20 @@ using RoutedEventArgs = System.Windows.RoutedEventArgs;
 namespace ScreenTrans.Present;
 
 /// <summary>
-/// 選項分頁（Issue #34；原 SettingsWindow 內容移入為 UserControl）：金鑰／朗讀語音／查詢模型／
-/// 喚起快捷鍵（監聽擷取）。儲存後 raise <see cref="SettingsChanged"/>；情境提示改由「情境」分頁管理，
-/// 本頁不呈現但 <see cref="Gather"/> 保留既有 Context 與 HistoryMax、不重置。
+/// 選項分頁（Issue #34；原 SettingsWindow 內容移入為 UserControl）：金鑰／朗讀語音／查詢模型等偏好。
+/// 儲存後 raise <see cref="SettingsChanged"/>；情境提示改由「情境」分頁管理、喚起快捷鍵改由「螢幕擷取」
+/// 分頁管理（#133），本頁不呈現該二者，但 <see cref="Gather"/> 保留既有 Context／HistoryMax／Hotkey、不重置。
 /// </summary>
 public partial class OptionsPage : UserControl
 {
     private const string DefaultVoiceTag = "";
     private ISpeechService? _testSvc;
-    private HotKeyBinding _hotkey = HotKeyBinding.Default;
-    private bool _listening; // 是否正在監聽擷取喚起快捷鍵
-    private System.Windows.Window? _listenWindow; // 監聽期間掛載擷取事件之宿主視窗（#127：改視窗層擷取、不依賴本頁鍵盤焦點）
 
     /// <summary>目前組態（供 Gather 保留未在本頁呈現之欄位）。</summary>
     public AppConfig Config { get; private set; }
 
     /// <summary>按「儲存」後觸發，帶新組態；呼叫端據此重建服務、更新狀態、重註冊熱鍵。</summary>
     public event Action<AppConfig>? SettingsChanged;
-
-    /// <summary>
-    /// 監聽指定快捷鍵之開始（<c>true</c>）／結束（<c>false</c>）；呼叫端（App）據此暫停/恢復全域熱鍵，
-    /// 避免監聽期間按下與現行相同之鍵誤觸喚起，並讓鍵盤組合不被 <c>RegisterHotKey</c> 吞鍵（Issue #89）。
-    /// </summary>
-    public event Action<bool>? ListeningChanged;
 
     public OptionsPage(AppConfig current)
     {
@@ -45,12 +32,6 @@ public partial class OptionsPage : UserControl
             VoiceBox.Items.Add(new ComboBoxItem { Content = v, Tag = v });
         }
 
-        ChangeHotkeyBtn.Click += (_, _) => StartListening();
-        // 擷取喚起鍵改於宿主視窗層掛載（見 StartListening）——修 #127：Win11 上停用「變更」鈕後
-        // 鍵盤焦點移離本頁、`Keyboard.Focus(this)` 未穩定生效，按鍵不進 OnListenKeyDown 而「按下無效果」；
-        // 且原 LostKeyboardFocus→StopListening 會於焦點抖動時立即取消監聽。改視窗層擷取後不依賴本頁焦點。
-        // 監聽中本頁被切離（切分頁致 Unloaded）→ 視同取消，確保全域熱鍵必恢復（Issue #89）。
-        Unloaded += (_, _) => StopListening();
         SaveBtn.Click += OnSave;
         TestBtn.Click += OnTest;
         // 發音及格門檻：滑桿↔數值框雙向同步（spec#10）
@@ -85,8 +66,6 @@ public partial class OptionsPage : UserControl
         ResultHideOnBlurChk.IsChecked = c.ResultHideOnBlur; // 查詢視窗失焦自動隱藏（#複查）
         ResultFontSlider.Value = c.ResultFontSize; // ValueChanged 同步數值框（#複查）
         ResultFontBox.Text = ((int)c.ResultFontSize).ToString();
-        _hotkey = HotKeyBinding.Parse(c.Hotkey);
-        UpdateHotkeyStatus();
     }
 
     /// <summary>
@@ -98,10 +77,6 @@ public partial class OptionsPage : UserControl
     /// <summary>捨棄未儲存變更、還原為上次儲存值（#複查：離開頁時選「確定離開」則還原）。</summary>
     public void RevertChanges()
     {
-        if (_listening)
-        {
-            StopListening(); // 監聽中離開＝取消監聽、恢復全域熱鍵
-        }
         KeyBox.Clear();
         SetConfig(Config); // 以上次儲存快照重填所有欄位
     }
@@ -119,120 +94,6 @@ public partial class OptionsPage : UserControl
         var v = int.TryParse(ResultFontBox.Text?.Trim(), out var n) ? Math.Clamp(n, 16, 40) : (int)AppConfig.DefaultResultFontSize;
         ResultFontSlider.Value = v;
     }
-
-    private void UpdateHotkeyStatus()
-    {
-        HotkeyStatus.Text = "Current: " + _hotkey.DisplayName;
-    }
-
-    private void StartListening()
-    {
-        if (_listening)
-        {
-            return; // 已在監聽 → 不重入
-        }
-        _listening = true;
-        ListeningChanged?.Invoke(true); // 暫停全域熱鍵，避免監聽期間按現行鍵誤觸喚起（Issue #89）
-        HotkeyStatus.Text = "Press a hotkey… (Esc to cancel)";
-        ChangeHotkeyBtn.IsEnabled = false;
-        // 於宿主視窗層擷取按鍵/滑鼠——不依賴 UserControl 取得鍵盤焦點（修 #127，見建構式註解）。
-        _listenWindow = System.Windows.Window.GetWindow(this);
-        if (_listenWindow is not null)
-        {
-            _listenWindow.PreviewKeyDown += OnListenKeyDown;
-            _listenWindow.PreviewMouseDown += OnListenMouseDown;
-            _listenWindow.Deactivated += OnListenAborted; // 切到他視窗＝取消監聽、恢復全域熱鍵
-        }
-        // 仍嘗試聚焦本頁（利於事件路由與 Esc），但擷取已不依賴之
-        Focus();
-        Keyboard.Focus(this);
-    }
-
-    private void StopListening()
-    {
-        if (!_listening)
-        {
-            return; // 已非監聽 → 不重覆恢復
-        }
-        _listening = false;
-        ChangeHotkeyBtn.IsEnabled = true;
-        UpdateHotkeyStatus();
-        if (_listenWindow is not null)
-        {
-            _listenWindow.PreviewKeyDown -= OnListenKeyDown;
-            _listenWindow.PreviewMouseDown -= OnListenMouseDown;
-            _listenWindow.Deactivated -= OnListenAborted;
-            _listenWindow = null;
-        }
-        ListeningChanged?.Invoke(false); // 恢復全域熱鍵（Issue #89）
-    }
-
-    private void OnListenAborted(object? sender, System.EventArgs e) => StopListening();
-
-    private void OnListenKeyDown(object sender, KeyEventArgs e)
-    {
-        if (!_listening)
-        {
-            return;
-        }
-        e.Handled = true;
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key == Key.Escape)
-        {
-            StopListening();
-            return;
-        }
-        if (IsModifierKey(key))
-        {
-            return;
-        }
-        uint mods = 0;
-        var m = Keyboard.Modifiers;
-        if (m.HasFlag(ModifierKeys.Control)) mods |= HotKeyBinding.ModControl;
-        if (m.HasFlag(ModifierKeys.Alt)) mods |= HotKeyBinding.ModAlt;
-        if (m.HasFlag(ModifierKeys.Shift)) mods |= HotKeyBinding.ModShift;
-        if (m.HasFlag(ModifierKeys.Windows)) mods |= HotKeyBinding.ModWin;
-        SetListenedBinding(HotKeyBinding.Keyboard(mods, (uint)KeyInterop.VirtualKeyFromKey(key)));
-    }
-
-    private void OnListenMouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (!_listening)
-        {
-            return;
-        }
-        if (e.LeftButton == MouseButtonState.Pressed && e.RightButton == MouseButtonState.Pressed)
-        {
-            e.Handled = true;
-            SetListenedBinding(HotKeyBinding.OfMouse(MouseTrigger.LeftRight));
-            return;
-        }
-        MouseTrigger? trig = e.ChangedButton switch
-        {
-            MouseButton.Middle => MouseTrigger.Middle,
-            MouseButton.XButton1 => MouseTrigger.XButton1,
-            MouseButton.XButton2 => MouseTrigger.XButton2,
-            _ => null,
-        };
-        if (trig is null)
-        {
-            return;
-        }
-        e.Handled = true;
-        SetListenedBinding(HotKeyBinding.OfMouse(trig.Value));
-    }
-
-    /// <summary>把擷取到的綁定寫入喚起快捷鍵，並結束監聽。</summary>
-    private void SetListenedBinding(HotKeyBinding binding)
-    {
-        _hotkey = binding;
-        StopListening();
-    }
-
-    private static bool IsModifierKey(Key k) => k is
-        Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or
-        Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or
-        Key.System or Key.None;
 
     private static void SelectByTag(ComboBox box, string tag)
     {
@@ -257,7 +118,7 @@ public partial class OptionsPage : UserControl
         Config.TimeoutSec,
         TagOf(VoiceBox),
         Config.MaxRetries,
-        _hotkey.Serialize(),
+        Config.Hotkey,       // 保留：喚起快捷鍵改由「螢幕擷取」分頁管理（#133），本頁不重置
         Config.HistoryMax,   // 保留（#13）
         Config.Context,      // 保留情境（由情境分頁管理，本頁不重置）
         (int)PronThresholdSlider.Value, // 發音及格門檻（spec#10）

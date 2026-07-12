@@ -75,7 +75,7 @@
       <!-- 功能列分頁（圖示＋文字；標題僅在 OS 標題列、內容區不重複——Issue #38 Windows 慣例） -->
       <Grid Grid.Row="0">
         <StackPanel Orientation="Horizontal" Margin="12,10,0,6">
-          <RadioButton x:Name="TabContext" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xEB9F;" Content="Context"/>
+          <RadioButton x:Name="TabContext" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xEB9F;" Content="Capture"/>
           <RadioButton x:Name="TabNotes" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE70B;" Content="Notes" IsChecked="True"/>
           <RadioButton x:Name="TabHistory" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE81C;" Content="History"/>
           <RadioButton x:Name="TabOptions" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE713;" Content="Options"/>
