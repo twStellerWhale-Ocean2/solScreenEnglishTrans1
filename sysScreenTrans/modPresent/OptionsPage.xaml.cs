@@ -63,7 +63,6 @@ public partial class OptionsPage : UserControl
         EntryBoldChk.IsChecked = c.EntryBold;
         EntryWrapChk.IsChecked = c.EntryWrap;
         PassedTransparentChk.IsChecked = c.PassedCardTransparent; // 過關卡透明底（#123）
-        ResultHideOnBlurChk.IsChecked = c.ResultHideOnBlur; // 查詢視窗失焦自動隱藏（#複查）
         ResultFontSlider.Value = c.ResultFontSize; // ValueChanged 同步數值框（#複查）
         ResultFontBox.Text = ((int)c.ResultFontSize).ToString();
     }
@@ -126,8 +125,8 @@ public partial class OptionsPage : UserControl
         EntryFontSlider.Value,          // 條目字級（#複查）
         EntryBoldChk.IsChecked == true, // 條目粗體
         EntryWrapChk.IsChecked == true, // 條目自動換行
-        ResultFontSlider.Value,          // 查詢視窗基準字級（#複查）
-        ResultHideOnBlurChk.IsChecked == true, // 查詢視窗失焦自動隱藏（#複查）
+        ResultFontSlider.Value,          // Dictionary 分頁結果基準字級（#複查）
+        Config.ResultHideOnBlur, // #135：失焦自動隱藏已移除（浮窗移除）——保留 AppConfig 欄位、UI 不再呈現
         PassedTransparentChk.IsChecked == true); // 過關卡透明底（#123）
 
     /// <summary>數值框 → 滑桿同步（鉗制 0–100；空/非數字回門檻預設）。</summary>

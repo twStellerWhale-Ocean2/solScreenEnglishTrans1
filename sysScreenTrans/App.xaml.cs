@@ -30,7 +30,8 @@ public partial class App : System.Windows.Application
     private IPronunciationAssessor? _assessor;   // 發音評分（spec#10；金鑰於呼叫時讀、隨設定重建）
     private AppConfig _config = new("gpt-4o-mini", 15, "");
     private bool _busy;
-    private ResultWindow? _result; // 目前開啟中的結果視窗；下一次查詢取代前一個
+    private DictionaryPage? _dictionaryPage; // Dictionary 分頁：查詢結果併入主視窗（#135，取代浮動 ResultWindow）
+    private System.Windows.Threading.DispatcherTimer? _topmostTimer; // 擷取後主視窗暫置頂（疊於無邊框遊戲）之解除計時
     private readonly HistoryStore _historyStore = new();
     private readonly NotesStore _notesStore = new();
     private readonly ContextStore _contextStore = new();
@@ -114,9 +115,16 @@ public partial class App : System.Windows.Application
         _updates = new UpdateService();
         _updates.UpdateReady += v => Dispatcher.BeginInvoke(() => _main?.ShowUpdateReady(v));
 
-        _main = new MainWindow(_notesPage, _historyPage, _contextPage, _optionsPage, new AboutPage(_updates));
+        // Dictionary 分頁（#135）：查詢結果併入主視窗、取代浮動 ResultWindow；查詢/檢視/查單字/重譯皆導向本頁。
+        _dictionaryPage = new DictionaryPage();
+        _dictionaryPage.AddToNotesRequested += AddToNotes;
+        _dictionaryPage.WordQueryRequested += word => _ = LookupWordAsync(word);   // 點單字＝查該字
+        _dictionaryPage.TextReQueryRequested += text => _ = ReTranslateAsync(text); // 編輯原文→重譯
+        _dictionaryPage.ManualQueryRequested += text => _ = ManualLookupAsync(text); // 分頁頂部手動輸入查詢
+        _dictionaryPage.HistoryRequested += RefreshDictionaryHistory; // 下拉開啟→以查詢歷史填入（#135 回饋）
+
+        _main = new MainWindow(_dictionaryPage, _notesPage, _historyPage, _contextPage, _optionsPage, new AboutPage(_updates));
         _main.RefreshStatus(keyReady, HotkeyDisplay());
-        _main.ResultRequested += SummonResult; // 功能列 Result 鈕（Issue #107）
         // 主視窗取得焦點不關結果卡片（Issue #105：與主視窗共存，關閉時機僅限使用者關閉／新查詢或檢視取代／選項儲存重建）
         _main.WindowState = WindowState.Minimized;
         _main.Show();
@@ -225,8 +233,6 @@ public partial class App : System.Windows.Application
         _busy = true;
         try
         {
-            CloseResult(); // 新查詢一開始即關前一結果視窗（守衛，Issue #32）
-
             var mask = new MaskWindow();
             mask.ShowDialog();
             if (mask.Result is null)
@@ -245,13 +251,12 @@ public partial class App : System.Windows.Application
         }
     }
 
-    /// <summary>查詢主動線（兩熱鍵共用）：結果視窗 loading → vision 查詢（依 <c>IsPointMode</c>）→ 結果/錯誤＋歷史留存。</summary>
+    /// <summary>查詢主動線：Dictionary 分頁 loading → vision 查詢（依 <c>IsPointMode</c>）→ 結果/錯誤＋歷史留存（#135）。</summary>
     private async Task RunQueryAsync(CaptureResult capture)
     {
-        var win = NewResultWindow();
-        win.ShowLoading();
-        win.Show();
-        win.Activate();
+        PresentDictionary(); // 切至 Dictionary 分頁、主視窗前景＋暫置頂疊於（無邊框視窗化）遊戲
+        _dictionaryPage!.SetNoteTargets(TopFolderNames(), ActiveContextName()); // #55「加入至」下拉來源
+        _dictionaryPage.ShowLoading();
 
         try
         {
@@ -263,56 +268,52 @@ public partial class App : System.Windows.Application
                 _historyStore.Append(result, _config.HistoryMax, DateTimeOffset.Now);
                 _historyPage?.Reload();
             }
-            if (!ReferenceEquals(_result, win))
-            {
-                return;
-            }
-            win.ShowResult(result, _speech!);
+            _dictionaryPage.ShowResult(result, _speech!);
         }
         catch (QueryException ex)
         {
-            if (!ReferenceEquals(_result, win))
-            {
-                return;
-            }
-            win.ShowError(ex.Message);
+            _dictionaryPage.ShowError(ex.Message);
         }
     }
 
-    /// <summary>建立並接線一個結果視窗（設為當前 _result；掛收藏入口，Issue #34 移除歷史/筆記入口）。
-    /// 起手先過單一守衛——「同時至多一個」由本方法結構保證，不倚賴各呼叫端自律或遮罩覆蓋的偶然保護（#107 審查）。</summary>
-    private ResultWindow NewResultWindow()
+    /// <summary>將查詢結果呈現於 Dictionary 分頁（#135，取代浮動視窗）：切至該分頁、還原主視窗並帶前景，
+    /// 再**短暫置頂**使結果疊於無邊框視窗化遊戲上（獨佔全螢幕本就無法被任何非遊戲視窗覆蓋）；置頂數秒後自動解除。</summary>
+    private void PresentDictionary()
     {
-        CloseResult();
-        var win = new ResultWindow();
-        _result = win;
-        win.Closed += (_, _) => { if (ReferenceEquals(_result, win)) _result = null; };
-        win.AddToNotesRequested += AddToNotes;
-        win.WordQueryRequested += word => _ = LookupWordAsync(win, word); // 複查回饋：點單字＝查該字
-        win.TextReQueryRequested += text => _ = ReTranslateAsync(win, text); // 複查回饋：編輯原文→重譯
-        win.SetNoteTargets(TopFolderNames(), ActiveContextName()); // #55「加入至」下拉來源
-        return win;
+        _main?.ShowTab(MainTab.Dictionary); // 切分頁＋自收合還原＋帶前景（ShowTab→RestoreFromTray）
+        if (_main is null)
+        {
+            return;
+        }
+        _main.Topmost = true; // 暫置頂疊於無邊框遊戲之上
+        _topmostTimer ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
+        _topmostTimer.Stop();
+        _topmostTimer.Tick -= OnTopmostElapsed; // 重入時重置、不累加 handler
+        _topmostTimer.Tick += OnTopmostElapsed;
+        _topmostTimer.Start();
     }
 
-    /// <summary>單字查詢（複查回饋：結果視窗點單字）：文字查該字義→推入該視窗導航堆疊（可往前返回原句）；失敗以 toast 明訊、不破壞現有結果。</summary>
-    private async Task LookupWordAsync(ResultWindow win, string word)
+    private void OnTopmostElapsed(object? sender, EventArgs e)
+    {
+        _topmostTimer?.Stop();
+        if (_main is not null)
+        {
+            _main.Topmost = false; // 解除暫置頂，主視窗回一般行為
+        }
+    }
+
+    /// <summary>單字查詢（Dictionary 分頁點單字，#135）：文字查該字義→推入分頁導航堆疊（可往前返回原句）；失敗以 toast 明訊、不破壞現有結果。</summary>
+    private async Task LookupWordAsync(string word)
     {
         try
         {
             var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
             var result = await query.QueryWordAsync(word);
-            if (ReferenceEquals(_result, win)) // 視窗未被取代才回填
-            {
-                win.PushWordResult(result); // 內含結束等待游標
-            }
-            else
-            {
-                win.WordLookupFailed(); // 視窗已換：仍清該窗等待游標
-            }
+            _dictionaryPage?.PushWordResult(result); // 內含結束等待游標
         }
         catch (QueryException ex)
         {
-            win.WordLookupFailed(); // 清等待游標＋忙碌旗標
+            _dictionaryPage?.WordLookupFailed(); // 清等待游標＋忙碌旗標
             ToastNotifier.Show("Word lookup failed: " + ex.Message);
         }
     }
@@ -371,28 +372,53 @@ public partial class App : System.Windows.Application
         }
     }
 
-    /// <summary>編輯原文後重譯（複查回饋：辨識有誤時校正）：文字重查→取代該視窗目前結果；失敗 toast、清游標。</summary>
-    private async Task ReTranslateAsync(ResultWindow win, string text)
+    /// <summary>編輯原文後重譯（辨識有誤時校正，#135）：文字重查→取代 Dictionary 分頁目前結果；失敗 toast、清游標。</summary>
+    private async Task ReTranslateAsync(string text)
     {
         try
         {
             var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
             var result = await query.QueryTextAsync(text);
-            if (ReferenceEquals(_result, win))
-            {
-                win.ReplaceCurrentResult(result);
-            }
-            else
-            {
-                win.WordLookupFailed();
-            }
+            _dictionaryPage?.ReplaceCurrentResult(result);
         }
         catch (QueryException ex)
         {
-            win.WordLookupFailed();
+            _dictionaryPage?.WordLookupFailed();
             ToastNotifier.Show("Re-translate failed: " + ex.Message);
         }
     }
+
+    /// <summary>Dictionary 分頁手動輸入查詢（#135）：單一 token（無空白）→查該字字義、否則整句翻譯；結果顯示於本頁。</summary>
+    private async Task ManualLookupAsync(string text)
+    {
+        var t = (text ?? "").Trim();
+        if (t.Length == 0)
+        {
+            return;
+        }
+        _main?.ShowTab(MainTab.Dictionary);
+        _dictionaryPage!.SetNoteTargets(TopFolderNames(), ActiveContextName());
+        _dictionaryPage.ShowLoading();
+        try
+        {
+            var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
+            bool single = !t.Any(char.IsWhiteSpace);
+            var result = single ? await query.QueryWordAsync(t) : await query.QueryTextAsync(t);
+            _dictionaryPage.ShowResult(result, _speech!);
+        }
+        catch (QueryException ex)
+        {
+            _dictionaryPage.ShowError(ex.Message);
+        }
+    }
+
+    /// <summary>刷新 Dictionary 分頁輸入下拉之查詢歷史（英文原文、新在前、去重；#135 回饋，下拉開啟時呼叫）。</summary>
+    private void RefreshDictionaryHistory()
+        => _dictionaryPage?.SetHistory(_historyStore.Load()
+            .Select(h => h.ToResult().Original)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct()
+            .ToList());
 
     /// <summary>目前頂層資料夾名清單（供結果視窗「加入至」下拉，#55）。</summary>
     private List<string> TopFolderNames() => _notesStore.LoadEnsured().Folders.Select(f => f.Name).ToList();
@@ -434,14 +460,12 @@ public partial class App : System.Windows.Application
         return ctx.Length > 0 ? ctx : NotesStore.DefaultFolderName;
     }
 
-    /// <summary>「檢視」：以結果卡片顯示三欄詳情（重用 ResultWindow 之整句/逐字發音，供歷史與筆記共用）；
-    /// 取代前一結果卡之單一守衛由 NewResultWindow 起手保證（Issue #105/#107）。</summary>
+    /// <summary>「檢視」：於 Dictionary 分頁顯示三欄詳情（重用共用 ResultView 之整句/逐字發音，供歷史與筆記共用，#135）。</summary>
     private void ShowDetail(QueryResult r)
     {
-        var win = NewResultWindow();
-        win.Show();
-        win.Activate();
-        win.ShowResult(r, _speech!);
+        PresentDictionary();
+        _dictionaryPage!.SetNoteTargets(TopFolderNames(), ActiveContextName());
+        _dictionaryPage.ShowResult(r, _speech!);
     }
 
     /// <summary>
@@ -451,17 +475,9 @@ public partial class App : System.Windows.Application
     /// </summary>
     private void SummonResult()
     {
-        if (_result is not null && !_result.IsClosing)
+        if (_dictionaryPage?.HasResult == true)
         {
-            if (!_result.IsVisible)
-            {
-                _result.Show(); // 失焦自動隱藏（#複查）後喚回：Hidden 視窗須先 Show，Activate 不會使其重現
-            }
-            if (_result.WindowState == WindowState.Minimized)
-            {
-                _result.WindowState = WindowState.Normal;
-            }
-            _result.Activate();
+            PresentDictionary(); // 分頁已有結果 → 切過去帶前景
             return;
         }
         var latest = _historyStore.Load().FirstOrDefault();
@@ -473,16 +489,16 @@ public partial class App : System.Windows.Application
         ShowDetail(latest.ToResult());
     }
 
-    /// <summary>選項分頁儲存後套用：重建語音服務、重註冊熱鍵、更新狀態；關前一結果視窗（不續用已釋放服務）。</summary>
+    /// <summary>選項分頁儲存後套用：重建語音服務、重註冊熱鍵、更新狀態；並把新語音注入 Dictionary 分頁（不續用已釋放服務，#135）。</summary>
     private void ApplySettings(AppConfig cfg)
     {
         _config = cfg;
-        CloseResult();
         (_speech as IDisposable)?.Dispose();
         _speech = new SpeechService(_config.Voice);
+        _dictionaryPage?.UpdateSpeech(_speech); // #135：換語音服務後同步分頁（播放鈕讀欄位、免用已釋放服務）
         _assessor = new PronunciationService(_config.PronModel, _config.TimeoutSec, _config.MaxRetries); // 隨模型/逾時重建（spec#10）
         EntryDisplaySettings.SyncFrom(_config); // #複查：條目字級/粗體/換行偏好同步後重建兩頁
-        ResultDisplaySettings.SyncFrom(_config); // #複查：查詢視窗基準字級同步（下次查詢即套用；CloseResult 已關舊窗）
+        ResultDisplaySettings.SyncFrom(_config); // #複查/#135：Dictionary 分頁結果基準字級同步（下次渲染套用）
         _notesPage?.Reload(); // 門檻/條目顯示改動 → 重建卡片（intTest#36）
         _historyPage?.Reload(); // #複查：條目顯示改動同步套用歷史頁
         RegisterHotkeyOrWarn();
@@ -497,26 +513,6 @@ public partial class App : System.Windows.Application
         }
         _main?.RefreshStatus(keyReady, HotkeyDisplay());
         _main?.FlashSaved(); // #125：儲存成功於狀態列輕量閃示「Saved ✓」（取代原「Saved.」模態框；含「存後離開」路徑）
-    }
-
-    /// <summary>
-    /// 關閉結果視窗之單一守衛（Issue #32）：先解 <c>_result</c> 參考再關閉，僅在未進入關閉序列時
-    /// 才 <c>Close()</c>；極端交錯以 catch 兜底，避免「Cannot call Close while a Window is closing」重入崩潰。
-    /// </summary>
-    private void CloseResult()
-    {
-        var r = _result;
-        if (r is null)
-        {
-            return;
-        }
-        _result = null;
-        if (r.IsClosing)
-        {
-            return;
-        }
-        try { r.Close(); }
-        catch (InvalidOperationException) { /* 已在關閉序列中，忽略 */ }
     }
 
     protected override void OnExit(ExitEventArgs e)

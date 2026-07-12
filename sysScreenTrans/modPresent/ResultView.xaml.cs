@@ -1,8 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
 using ScreenTrans.Query;
-using Key = System.Windows.Input.Key;
-using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using Button = System.Windows.Controls.Button;
 using CheckBox = System.Windows.Controls.CheckBox;
 using Cursors = System.Windows.Input.Cursors;
@@ -13,40 +11,31 @@ using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 using HorizontalAlignment = System.Windows.HorizontalAlignment;
 using VerticalAlignment = System.Windows.VerticalAlignment;
 using Orientation = System.Windows.Controls.Orientation;
-using CancelEventArgs = System.ComponentModel.CancelEventArgs;
 using Hyperlink = System.Windows.Documents.Hyperlink;
 using Run = System.Windows.Documents.Run;
+using UserControl = System.Windows.Controls.UserControl;
 
 namespace ScreenTrans.Present;
 
 /// <summary>
 /// 加入我的筆記之請求（Issue #55）：結果＋目標資料夾名（空＝依使用中情境/預設夾，由 App 解析）＋底色 hex。
-/// 由結果視窗依當下「加入至／底色」選擇組成，供 App 加入指定夾並套色。
+/// 由結果檢視依當下「加入至／底色」選擇組成，供 App 加入指定夾並套色。
 /// </summary>
 public readonly record struct NoteAddRequest(QueryResult Result, string FolderName, string ColorHex);
 
 /// <summary>
-/// 浮動結果視窗（[runWi自訂Usr查看聆聽結果]、design ＜III.C.(C)＞ 查詢結果頁）：
-/// 淺粉底、大字；英文組（原文＋KK音標）與中文組（中譯）各有獨立播放鈕與「自動播放」勾選，
-/// 兩組間留空白行。勾選自動播放者，結果一出即朗讀對應語言。
-/// <b>標準表單（Issue #59）</b>：標準標題列（OS 字型/標題）＋標準邊框拖拉縮放（<c>ResizeMode=CanResize</c>）
-/// ＋工作列按鈕（<c>ShowInTaskbar</c>，失焦後仍可尋、不再像被隱藏）；Topmost 浮於遊戲上「一直存在」，
-/// 同時至多一個（呼叫端 <c>App.CloseResult</c> 取代前一個）。
-/// 關閉由明確操作觸發：ESC／標題列關閉鈕／下一次查詢取代（失焦不自動關閉，切換視窗對照時結果保留）。
-/// 關閉時記住位置與大小（UiStateStore），下次開啟還原。
+/// 查詢結果檢視（#135：自 <c>ResultWindow</c> 抽出為共用 <see cref="UserControl"/>，宿於 Dictionary 分頁）：
+/// 三區直排原文／KK 音標／中譯（不加欄目標示、以字級/色彩/字體分層）；英文組（原文＋KK 音標）與中文組（中譯）
+/// 各有獨立播放鈕與「自動播放」勾選。英文原文逐字可點＝查該單字（往前/往後導航返回原句），鉛筆鈕編輯原文重譯，
+/// 底部「加入我的筆記」＋「自動加入筆記」＋底色色塊列。<b>不再是浮動視窗</b>——無位置記憶/失焦隱藏/ESC 關窗/單一守衛。
 /// </summary>
-public partial class ResultWindow : Window
+public partial class ResultView : UserControl
 {
     private ISpeechService? _speech;
-    private bool _closing;
-    private readonly UiStateStore _ui;
     private QueryResult? _current; // 目前顯示中的結果（供「加入我的筆記」收藏）
     private string _activeContextName = ""; // 使用中情境名（供「加入至」預設夾選項標籤與解析，#55）
     private string _currentColor = "";      // 目前選定底色 hex（空＝無底色，#55）
     private bool _wiring;                    // 建構下拉/色塊時抑制事件回寫
-
-    /// <summary>是否已進入關閉序列（供呼叫端避免對關閉中視窗重複 Close，Issue #32）。</summary>
-    public bool IsClosing => _closing;
 
     /// <summary>按「加入我的筆記」或勾選「自動加入筆記」時觸發（傳加入請求：結果＋目標夾＋底色，#55）。</summary>
     public event Action<NoteAddRequest>? AddToNotesRequested;
@@ -62,12 +51,9 @@ public partial class ResultWindow : Window
     private int _pos = -1;
     private bool _wordBusy; // 單字查詢進行中：游標等待＋忽略再點（避免連點，複查回饋）
 
-    public ResultWindow()
+    public ResultView()
     {
         InitializeComponent();
-        _ui = UiStateStore.Load();
-        ApplyBounds();
-        // 移動/縮放/關閉皆由 OS 標準 chrome 提供（Issue #59），不再自訂 HeaderBar 拖曳/Thumb 握把/關閉鈕。
         AddNoteBtn.Click += (_, _) => RaiseAdd();
         BackBtn.Click += (_, _) => Navigate(-1);
         ForwardBtn.Click += (_, _) => Navigate(1);
@@ -77,21 +63,17 @@ public partial class ResultWindow : Window
         AutoAddChk.Checked += (_, _) => AutoAddSettings.Enabled = true;
         AutoAddChk.Unchecked += (_, _) => AutoAddSettings.Enabled = false;
 
-        // 失焦自動隱藏（#複查，選項可開）：預設關＝維持 #105（點主視窗不隱藏）；開啟後點到他窗即隱藏、下次查詢再現。
-        // 單字查詢/重譯進行中（_wordBusy）不隱藏，免等待中內容突然消失。
-        Deactivated += (_, _) =>
-        {
-            if (ResultDisplaySettings.HideOnBlur && !_closing && !_wordBusy)
-            {
-                Hide();
-            }
-        };
-
         _currentColor = NoteDefaults.ColorHex; // 預設底色（#55）
         FolderCombo.SelectionChanged += OnFolderChanged;
         BuildSwatches();
         BuildFolderCombo(); // 無情境資訊時先以預設建；App 設定 targets 後重建
     }
+
+    /// <summary>是否已顯示過非空結果（供 App 判斷「喚回」時分頁是否已有內容，#135）。</summary>
+    public bool HasResult => _current is { IsEmpty: false };
+
+    /// <summary>設定變更後由 App 注入新語音服務（播放鈕閉包讀取欄位，避免用到已釋放的舊服務，#135）。</summary>
+    public void UpdateSpeech(ISpeechService speech) => _speech = speech;
 
     /// <summary>
     /// 供 App 提供「加入至」下拉之來源（Issue #55）：頂層資料夾名清單＋使用中情境名（空＝無情境）。
@@ -215,67 +197,6 @@ public partial class ResultWindow : Window
         }
     }
 
-    /// <summary>套用記住的大小；位置若仍落在螢幕內則還原，否則置中。</summary>
-    private void ApplyBounds()
-    {
-        Width = _ui.WinWidth;
-        Height = _ui.WinHeight;
-        if (_ui.WinLeft is double l && _ui.WinTop is double t && IsOnScreen(l, t, _ui.WinWidth))
-        {
-            WindowStartupLocation = WindowStartupLocation.Manual;
-            Left = l;
-            Top = t;
-        }
-        else
-        {
-            WindowStartupLocation = WindowStartupLocation.CenterScreen;
-        }
-    }
-
-    /// <summary>標題列可見且可點：頂邊在虛擬桌面內、左右各留至少 80px 在畫面上。</summary>
-    private static bool IsOnScreen(double left, double top, double width)
-    {
-        double vsl = SystemParameters.VirtualScreenLeft;
-        double vst = SystemParameters.VirtualScreenTop;
-        double vsr = vsl + SystemParameters.VirtualScreenWidth;
-        double vsb = vst + SystemParameters.VirtualScreenHeight;
-        return top >= vst - 2 && top <= vsb - 40 && (left + width) >= vsl + 80 && left <= vsr - 80;
-    }
-
-    /// <summary>只關一次：避免關閉過程中 ESC／關閉鈕／取代流程重複呼叫 Close（WPF 會擲「closing」例外）。</summary>
-    private void CloseOnce()
-    {
-        if (_closing)
-        {
-            return;
-        }
-        _closing = true;
-        Close();
-    }
-
-    protected override void OnClosing(CancelEventArgs e)
-    {
-        _closing = true;
-        EndWordLookup(); // 關窗時若仍在查單字，清除全域等待游標覆寫（免卡住）
-        var b = RestoreBounds;
-        if (b.Width > 0 && !double.IsNaN(b.Left))
-        {
-            _ui.WinLeft = b.Left;
-            _ui.WinTop = b.Top;
-            _ui.WinWidth = b.Width;
-            _ui.WinHeight = b.Height;
-        }
-        else
-        {
-            _ui.WinLeft = Left;
-            _ui.WinTop = Top;
-            _ui.WinWidth = ActualWidth;
-            _ui.WinHeight = ActualHeight;
-        }
-        _ui.Save();
-        base.OnClosing(e);
-    }
-
     public void ShowLoading()
     {
         _current = null;
@@ -288,7 +209,7 @@ public partial class ResultWindow : Window
         });
     }
 
-    /// <summary>主查詢結果（螢幕框選/雙擊）：重置導航堆疊、渲染、依設定自動播放與自動加入筆記。</summary>
+    /// <summary>主查詢結果（螢幕框選/雙擊/手動輸入）：重置導航堆疊、渲染、依設定自動播放與自動加入筆記。</summary>
     public void ShowResult(QueryResult r, ISpeechService speech)
     {
         _speech = speech;
@@ -507,7 +428,7 @@ public partial class ResultWindow : Window
             Background = Brush("#F4C2D0"),
             Foreground = Brush("#6D3A4D"),
             BorderThickness = new Thickness(0),
-            FontSize = 18,
+            FontSize = 14, // 播音鈕比照一般內文字級（USR 回饋：不特別加大）
             Cursor = Cursors.Hand,
         };
         btn.Click += (_, _) => onPlay();
@@ -518,7 +439,7 @@ public partial class ResultWindow : Window
             Content = "Auto-play",
             IsChecked = autoInit,
             Foreground = Brush("#8A5A6D"),
-            FontSize = 16,
+            FontSize = 14, // 自動播放勾選比照一般內文字級（USR 回饋）
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(14, 0, 0, 0),
         };
@@ -615,13 +536,5 @@ public partial class ResultWindow : Window
         var col = new System.Windows.TextDecorationCollection { deco };
         col.Freeze();
         return col;
-    }
-
-    protected override void OnKeyDown(KeyEventArgs e)
-    {
-        if (e.Key == Key.Escape)
-        {
-            CloseOnce();
-        }
     }
 }

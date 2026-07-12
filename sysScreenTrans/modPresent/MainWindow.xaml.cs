@@ -4,7 +4,7 @@ using CancelEventArgs = System.ComponentModel.CancelEventArgs;
 namespace ScreenTrans.Present;
 
 /// <summary>統一主視窗之分頁。</summary>
-public enum MainTab { Notes, History, Context, Options, About }
+public enum MainTab { Dictionary, Notes, History, Context, Options, About }
 
 /// <summary>
 /// 統一 Office 式主視窗（Issue #34）：頂部功能列分頁（圖示＋文字）＋下方對應功能頁，取代原
@@ -15,18 +15,17 @@ public partial class MainWindow : Window
 {
     private bool _exiting; // true 時允許真正關閉（結束程式）；否則關閉＝收合。結束由系統匣「結束」觸發。
 
-    /// <summary>功能列 Result 鈕按下（Issue #107）：本視窗僅發事件，喚回三態決策在 App 組合根。</summary>
-    public event Action? ResultRequested;
-
+    private readonly DictionaryPage _dictionary;
     private readonly NotesPage _notes;
     private readonly HistoryPage _history;
     private readonly ContextPage _context;
     private readonly OptionsPage _options;
     private readonly AboutPage _about;
 
-    public MainWindow(NotesPage notes, HistoryPage history, ContextPage context, OptionsPage options, AboutPage about)
+    public MainWindow(DictionaryPage dictionary, NotesPage notes, HistoryPage history, ContextPage context, OptionsPage options, AboutPage about)
     {
         InitializeComponent();
+        _dictionary = dictionary;
         _notes = notes;
         _history = history;
         _context = context;
@@ -39,12 +38,12 @@ public partial class MainWindow : Window
 
         // 各分頁切換前先過「離開選項頁」守衛（#複查）：選項頁有未存變更時提示，取消則留在選項頁。
         // 切至筆記/歷史時於狀態列顯目前檢視條目數，其餘分頁隱藏（#132）。
+        TabDictionary.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } Host.Content = _dictionary; ShowEntryCount(null); };
         TabNotes.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _notes.Reload(); Host.Content = _notes; ShowEntryCount(_notes.CurrentEntryCount); };
         TabHistory.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _history.Reload(); Host.Content = _history; ShowEntryCount(_history.CurrentEntryCount); };
         TabContext.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _context.Reload(); Host.Content = _context; ShowEntryCount(null); };
         TabOptions.Checked += (_, _) => { Host.Content = _options; ShowEntryCount(null); };
         TabAbout.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } Host.Content = _about; ShowEntryCount(null); };
-        ResultBtn.Click += (_, _) => ResultRequested?.Invoke();
 
         Host.Content = _notes; // 預設筆記分頁（XAML IsChecked 於接線前已設，故此處明確帶入）
         ShowEntryCount(_notes.CurrentEntryCount); // #132：初始筆記分頁條目數
@@ -87,6 +86,7 @@ public partial class MainWindow : Window
     {
         switch (tab)
         {
+            case MainTab.Dictionary: TabDictionary.IsChecked = true; break;
             case MainTab.Notes: TabNotes.IsChecked = true; break;
             case MainTab.History: TabHistory.IsChecked = true; break;
             case MainTab.Context: TabContext.IsChecked = true; break;

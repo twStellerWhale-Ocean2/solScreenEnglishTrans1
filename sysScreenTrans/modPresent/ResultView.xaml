@@ -1,14 +1,8 @@
-<Window x:Class="ScreenTrans.Present.ResultWindow"
+<UserControl x:Class="ScreenTrans.Present.ResultView"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Query Result"
-        Icon="pack://application:,,,/assets/app.ico"
-        WindowStyle="SingleBorderWindow" ResizeMode="CanResizeWithGrip"
-        ShowInTaskbar="True" Topmost="True"
-        Background="{StaticResource PinkBg}"
-        Width="560" Height="400" MinWidth="320" MinHeight="220"
-        WindowStartupLocation="CenterScreen">
-  <Window.Resources>
+        Background="Transparent">
+  <UserControl.Resources>
     <!-- 導航圓鈕（複查回饋）：啟用＝粉底深字圓鈕、hover 加深；停用＝淡底淡字、無手形——明確區分可用/不可用 -->
     <Style x:Key="NavButton" TargetType="Button">
       <Setter Property="Width" Value="30"/>
@@ -39,10 +33,9 @@
         </Setter.Value>
       </Setter>
     </Style>
-  </Window.Resources>
-  <!-- Issue #59：改標準表單——標準標題列（OS 字型/標題）＋標準邊框拖拉縮放＋右下角縮放握把（ResizeMode=CanResizeWithGrip，#97）＋
-       ShowInTaskbar=True（失焦後仍有工作列按鈕可尋、不再像被隱藏）。移除原自訂 WindowStyle=None 卡片、
-       自訂標題列/關閉鈕/縮放握把（改由 OS 標準 chrome 提供）。字型比照主視窗（系統預設）。 -->
+  </UserControl.Resources>
+  <!-- 查詢結果檢視（自 ResultWindow 抽出為共用 UserControl，#135）：三區直排原文／KK 音標／中譯，
+       逐字可點查單字、鉛筆編輯重譯、中英各自播放/自動播放、加入我的筆記＋底色。宿於 Dictionary 分頁。 -->
   <Grid>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>
@@ -50,12 +43,7 @@
       <RowDefinition Height="Auto"/>
     </Grid.RowDefinitions>
 
-    <!-- 浮水印底圖（兩位女孩，極淡、不擋點擊） -->
-    <Image Grid.Row="0" Grid.RowSpan="3" Source="pack://application:,,,/assets/icon.png"
-           Opacity="0.10" Stretch="Uniform" IsHitTestVisible="False"
-           HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20"/>
-
-    <!-- 頂部工具列（複查回饋）：往前/往後（單字查詢導航，快速返回原句）＋「加入至」資料夾（自底部上移） -->
+    <!-- 頂部工具列：往前/往後（單字查詢導航，快速返回原句）＋編輯（鉛筆）＋「加入至」資料夾 -->
     <Grid Grid.Row="0">
       <Border Height="1" Background="#F4C2D0" VerticalAlignment="Bottom"/>
       <StackPanel Orientation="Horizontal" Margin="14,8,16,8" VerticalAlignment="Center">
@@ -73,7 +61,7 @@
       <StackPanel x:Name="BodyPanel" Margin="18,14,18,10"/>
     </ScrollViewer>
 
-    <!-- 底部工具列（Issue #34）：加入我的筆記＋自動加入筆記；下方為底色（Issue #55；#複查：資料夾下拉上移頂部） -->
+    <!-- 底部工具列：加入我的筆記＋自動加入筆記＋底色色塊列 -->
     <Grid Grid.Row="2">
       <Border Height="1" Background="#F4C2D0" VerticalAlignment="Top"/>
       <StackPanel Margin="16,10,16,12">
@@ -96,8 +84,6 @@
           <CheckBox x:Name="AutoAddChk" Content="Auto-add to Notes" Margin="14,0,0,0"
                     VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="13"/>
         </StackPanel>
-        <!-- #55：底色色塊列（加入至資料夾下拉已於 #複查 上移頂部工具列） -->
-        <!-- #109 十色（11 塊）：DockPanel 使 WrapPanel 取得「實際剩餘寬」而非無限寬——窗窄時換行全可視可點，不裁切 -->
         <DockPanel Margin="0,8,0,0">
           <TextBlock DockPanel.Dock="Left" Text="Color" VerticalAlignment="Center" Foreground="#8A5A6D" FontSize="12.5" Margin="0,0,6,0"/>
           <WrapPanel x:Name="SwatchRow" Orientation="Horizontal" VerticalAlignment="Center"/>
@@ -105,4 +91,4 @@
       </StackPanel>
     </Grid>
   </Grid>
-</Window>
+</UserControl>
