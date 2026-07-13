@@ -4,7 +4,7 @@
 
 ## 範圍
 
-* 對 `QueryService.QueryAsync`（`sysScreenTrans/modQuery/QueryService.cs`）之**暫時性**錯誤（逾時、連線中斷、HTTP 429、HTTP 5xx）加有限次數**指數退避**重試；**永久性**錯誤（401／400／其他 4xx／回應格式解析失敗）不重試、立即降級。
+* 對 `QueryService.QueryAsync`（`sysLingoIsland/modQuery/QueryService.cs`）之**暫時性**錯誤（逾時、連線中斷、HTTP 429、HTTP 5xx）加有限次數**指數退避**重試；**永久性**錯誤（401／400／其他 4xx／回應格式解析失敗）不重試、立即降級。
 * 重試次數以 `paramQueryMaxRetries`（appsettings，預設 2）可調。
 * **範圍收斂**：原議題之 `OpenAiSpeechService.FetchWavAsync` 已於 #15 移除（改 Windows 內建語音、離線 SAPI、無網路），不在本增量。
 
@@ -14,11 +14,11 @@
 |---|---|---|
 | 建置 0 錯 | `dotnet build -c Release`（含於 `dotnet test`） | ✅ 0 錯 |
 | 單元測試全過 | `dotnet test` | ✅ **31 passed / 0 failed**（本增量新增 9：重試迴圈 6＋AppConfig 3） |
-| 依賴安全 | `dotnet list package --vulnerable` | ✅ 0 漏洞（ScreenTrans／ScreenTrans.Tests） |
+| 依賴安全 | `dotnet list package --vulnerable` | ✅ 0 漏洞（LingoIsland／LingoIsland.Tests） |
 | 結構合規 | repoLint／docLint | N/A：本 repo（repoStructVersion 2.0）無 lint 腳本；design.md 依 3.2 骨架局部研改、章節結構未破壞 |
 | HMI 結構合規 | uiLint | N/A：無 React 建置單元 |
 
-**新增／異動單元測試（元件層，`sysScreenTrans.Tests`）**：
+**新增／異動單元測試（元件層，`sysLingoIsland.Tests`）**：
 
 * `QueryServiceRetryTests`：
   * `IsTransientStatus_ClassifiesRetryable`（Theory）：429／500／503→可重試；400／401／404／200→不可重試。

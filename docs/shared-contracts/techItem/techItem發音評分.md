@@ -24,6 +24,6 @@ description: 技術選型·元件層(techItem) Profile —— 「發音評分／
 
 # IV. 備註紀錄
 
-* 2026-07-06：建立。techItem「發音評分（pronunciation assessment）」型態首份；統一 OpenAI 音訊輸入模型（沿用既有金鑰）。因 solScreenEnglishTrans1 增量「筆記發音練習」立案而補建；與 [techItem語音合成] TTS 責任區隔。
-* 2026-07-06（修訂）：標準產品收斂為 `gpt-audio` 系列（`gpt-4o-*-audio-preview` 已下架）；並記錄「音訊模型不支援 structured outputs（`response_format`）」之硬限制——改以提示要 JSON＋容錯解析。因 solScreenEnglishTrans1 增量 #97 實測 `gpt-audio-mini` 得證。
-* 2026-07-06（修訂）：補「無朗讀防呆」——提示須先判定有無真正朗讀，靜音／雜訊／與目標無關一律 0、註明未偵測到朗讀；移除「不因雜訊過度扣分」之寬容。因 solScreenEnglishTrans1 增量 #99 實測「無聲/背景雜訊誤得約 65 分」得證，收斂標準做法。
+* 2026-07-06：建立。techItem「發音評分（pronunciation assessment）」型態首份；統一 OpenAI 音訊輸入模型（沿用既有金鑰）。因 solLingoIsland 增量「筆記發音練習」立案而補建；與 [techItem語音合成] TTS 責任區隔。
+* 2026-07-06（修訂）：標準產品收斂為 `gpt-audio` 系列（`gpt-4o-*-audio-preview` 已下架）；並記錄「音訊模型不支援 structured outputs（`response_format`）」之硬限制——改以提示要 JSON＋容錯解析。因 solLingoIsland 增量 #97 實測 `gpt-audio-mini` 得證。
+* 2026-07-06（修訂）：補「無朗讀防呆」——提示須先判定有無真正朗讀，靜音／雜訊／與目標無關一律 0、註明未偵測到朗讀；移除「不因雜訊過度扣分」之寬容。因 solLingoIsland 增量 #99 實測「無聲/背景雜訊誤得約 65 分」得證，收斂標準做法。

@@ -1,0 +1,21 @@
+<Window x:Class="LingoIsland.Present.DictionaryWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:LingoIsland.Present"
+        Title="Dictionary"
+        Icon="pack://application:,,,/assets/app.ico"
+        WindowStyle="SingleBorderWindow" ResizeMode="CanResizeWithGrip"
+        ShowInTaskbar="True" Topmost="True"
+        Background="{StaticResource PinkBg}"
+        Width="600" Height="460" MinWidth="360" MinHeight="260"
+        WindowStartupLocation="CenterScreen">
+  <!-- 獨立字典視窗（v1.0.1，USR 回饋）：查詢結果／查字典改回獨立視窗，避免併入主視窗分頁時
+       「筆記頁檢視單字→整窗跳到 Dictionary 分頁、打斷發音練習」。宿共用 DictionaryPage（文字框查詢＋歷史下拉＋結果檢視）。
+       Topmost 浮於遊戲上、與主視窗共存；關閉（✕／ESC）＝隱藏而非銷毀（保留狀態、可再喚出）；記住位置大小。 -->
+  <Grid>
+    <!-- 浮水印底圖（極淡、不擋點擊） -->
+    <Image Source="pack://application:,,,/assets/icon.png" Opacity="0.10" Stretch="Uniform"
+           IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="20"/>
+    <local:DictionaryPage x:Name="Page"/>
+  </Grid>
+</Window>

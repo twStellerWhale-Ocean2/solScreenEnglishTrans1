@@ -1,0 +1,106 @@
+<Application x:Class="LingoIsland.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Application.Resources>
+    <!-- 共用粉色系（承結果卡片）＋ logo 浮水印，供統一主視窗與各分頁套用（Issue #34） -->
+    <SolidColorBrush x:Key="PinkBg" Color="#FFF0F5"/>
+    <SolidColorBrush x:Key="PinkTint" Color="#FBE4EC"/>
+    <SolidColorBrush x:Key="PinkAccent" Color="#F4C2D0"/>
+    <SolidColorBrush x:Key="PinkText" Color="#6D3A4D"/>
+    <SolidColorBrush x:Key="PinkSub" Color="#8A5A6D"/>
+    <!-- 卡片半透明白（Issue #71→#73→#75：白色 40%，讓底層小女孩浮水印明顯透出） -->
+    <SolidColorBrush x:Key="CardBg" Color="#66FFFFFF"/>
+    <!-- 白色控制項統一半透明白（40%），供輸入框等套用（Issue #73／#75） -->
+    <SolidColorBrush x:Key="ControlWhite" Color="#66FFFFFF"/>
+
+    <!-- 卡片外框（半透明白，讓底層粉底/logo 透出些許） -->
+    <Style x:Key="Card" TargetType="Border">
+      <Setter Property="Background" Value="{StaticResource CardBg}"/>
+      <Setter Property="BorderBrush" Value="{StaticResource PinkAccent}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="CornerRadius" Value="8"/>
+    </Style>
+
+    <!-- 粉色主要按鈕 -->
+    <Style x:Key="PinkButton" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="{StaticResource PinkText}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="8" Background="{StaticResource PinkAccent}" Padding="12,5">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#EFB3C6"/>
+              </Trigger>
+              <Trigger Property="IsEnabled" Value="False">
+                <Setter TargetName="bg" Property="Background" Value="#EFE0E6"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- 白色輸入控制項統一半透明白 40%（Issue #73／#75）：文字/密碼/下拉框底色透出浮水印；深字對比仍足 -->
+    <Style TargetType="TextBox">
+      <Setter Property="Background" Value="{StaticResource ControlWhite}"/>
+    </Style>
+    <Style TargetType="PasswordBox">
+      <Setter Property="Background" Value="{StaticResource ControlWhite}"/>
+    </Style>
+    <Style TargetType="ComboBox">
+      <Setter Property="Background" Value="{StaticResource ControlWhite}"/>
+    </Style>
+
+    <!-- 左右欄分隔拖拉條（Issue #58：各分頁左側欄寬可拖拉調整）：預設細粉條、滑過加深、游標左右箭 -->
+    <Style x:Key="ColSplitter" TargetType="GridSplitter">
+      <Setter Property="Width" Value="6"/>
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="VerticalAlignment" Value="Stretch"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="Cursor" Value="SizeWE"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="GridSplitter">
+            <Border Background="{TemplateBinding Background}">
+              <Border x:Name="grip" Width="2" CornerRadius="1" HorizontalAlignment="Center"
+                      Background="{StaticResource PinkAccent}" Margin="0,8"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="grip" Property="Background" Value="#E38DAA"/>
+                <Setter TargetName="grip" Property="Width" Value="3"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
+    <!-- 次要按鈕（半透明白底粉框；Issue #71 改半透明，讓浮水印透出） -->
+    <Style x:Key="GhostButton" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Foreground" Value="{StaticResource PinkSub}"/>
+      <Setter Property="FontSize" Value="13"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="8" Background="#66FFFFFF"
+                    BorderBrush="{StaticResource PinkAccent}" BorderThickness="1" Padding="12,5">
+              <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="#80FFF0F5"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Application.Resources>
+</Application>

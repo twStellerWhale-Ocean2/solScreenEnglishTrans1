@@ -35,4 +35,4 @@ description: 【候選契約·待家規裁決】技術選型·平台層(techStac
 
 # IV. 備註紀錄
 
-* 2026-07-03：候選草案建立（solScreenEnglishTrans1 增量 #1）。techStack 為封閉家規枚舉，本檔尚未入契約庫正本；待 USR 於增量 #1 Draft PR 裁決核准後，由 USR 或後續作業將本檔轉入 [2tech-incrSet-shared/契約庫] 並通知全 repo 群。
+* 2026-07-03：候選草案建立（solLingoIsland 增量 #1）。techStack 為封閉家規枚舉，本檔尚未入契約庫正本；待 USR 於增量 #1 Draft PR 裁決核准後，由 USR 或後續作業將本檔轉入 [2tech-incrSet-shared/契約庫] 並通知全 repo 群。

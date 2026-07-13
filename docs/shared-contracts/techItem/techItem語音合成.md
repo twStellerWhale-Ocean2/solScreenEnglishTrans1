@@ -22,4 +22,4 @@ description: 技術選型·元件層(techItem) Profile —— 「語音合成（
 
 # IV. 備註紀錄
 
-* 2026-07-03：建立。techItem「語音合成（TTS）」型態首份；統一 Windows 內建語音合成。因 solScreenEnglishTrans1 立案而補建。
+* 2026-07-03：建立。techItem「語音合成（TTS）」型態首份；統一 Windows 內建語音合成。因 solLingoIsland 立案而補建。

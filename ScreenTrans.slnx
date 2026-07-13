@@ -1,8 +1,0 @@
-<Solution>
-  <Folder Name="/sysScreenTrans.Tests/">
-    <Project Path="sysScreenTrans.Tests/ScreenTrans.Tests.csproj" />
-  </Folder>
-  <Folder Name="/sysScreenTrans/">
-    <Project Path="sysScreenTrans/ScreenTrans.csproj" />
-  </Folder>
-</Solution>

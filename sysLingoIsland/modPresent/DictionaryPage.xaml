@@ -1,0 +1,10 @@
+<UserControl x:Class="LingoIsland.Present.DictionaryPage"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:LingoIsland.Present"
+        Background="Transparent">
+  <!-- Dictionary 內容（#135；v1.0.1：查詢輸入列已移入 ResultView，位於頂部工具列下方——USR 回饋「兩列對調」）。
+       本頁為薄殼：僅宿共用 ResultView，並將其 ManualQueryRequested／HistoryRequested／加入筆記等事件轉發給 App。
+       透明底＝透出主視窗粉底與小女孩浮水印，控制項採全域半透明白樣式（#66FFFFFF），與其他分頁一致（USR 回饋）。 -->
+  <local:ResultView x:Name="Result"/>
+</UserControl>

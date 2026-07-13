@@ -4,7 +4,7 @@
 
 ## 範圍
 
-* `AppConfig.Load`（`sysScreenTrans/AppConfig.cs`）讀 `paramQueryTimeoutSec` 時，對 `0` 或負值於**組態讀取邊界**套用安全下限 `15`；合法正值原樣保留。
+* `AppConfig.Load`（`sysLingoIsland/AppConfig.cs`）讀 `paramQueryTimeoutSec` 時，對 `0` 或負值於**組態讀取邊界**套用安全下限 `15`；合法正值原樣保留。
 * 根因：非正值一路傳至 `QueryService.SendOnceAsync` 之 `cts.CancelAfter(TimeSpan.FromSeconds(_timeoutSec))`（`QueryService.cs:96`），`CancelAfter(0/負)` 即刻取消、每次查詢立即逾時、永遠查不到結果。
 * **單點防呆**：驗證集中於組態邊界，`QueryService` 維持信任其建構子輸入、不重複驗證。
 * **檢整校正**：原議題引用之對照「`OpenAiSpeechService` 已對 `timeoutSec <= 0` 退回 20 秒」已過期——`OpenAiSpeechService.cs` 於 #9 移除 OpenAI TTS 時刪除；改以現存之 `QueryService` `maxRetries` clamp（`QueryService.cs:38`）為一致性依據。
@@ -15,12 +15,12 @@
 |---|---|---|
 | 建置 0 錯 | `dotnet build -c Release`（含於 `dotnet test`） | ✅ 0 錯 |
 | 單元測試全過 | `dotnet test` | ✅ **35 passed / 0 failed**（本增量新增 4：非正值 Theory 3＋正值保留 1） |
-| 依賴安全 | `dotnet list package --vulnerable` | ✅ 0 漏洞（ScreenTrans／ScreenTrans.Tests） |
+| 依賴安全 | `dotnet list package --vulnerable` | ✅ 0 漏洞（LingoIsland／LingoIsland.Tests） |
 | 版號已釘選 | 本地 `VERSION` 相對 `origin/main` 進位 | ✅ `0.4.0 → 0.4.1`（fix→patch）、CHANGELOG 同步 |
 | 結構合規 | repoLint／docLint | N/A：本 repo（repoStructVersion 2.0）無 lint 腳本；design.md 依 3.2 骨架局部研改、章節結構未破壞 |
 | HMI 結構合規 | uiLint | N/A：無 React 建置單元 |
 
-**新增／異動單元測試（元件層，`sysScreenTrans.Tests/AppConfigTests`）**：
+**新增／異動單元測試（元件層，`sysLingoIsland.Tests/AppConfigTests`）**：
 
 * `Load_NonPositiveTimeout_AppliesSafeFloor`（Theory：`0`／`-1`／`-30`）：非正值 → `TimeoutSec == 15`。
 * `Load_PositiveTimeout_KeptAsIs`：合法正值 `45` → 原樣保留、不受防呆影響。

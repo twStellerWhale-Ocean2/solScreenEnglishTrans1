@@ -1,0 +1,119 @@
+<Window x:Class="LingoIsland.Present.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="LingoIsland" Width="680" Height="540" MinWidth="560" MinHeight="440"
+        ShowInTaskbar="True" WindowStartupLocation="CenterScreen" ResizeMode="CanResizeWithGrip"
+        Icon="pack://application:,,,/assets/app.ico" Background="{StaticResource PinkBg}">
+  <Window.Resources>
+    <!-- 分頁鈕：圖示在上、文字在下（USR 回饋，Issue #34）；圖示採 Segoe MDL2 Assets 系統字圖（Issue #38） -->
+    <Style x:Key="TabButton" TargetType="RadioButton">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Margin" Value="4,0,0,0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="bg" CornerRadius="9" Background="Transparent" Padding="8,7" Width="78">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                           Foreground="{StaticResource PinkText}" HorizontalAlignment="Center"/>
+                <ContentPresenter HorizontalAlignment="Center" Margin="0,4,0,0"
+                                  TextElement.FontSize="11.5" TextElement.Foreground="#8A5A6D"/>
+              </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="{StaticResource PinkAccent}"/>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="{StaticResource PinkTint}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+    <!-- 動作鈕（非分頁、不入分頁群組）：功能列右端 Result 喚回結果卡（Issue #107）；視覺同 TabButton、無選取態 -->
+    <Style x:Key="ActionButton" TargetType="Button">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="Button">
+            <Border x:Name="bg" CornerRadius="9" Background="Transparent" Padding="8,7" Width="78">
+              <StackPanel HorizontalAlignment="Center">
+                <TextBlock Text="{TemplateBinding Tag}" FontFamily="Segoe MDL2 Assets" FontSize="18"
+                           Foreground="{StaticResource PinkText}" HorizontalAlignment="Center"/>
+                <ContentPresenter HorizontalAlignment="Center" Margin="0,4,0,0"
+                                  TextElement.FontSize="11.5" TextElement.Foreground="#8A5A6D"/>
+              </StackPanel>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="{StaticResource PinkTint}"/>
+              </Trigger>
+              <Trigger Property="IsPressed" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="{StaticResource PinkAccent}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </Window.Resources>
+
+  <Grid>
+    <!-- logo 背景浮水印（Issue #71：提高不透明度、放大，讓小女孩明顯一點；仍不擋操作） -->
+    <Image Source="pack://application:,,,/assets/icon.png" Opacity="0.14" Stretch="Uniform"
+           IsHitTestVisible="False" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="40"/>
+
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+
+      <!-- 功能列分頁（圖示＋文字；標題僅在 OS 標題列、內容區不重複——Issue #38 Windows 慣例） -->
+      <Grid Grid.Row="0">
+        <StackPanel Orientation="Horizontal" Margin="12,10,0,6">
+          <RadioButton x:Name="TabContext" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xEB9F;" Content="Capture"/>
+          <RadioButton x:Name="TabNotes" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE70B;" Content="Notes" IsChecked="True"/>
+          <RadioButton x:Name="TabHistory" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE81C;" Content="History"/>
+          <RadioButton x:Name="TabOptions" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE713;" Content="Options"/>
+          <RadioButton x:Name="TabAbout" Style="{StaticResource TabButton}" GroupName="MainTabs" Tag="&#xE946;" Content="About"/>
+        </StackPanel>
+        <!-- 叫出獨立字典視窗（v1.0.1 恢復）：MDL2 E82D Dictionary 字圖 -->
+        <Button x:Name="ResultBtn" Style="{StaticResource ActionButton}" Tag="&#xE82D;" Content="Dictionary"
+                ToolTip="Open the Dictionary window" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,10,12,6"/>
+        <Border Height="1" Background="{StaticResource PinkAccent}" VerticalAlignment="Bottom"/>
+      </Grid>
+
+      <!-- 內容區 -->
+      <ContentControl x:Name="Host" Grid.Row="1" Margin="0"/>
+
+      <!-- 底部狀態列（Windows 慣例：狀態文字置底——Issue #38） -->
+      <StatusBar Grid.Row="2" Background="{StaticResource PinkTint}" BorderBrush="{StaticResource PinkAccent}" BorderThickness="0,1,0,0">
+        <StatusBarItem>
+          <TextBlock x:Name="KeyStatusText" FontSize="12" Foreground="#2E7D46" Margin="6,0,0,0"/>
+        </StatusBarItem>
+        <Separator Background="{StaticResource PinkAccent}"/>
+        <StatusBarItem>
+          <TextBlock x:Name="HotkeyText" FontSize="12" Foreground="#8A5A6D"/>
+        </StatusBarItem>
+        <Separator x:Name="CountSeparator" Background="{StaticResource PinkAccent}" Visibility="Collapsed"/>
+        <StatusBarItem>
+          <!-- 目前檢視之條目列數（#132）：筆記=目前夾條目數／歷史=目前檢視條目數；非該二分頁隱藏 -->
+          <TextBlock x:Name="CountText" FontSize="12" Foreground="#8A5A6D" Visibility="Collapsed"/>
+        </StatusBarItem>
+        <Separator x:Name="UpdateSeparator" Background="{StaticResource PinkAccent}" Visibility="Collapsed"/>
+        <StatusBarItem>
+          <!-- 更新就緒提示（Issue #51）：新版靜默下載完成才顯示，平時隱藏 -->
+          <TextBlock x:Name="UpdateText" FontSize="12" Foreground="#2F6FED" Visibility="Collapsed"/>
+        </StatusBarItem>
+        <StatusBarItem>
+          <!-- 儲存成功輕量閃示（#125）：數秒後自動隱藏，取代原「Saved.」模態對話框 -->
+          <TextBlock x:Name="SavedFlashText" FontSize="12" FontWeight="SemiBold" Foreground="#2E7D46" Visibility="Collapsed"/>
+        </StatusBarItem>
+      </StatusBar>
+    </Grid>
+  </Grid>
+</Window>

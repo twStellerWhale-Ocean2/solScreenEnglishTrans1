@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/sysLingoIsland.Tests/">
+    <Project Path="sysLingoIsland.Tests/LingoIsland.Tests.csproj" />
+  </Folder>
+  <Folder Name="/sysLingoIsland/">
+    <Project Path="sysLingoIsland/LingoIsland.csproj" />
+  </Folder>
+</Solution>

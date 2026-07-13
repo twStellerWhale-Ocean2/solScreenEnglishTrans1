@@ -22,4 +22,4 @@
 
 ## 自訂設計（不在此，見 design.md 文字）
 
-本案自訂 etyCfg（sysScreenTrans 組態）、runWi（熱鍵喚起框選／辨識翻譯選區／查看聆聽結果）、setWi（安裝金鑰／啟動結束常駐／移除）、datIntf（查詢結果格式）、comIntf（本機桌面操作）皆為本案專屬、不成檔——內容在 design.md 就近文字（invariant／欄位格式／行為步驟）描述。
+本案自訂 etyCfg（sysLingoIsland 組態）、runWi（熱鍵喚起框選／辨識翻譯選區／查看聆聽結果）、setWi（安裝金鑰／啟動結束常駐／移除）、datIntf（查詢結果格式）、comIntf（本機桌面操作）皆為本案專屬、不成檔——內容在 design.md 就近文字（invariant／欄位格式／行為步驟）描述。
