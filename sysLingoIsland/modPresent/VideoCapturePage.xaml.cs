@@ -144,7 +144,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                 _poll.Start();
                 // 「逐句暫停」成功訊息延到 OnPoll 確認實際起播才顯示——避免可嵌入被禁／無效影片時謊報成功。
                 SetStatus(_isAuto
-                    ? $"{_cues.Count} auto-generated caption lines (machine-transcribed, fragmented) — starting playback…"
+                    ? $"{_cues.Count} auto-generated caption lines (machine-transcribed) — starting playback…"
                     : $"{_cues.Count} subtitle lines fetched — starting playback…");
             }
             else
@@ -206,7 +206,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
             {
                 _playbackStarted = true;
                 SetStatus(_isAuto
-                    ? $"{_cues.Count} auto-generated caption lines — machine-transcribed and often fragmented, so a video with proper subtitles works best. Playback pauses at each line."
+                    ? $"{_cues.Count} auto-generated caption lines (machine-transcribed) — playback pauses at each line; tap a word to look it up."
                     : $"{_cues.Count} subtitle lines loaded — playback pauses at each line; tap a word to look it up.");
             }
 

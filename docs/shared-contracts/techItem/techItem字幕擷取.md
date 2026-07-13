@@ -10,7 +10,7 @@ description: 技術選型·元件層(techItem) Profile —— 「線上影片字
 
 # II. 參考準備
 
-* **統一標準產品**：**本機 `yt-dlp`（CLI）**——經 `System.Diagnostics.Process` 啟動、以取字幕相關選項（如 `--write-subs`／`--write-auto-subs`／`--sub-langs en`／`--skip-download`／指定 `--sub-format`）取得目標影片之字幕檔（VTT/SRT），由宿主解析為逐句 cue（文字＋起訖秒）。yt-dlp 為業界廣用、活躍維護之開源工具，支援 YouTube 等多來源。
+* **統一標準產品**：**本機 `yt-dlp`（CLI）**——經 `System.Diagnostics.Process` 啟動、以取字幕相關選項（如 `--write-subs`／`--write-auto-subs`／`--sub-langs en`／`--skip-download`／指定 `--sub-format`）取得目標影片之字幕檔，由宿主解析為逐句 cue（文字＋起訖秒）。**格式擇要**：人工字幕取 **VTT**（乾淨句級）；自動字幕取 **json3**（事件級、乾淨無滾動）——YouTube 自動字幕之 VTT 為逐字滾動渲染（每 cue 重複前一 cue 約半）會破碎，json3 給乾淨事件級文字。yt-dlp 為業界廣用、活躍維護之開源工具，支援 YouTube 等多來源。
 * **替代界線**：可用平台官方字幕 API（受權限/額度限制）替代；一律**僅取字幕文字、不下載影片本體**（不繞過平台、不重散佈）。欲改用官方 API 或內建解析器時於本契約換標準產品一處、design 引用不動（維持「影片識別→逐句 cue」之取得介面邊界）。
 * **能力／成本前置**：`yt-dlp` 須可得（隨附或使用者環境具備；缺失時明確提示）；影片須有可用英文字幕（自動或人工），**無字幕／私人／無效影片／取得逾時／非零離開碼一律明確錯誤並中止該片、不當機**；字幕可用性與平台版面變動、yt-dlp 版本相依為維護風險，須版本釘選＋錯誤降級。字幕文字來源由使用者自負（比照自備金鑰）。
 
@@ -25,3 +25,4 @@ description: 技術選型·元件層(techItem) Profile —— 「線上影片字
 # IV. 備註紀錄
 
 * 2026-07-13：建立。techItem「線上影片字幕擷取」型態首份；統一本機 yt-dlp（Process 呼叫）。因 solLingoIsland 增量 #139「影片擷取學習查詢（Mode A）」立案而補建；與 [techItem影片播放] 責任區隔。**候選契約，待 USR 於 Draft PR 裁決入庫（範本庫正本尚待同步）。**
+* 2026-07-14：**自動字幕改取 json3**（事件級、乾淨無滾動）而非 VTT（逐字滾動渲染破碎）——增量 #143。人工字幕維持 VTT。修正 #139 期間「自動字幕不可用」之誤判（實為 VTT 格式所致）。

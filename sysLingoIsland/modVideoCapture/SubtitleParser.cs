@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace LingoIsland.Video;
@@ -63,6 +64,106 @@ public static class SubtitleParser
         }
         return cues;
     }
+
+    /// <summary>
+    /// 解析 YouTube <c>json3</c> 字幕（[techItem字幕擷取]，spec#2）為逐句 <see cref="SubtitleCue"/>。
+    /// json3 為<b>事件級</b>結構（非 VTT 之逐字滾動渲染），自動字幕改抓此格式即乾淨、無滾動重複：
+    /// 每個 <c>event</c>（含 <c>segs[].utf8</c> 與 <c>tStartMs</c>／<c>dDurationMs</c>）→ 一句 cue。
+    /// 空文字／缺時間之 event 略過；去連續完全重複；malformed／null 回空清單、不擲例外。
+    /// </summary>
+    public static IReadOnlyList<SubtitleCue> ParseJson3(string? content)
+    {
+        var cues = new List<SubtitleCue>();
+        if (string.IsNullOrWhiteSpace(content)) return cues;
+        try
+        {
+            using var doc = JsonDocument.Parse(content);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object
+                || !doc.RootElement.TryGetProperty("events", out var events)
+                || events.ValueKind != JsonValueKind.Array)
+            {
+                return cues;
+            }
+            foreach (var ev in events.EnumerateArray())
+            {
+                if (ev.ValueKind != JsonValueKind.Object
+                    || !ev.TryGetProperty("segs", out var segs) || segs.ValueKind != JsonValueKind.Array
+                    || !ev.TryGetProperty("tStartMs", out var tStart))
+                {
+                    continue;
+                }
+                var startMs = ReadNum(tStart);
+                var durMs = ev.TryGetProperty("dDurationMs", out var d) ? ReadNum(d) : 0;
+
+                var sb = new StringBuilder();
+                foreach (var seg in segs.EnumerateArray())
+                {
+                    if (seg.ValueKind == JsonValueKind.Object
+                        && seg.TryGetProperty("utf8", out var u) && u.ValueKind == JsonValueKind.String)
+                    {
+                        sb.Append(u.GetString());
+                    }
+                }
+                var text = Ws.Replace(sb.ToString(), " ").Trim();
+                if (text.Length == 0) continue;
+
+                var start = startMs / 1000.0;
+                var end = (startMs + durMs) / 1000.0;
+                if (end <= start) end = start + 0.1; // 保底：零長 event 給極短區間，供到句暫停
+
+                if (cues.Count > 0 && cues[^1].Text == text) continue; // 去連續完全重複
+                cues.Add(new SubtitleCue(text, start, end));
+            }
+        }
+        catch (JsonException)
+        {
+            // malformed json3 → 回目前已解析（多半空），不擲例外中斷上層。
+        }
+        return cues;
+    }
+
+    /// <summary>json3 數值欄位可能為 number 或字串化數字，皆容錯讀為 double（毫秒）。</summary>
+    private static double ReadNum(JsonElement e) =>
+        e.ValueKind == JsonValueKind.Number ? e.GetDouble()
+        : double.TryParse(e.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0;
+
+    /// <summary>
+    /// 併合過細之相鄰 cue 為句級（json3 事件級常過碎，如單字「shovel.」「Incoming.」——到句暫停過頻）：
+    /// 累積相鄰 cue，遇下列任一即斷句起新句——目前句已以句末標點（<c>. ? ! …</c>）結束、與下一 cue 時間間隔過大
+    /// （&gt; <paramref name="maxGapSec"/>）、下一 cue 以換說話者標記 <c>&gt;&gt;</c> 起始、或目前句已達字數上限
+    /// （&gt;= <paramref name="maxWords"/>）。保留首 cue 起點、末 cue 訖點。純函式、internal 供單元測試。
+    /// </summary>
+    internal static IReadOnlyList<SubtitleCue> CoalesceCues(
+        IReadOnlyList<SubtitleCue> cues, int maxWords = 14, double maxGapSec = 1.2)
+    {
+        var result = new List<SubtitleCue>();
+        SubtitleCue? cur = null;
+        foreach (var cue in cues)
+        {
+            if (cur is null) { cur = cue; continue; }
+            var gap = cue.StartSec - cur.EndSec;
+            var startsNewSpeaker = cue.Text.StartsWith(">>", StringComparison.Ordinal);
+            if (EndsSentence(cur.Text) || gap > maxGapSec || CountWords(cur.Text) >= maxWords || startsNewSpeaker)
+            {
+                result.Add(cur);
+                cur = cue;
+            }
+            else
+            {
+                cur = cur with { Text = cur.Text + " " + cue.Text, EndSec = cue.EndSec };
+            }
+        }
+        if (cur is not null) result.Add(cur);
+        return result;
+    }
+
+    private static bool EndsSentence(string text)
+    {
+        var t = text.TrimEnd();
+        return t.Length > 0 && t[^1] is '.' or '?' or '!' or '…';
+    }
+
+    private static int CountWords(string text) => text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
 
     private static string Clean(string s)
     {
