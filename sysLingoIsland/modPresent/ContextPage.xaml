@@ -4,7 +4,7 @@
   <Grid>
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>  <!-- 擷取管理 -->
-      <RowDefinition Height="*"/>     <!-- 情境管理（原內容） -->
+      <RowDefinition Height="*"/>     <!-- 主題管理（原內容） -->
     </Grid.RowDefinitions>
 
     <!-- 擷圖管理（#133／v1.0.1 重排）：粗體略大標題；兩種擷圖方式各一行——By button＝手動擷取鈕、By hotkey＝喚起快捷鍵；按鈕統一 GhostButton（不特別搶眼） -->
@@ -36,7 +36,7 @@
       </StackPanel>
     </Border>
 
-    <!-- 情境管理（Issue #36）：整區為一個「Contexts」區塊——標題其下含左命名清單與右編輯區
+    <!-- 主題管理（Issue #36）：整區為一個「Contexts」區塊——標題其下含左命名清單與右編輯區
          （v1.0.1：USR 回饋——Contexts 改為整區區塊標題、以 Card 包住左右兩欄，非僅清單標題） -->
     <Border Grid.Row="1" Style="{StaticResource Card}" Padding="12" Margin="10,6,10,10">
       <Grid>
@@ -44,10 +44,10 @@
           <RowDefinition Height="Auto"/>  <!-- Contexts 區塊標題 -->
           <RowDefinition Height="*"/>      <!-- 左清單 | splitter | 右編輯區 -->
         </Grid.RowDefinitions>
-        <TextBlock Grid.Row="0" Text="Contexts" FontWeight="Bold" FontSize="14"
+        <TextBlock Grid.Row="0" Text="Themes" FontWeight="Bold" FontSize="14"
                    Foreground="{StaticResource PinkText}" Margin="0,0,0,8"/>
 
-        <!-- 左側情境清單欄寬可拖拉調整（Issue #58） -->
+        <!-- 左側主題清單欄寬可拖拉調整（Issue #58） -->
         <Grid Grid.Row="1">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="216" MinWidth="160"/>
@@ -55,13 +55,13 @@
             <ColumnDefinition Width="*" MinWidth="260"/>
           </Grid.ColumnDefinitions>
 
-          <!-- 左：命名情境清單（New Context 於清單上方、統一 GhostButton；區塊標題已上移為整區標題） -->
+          <!-- 左：命名主題清單（New Theme 於清單上方、統一 GhostButton；區塊標題已上移為整區標題） -->
           <Grid Grid.Column="0" Margin="0,0,4,0">
             <Grid.RowDefinitions>
               <RowDefinition Height="Auto"/>
               <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <Button Grid.Row="0" x:Name="AddBtn" Content="＋ New Context" Style="{StaticResource GhostButton}"
+            <Button Grid.Row="0" x:Name="AddBtn" Content="＋ New Theme" Style="{StaticResource GhostButton}"
                     HorizontalAlignment="Left" Margin="0,0,0,6"/>
             <Border Grid.Row="1" Style="{StaticResource Card}">
               <ListBox x:Name="List" BorderThickness="0" Background="Transparent" Margin="4"
@@ -90,7 +90,7 @@
           <TextBlock Grid.Row="0" Text="Name" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
           <TextBox Grid.Row="1" x:Name="NameBox" Padding="6" Margin="0,4,0,10"/>
 
-          <TextBlock Grid.Row="2" Text="Context description (injected as reference for queries)" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Grid.Row="2" Text="Theme description (injected as reference for queries)" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
           <TextBox Grid.Row="3" x:Name="DescBox" Padding="6" Margin="0,4,0,4" TextWrapping="Wrap"
                    AcceptsReturn="True" MinHeight="80" VerticalAlignment="Stretch"
                    VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto"/>
@@ -135,7 +135,7 @@
           </WrapPanel>
         </Grid>
       </ScrollViewer>
-      <TextBlock x:Name="EmptyHint" Text="No contexts yet. Click “+ New Context” to create one; type text, or paste/upload a game screenshot for AI to auto-explain."
+      <TextBlock x:Name="EmptyHint" Text="No themes yet. Click “+ New Theme” to create one; type text, or paste/upload a game screenshot for AI to auto-explain."
                  Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="320"
                  TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
           </Grid>

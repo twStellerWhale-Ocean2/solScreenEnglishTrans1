@@ -34,7 +34,7 @@ public partial class App : System.Windows.Application
     private DictionaryWindow? _dictionaryWindow; // 獨立字典視窗（v1.0.1：取代 #135 併入主視窗之 Dictionary 分頁；修筆記練習被打斷）
     private readonly HistoryStore _historyStore = new();
     private readonly NotesStore _notesStore = new();
-    private readonly ContextStore _contextStore = new();
+    private readonly ThemeStore _themeStore = new();
     private readonly INotificationService _notify = new WinToastNotificationService(); // 發音回饋系統通知（#101）
     private UpdateService? _updates;
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "LingoIsland-error.log");
@@ -103,8 +103,8 @@ public partial class App : System.Windows.Application
         _listenGuard = new HotkeyListenGuard(
             suspend: () => _hotkey?.Unregister(),
             resume: RegisterHotkeyOrWarn);
-        _contextStore.LoadMigrated(_config.Context); // #14 單一情境提示相容遷移為一則命名情境
-        _contextPage = new ContextPage(_contextStore,
+        _themeStore.LoadMigrated(_config.Context); // #14 單一情境提示相容遷移為一則命名情境
+        _contextPage = new ContextPage(_themeStore,
             bytes => new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries).DescribeImageAsync(bytes),
             _config.Hotkey); // 目前喚起快捷鍵初值（#133：#3 設定整塊搬至擷取頁）
         // 喚起快捷鍵設定＋監聽暫停守衛＋手動擷取皆由擷取頁承載（#133：#3 快捷鍵搬遷、#5 手動擷取）
@@ -262,14 +262,14 @@ public partial class App : System.Windows.Application
     /// <summary>查詢主動線：Dictionary 分頁 loading → vision 查詢（依 <c>IsPointMode</c>）→ 結果/錯誤＋歷史留存（#135）。</summary>
     private async Task RunQueryAsync(CaptureResult capture)
     {
-        _dictionaryWindow!.Page.SetNoteTargets(TopFolderNames(), ActiveContextName()); // #55「加入至」下拉來源
+        _dictionaryWindow!.Page.SetNoteTargets(TopFolderNames(), ActiveThemeName()); // #55「加入至」下拉來源
         _dictionaryWindow.Page.ShowLoading();
         _dictionaryWindow.ShowAndActivate(); // 顯示獨立字典視窗（Topmost 疊於無邊框遊戲）
 
         try
         {
             var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries,
-                _contextStore.ActiveText(), _contextStore.ActiveColorRules()); // 配色規則＝使用中情境各色描述（#69）
+                _themeStore.ActiveText(), _themeStore.ActiveColorRules()); // 配色規則＝使用中情境各色描述（#69）
             var result = await query.QueryAsync(capture.PngBytes, capture.IsPointMode); // #54/#86 點選自動判斷
             if (!result.IsEmpty)
             {
@@ -303,7 +303,7 @@ public partial class App : System.Windows.Application
     /// <summary>影片擷取頁點字幕單字（#139，spec#2）：顯示獨立字典視窗 loading，再沿用既有單字查詢主動線（來源改字幕文字）。</summary>
     private void LookupWordFromVideo(string word)
     {
-        _dictionaryWindow?.Page.SetNoteTargets(TopFolderNames(), ActiveContextName());
+        _dictionaryWindow?.Page.SetNoteTargets(TopFolderNames(), ActiveThemeName());
         _dictionaryWindow?.Page.ShowLoading();
         _dictionaryWindow?.ShowAndActivate();
         _ = LookupWordAsync(word);
@@ -407,7 +407,7 @@ public partial class App : System.Windows.Application
         {
             return;
         }
-        _dictionaryWindow!.Page.SetNoteTargets(TopFolderNames(), ActiveContextName());
+        _dictionaryWindow!.Page.SetNoteTargets(TopFolderNames(), ActiveThemeName());
         _dictionaryWindow.Page.ShowLoading();
         _dictionaryWindow.ShowAndActivate();
         try
@@ -435,7 +435,7 @@ public partial class App : System.Windows.Application
     private List<string> TopFolderNames() => _notesStore.LoadEnsured().Folders.Select(f => f.Name).ToList();
 
     /// <summary>使用中情境名（空＝無使用中情境；供「加入至」預設夾解析與標籤，#55）。</summary>
-    private string ActiveContextName() => ContextStore.GetActive(_contextStore.Load())?.Name ?? "";
+    private string ActiveThemeName() => ThemeStore.GetActive(_themeStore.Load())?.Name ?? "";
 
     /// <summary>開啟統一主視窗並切到指定分頁（tray／入口）；結果卡片保留不關（Issue #105 與主視窗共存）。</summary>
     private void OpenMain(MainTab tab)
@@ -467,14 +467,14 @@ public partial class App : System.Windows.Application
         {
             return chosen.Trim();
         }
-        var ctx = ActiveContextName();
+        var ctx = ActiveThemeName();
         return ctx.Length > 0 ? ctx : NotesStore.DefaultFolderName;
     }
 
     /// <summary>「檢視」：於獨立字典視窗顯示三欄詳情（重用共用 ResultView；v1.0.1 改獨立視窗、**不動主視窗當前分頁**——修 #135 筆記練習被打斷）。</summary>
     private void ShowDetail(QueryResult r)
     {
-        _dictionaryWindow!.Page.SetNoteTargets(TopFolderNames(), ActiveContextName());
+        _dictionaryWindow!.Page.SetNoteTargets(TopFolderNames(), ActiveThemeName());
         _dictionaryWindow.Page.ShowResult(r, _speech!);
         _dictionaryWindow.ShowAndActivate();
     }

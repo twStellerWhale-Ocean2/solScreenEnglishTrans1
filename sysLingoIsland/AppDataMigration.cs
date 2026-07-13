@@ -23,16 +23,39 @@ public static class AppDataMigration
             var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             var legacy = Path.Combine(appData, LegacyFolder);
             var current = Path.Combine(appData, CurrentFolder);
-            // 新資料夾已在＝已遷移或已是新版所建；舊資料夾不在＝無可遷移。兩者皆 no-op（含全新安裝）。
-            if (Directory.Exists(current) || !Directory.Exists(legacy))
+            // ① 品牌更名遷移：新資料夾不存在且舊資料夾存在才整棵複製（含全新安裝時 no-op）。
+            if (!Directory.Exists(current) && Directory.Exists(legacy))
             {
-                return;
+                CopyDirectory(legacy, current);
             }
-            CopyDirectory(legacy, current);
+            // ② 情境→主題更名遷移（#146）：於 LingoIsland 夾內非破壞更名 contexts→themes（既有使用者亦需，故不受①之守衛限制）。
+            MigrateContextsToThemes(current);
         }
         catch
         {
             // 遷移失敗不阻斷啟動：各 store 缺檔會退預設、Save 會重建
+        }
+    }
+
+    /// <summary>
+    /// 情境升級為主題（#146）之一次性檔案遷移：於 <c>%APPDATA%\LingoIsland</c> 夾內，<c>themes.json</c> 尚無而
+    /// <c>contexts.json</c> 有 → 複製 <c>contexts.json</c>→<c>themes.json</c>、<c>contexts\</c>→<c>themes\</c>
+    /// （不覆寫、保留舊檔供 Velopack 回滾）。已遷移或全新安裝皆 no-op。
+    /// </summary>
+    private static void MigrateContextsToThemes(string dir)
+    {
+        if (!Directory.Exists(dir)) { return; }
+        var oldJson = Path.Combine(dir, "contexts.json");
+        var newJson = Path.Combine(dir, "themes.json");
+        if (File.Exists(oldJson) && !File.Exists(newJson))
+        {
+            File.Copy(oldJson, newJson, overwrite: false);
+        }
+        var oldImg = Path.Combine(dir, "contexts");
+        var newImg = Path.Combine(dir, "themes");
+        if (Directory.Exists(oldImg) && !Directory.Exists(newImg))
+        {
+            CopyDirectory(oldImg, newImg);
         }
     }
 

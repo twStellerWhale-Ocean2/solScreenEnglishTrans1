@@ -33,7 +33,7 @@ public partial class ResultView : UserControl
 {
     private ISpeechService? _speech;
     private QueryResult? _current; // 目前顯示中的結果（供「加入我的筆記」收藏）
-    private string _activeContextName = ""; // 使用中情境名（供「加入至」預設夾選項標籤與解析，#55）
+    private string _activeThemeName = ""; // 使用中主題名（供「加入至」預設夾選項標籤與解析，#55）
     private string _currentColor = "";      // 目前選定底色 hex（空＝無底色，#55）
     private bool _wiring;                    // 建構下拉/色塊時抑制事件回寫
 
@@ -98,12 +98,12 @@ public partial class ResultView : UserControl
     public void UpdateSpeech(ISpeechService speech) => _speech = speech;
 
     /// <summary>
-    /// 供 App 提供「加入至」下拉之來源（Issue #55）：頂層資料夾名清單＋使用中情境名（空＝無情境）。
+    /// 供 App 提供「加入至」下拉之來源（Issue #55）：頂層資料夾名清單＋使用中主題名（空＝無情境）。
     /// 於顯示結果前呼叫，重建下拉並依 <see cref="NoteDefaults.FolderName"/> 還原選擇。
     /// </summary>
-    public void SetNoteTargets(IEnumerable<string> topFolderNames, string activeContextName)
+    public void SetNoteTargets(IEnumerable<string> topFolderNames, string activeThemeName)
     {
-        _activeContextName = activeContextName ?? "";
+        _activeThemeName = activeThemeName ?? "";
         _folderNames = topFolderNames?.ToList() ?? new List<string>();
         BuildFolderCombo();
     }
@@ -115,8 +115,8 @@ public partial class ResultView : UserControl
         _wiring = true;
         FolderCombo.Items.Clear();
         // 第一項＝依使用中情境/預設夾（映射 NoteDefaults.FolderName＝""）
-        FolderCombo.Items.Add(_activeContextName.Length > 0
-            ? $"(Active context: {_activeContextName})"
+        FolderCombo.Items.Add(_activeThemeName.Length > 0
+            ? $"(Active theme: {_activeThemeName})"
             : "(Default: My Notes)");
         foreach (var n in _folderNames)
         {

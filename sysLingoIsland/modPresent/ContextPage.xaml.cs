@@ -45,10 +45,10 @@ namespace LingoIsland.Present;
 /// </summary>
 public partial class ContextPage : UserControl
 {
-    private readonly ContextStore _store;
+    private readonly ThemeStore _store;
     private readonly Func<byte[], Task<ImageContext>> _describe;
-    private ContextsData _data = new();
-    private ContextItem? _selected;
+    private ThemesData _data = new();
+    private ThemeItem? _selected;
     private byte[]? _pending; // 剛貼上/上傳、尚未儲存之圖片
     private readonly Dictionary<string, TextBox> _colorBoxes = new(); // 各色描述輸入框（Issue #69）
 
@@ -69,7 +69,7 @@ public partial class ContextPage : UserControl
     /// <summary>擷取到新綁定時觸發（#133：#3）；呼叫端據此持久化 <c>Hotkey</c>、重註冊全域熱鍵、更新狀態。</summary>
     public event Action<HotKeyBinding>? HotkeyChanged;
 
-    public ContextPage(ContextStore store, Func<byte[], Task<ImageContext>> describeAsync, string initialHotkey)
+    public ContextPage(ThemeStore store, Func<byte[], Task<ImageContext>> describeAsync, string initialHotkey)
     {
         InitializeComponent();
         _store = store;
@@ -219,7 +219,7 @@ public partial class ContextPage : UserControl
         List.SelectionChanged += OnSelect;
     }
 
-    private StackPanel ItemView(ContextItem it)
+    private StackPanel ItemView(ThemeItem it)
     {
         var sp = new StackPanel { Orientation = Orientation.Horizontal };
         var thumb = new Image { Width = 40, Height = 30, Stretch = System.Windows.Media.Stretch.UniformToFill, Margin = new Thickness(0, 0, 8, 0) };
@@ -243,7 +243,7 @@ public partial class ContextPage : UserControl
     {
         for (int i = 0; i < List.Items.Count; i++)
         {
-            if ((List.Items[i] as ListBoxItem)?.Tag is ContextItem it && it.Id == id)
+            if ((List.Items[i] as ListBoxItem)?.Tag is ThemeItem it && it.Id == id)
             {
                 List.SelectedIndex = i;
                 return;
@@ -254,7 +254,7 @@ public partial class ContextPage : UserControl
 
     private void OnSelect(object? sender, SelectionChangedEventArgs e)
     {
-        _selected = (List.SelectedItem as ListBoxItem)?.Tag as ContextItem;
+        _selected = (List.SelectedItem as ListBoxItem)?.Tag as ThemeItem;
         _pending = null;
         LoadEditor();
     }
@@ -286,7 +286,7 @@ public partial class ContextPage : UserControl
 
     private void OnAdd(object? sender, RoutedEventArgs e)
     {
-        var created = ContextStore.Add(_data, ContextStore.DefaultName);
+        var created = ThemeStore.Add(_data, ThemeStore.DefaultName);
         _store.Save(_data);
         BuildList();
         Editor.Visibility = Visibility.Visible;
@@ -298,8 +298,8 @@ public partial class ContextPage : UserControl
     private void OnSave(object? sender, RoutedEventArgs e)
     {
         if (_selected is null) { return; }
-        ContextStore.Rename(_data, _selected.Id, NameBox.Text);
-        ContextStore.UpdateText(_data, _selected.Id, DescBox.Text);
+        ThemeStore.Rename(_data, _selected.Id, NameBox.Text);
+        ThemeStore.UpdateText(_data, _selected.Id, DescBox.Text);
         if (_pending is not null)
         {
             _selected.Image = _store.WriteImage(_selected.Id, _pending);
@@ -324,7 +324,7 @@ public partial class ContextPage : UserControl
     private void OnSetActive(object? sender, RoutedEventArgs e)
     {
         if (_selected is null) { return; }
-        ContextStore.SetActive(_data, _selected.Id);
+        ThemeStore.SetActive(_data, _selected.Id);
         _store.Save(_data);
         BuildList();
         SelectById(_selected.Id);
@@ -339,7 +339,7 @@ public partial class ContextPage : UserControl
         {
             return;
         }
-        var removed = ContextStore.Remove(_data, _selected.Id);
+        var removed = ThemeStore.Remove(_data, _selected.Id);
         _store.DeleteImage(removed?.Image);
         _store.Save(_data);
         _selected = null;
@@ -401,7 +401,7 @@ public partial class ContextPage : UserControl
             DescBox.Text = string.IsNullOrWhiteSpace(DescBox.Text) ? desc : DescBox.Text.TrimEnd() + "\n" + desc;
             // #53：名稱尚未填（空白或仍為預設佔位）且可辨識出作品名 → 自動填入；已鍵入實際名稱則不覆寫
             var filledName = false;
-            if (ContextStore.ShouldAutoFillName(NameBox.Text) && !string.IsNullOrWhiteSpace(result.Name))
+            if (ThemeStore.ShouldAutoFillName(NameBox.Text) && !string.IsNullOrWhiteSpace(result.Name))
             {
                 NameBox.Text = result.Name.Trim();
                 filledName = true;

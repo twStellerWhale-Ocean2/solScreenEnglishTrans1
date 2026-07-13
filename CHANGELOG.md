@@ -2,6 +2,17 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [2.1.0] - 2026-07-14
+
+「情境」升級為「多媒體主題」——為多媒體學習中樞打底（epic #145 增量 1，#146）。
+
+### 變更
+- **「情境(Context)」更名升級為「主題(Theme)」**：資料模型與儲存（`ContextStore`→`ThemeStore`、`contexts.json`→`themes.json`、`contexts\`→`themes\`）、UI 標籤（Contexts→**Themes**、New Theme、Theme description、Active theme）一併更名。主題為跨媒體（截圖／影片／筆記）歸屬單位（後續增量擴充）。
+
+### 備註
+- **一次性非破壞資料遷移**：首次啟動自動將 `%APPDATA%\LingoIsland\contexts.json`→`themes.json`、`contexts\`→`themes\`（**保留舊檔供 Velopack 回滾**）；既有主題（原情境）自動沿用、不需手動操作。
+- 本增量僅「改名＋遷移＋資料模型」；主表單頁籤重構（①主題管理②螢幕截圖③影片）、截圖管理、影片頁三欄、說話人字幕等見 epic #145 後續增量。
+
 ## [2.0.1] - 2026-07-14
 
 影片自動字幕改用 **json3** 取得——避開 YouTube 自動字幕 VTT 的逐字滾動渲染破碎，卡通等「只有自動字幕」的影片也可乾淨學習（#143）。
