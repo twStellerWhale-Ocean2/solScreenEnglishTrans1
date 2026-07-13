@@ -48,7 +48,17 @@ public static class SubtitleParser
 
             var text = Ws.Replace(sb.ToString(), " ").Trim();
             if (text.Length == 0 || end <= start) continue;
-            if (cues.Count > 0 && cues[^1].Text == text) continue; // 去連續重複（自動字幕滾動）
+            if (cues.Count > 0)
+            {
+                var prev = cues[^1];
+                if (text == prev.Text) continue;                                           // 完全重複
+                if (text.StartsWith(prev.Text, StringComparison.Ordinal))                  // 滾動延伸（後句含前句）→ 以較完整者取代、延長結束時間
+                {
+                    cues[^1] = prev with { Text = text, EndSec = end };
+                    continue;
+                }
+                if (prev.Text.StartsWith(text, StringComparison.Ordinal)) continue;        // 為前句之較短前綴 → 略過
+            }
             cues.Add(new SubtitleCue(text, start, end));
         }
         return cues;

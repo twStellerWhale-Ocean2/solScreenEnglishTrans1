@@ -75,6 +75,22 @@ public class SubtitleParserTests
     }
 
     [Fact]
+    public void Parse_CollapsesRollingCaptions_KeepsFullestLine()
+    {
+        // YouTube 自動字幕逐字滾動：後句延伸前句 → 收斂為最完整那句（起始保留、結束延長）；換句才另起
+        var vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nthe pups are\n\n"
+                + "00:00:02.000 --> 00:00:03.000\nthe pups are ready\n\n"
+                + "00:00:03.000 --> 00:00:04.000\nthe pups are ready to help\n\n"
+                + "00:00:05.000 --> 00:00:06.000\nlet's roll\n";
+        var cues = SubtitleParser.Parse(vtt);
+        Assert.Equal(2, cues.Count);
+        Assert.Equal("the pups are ready to help", cues[0].Text);
+        Assert.Equal(1.0, cues[0].StartSec, 3);
+        Assert.Equal(4.0, cues[0].EndSec, 3);
+        Assert.Equal("let's roll", cues[1].Text);
+    }
+
+    [Fact]
     public void Parse_ZeroLengthOrReversedCue_Skipped()
     {
         var vtt = "WEBVTT\n\n00:00:02.000 --> 00:00:02.000\nzero\n\n00:00:05.000 --> 00:00:03.000\nreversed\n";

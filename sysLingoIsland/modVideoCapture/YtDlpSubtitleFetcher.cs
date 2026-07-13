@@ -39,7 +39,12 @@ public sealed class YtDlpSubtitleFetcher : ISubtitleFetcher
 
             var (exit, stderr) = await RunAsync(args, ct);
 
-            var vtt = Directory.EnumerateFiles(dir, "*.vtt").FirstOrDefault();
+            // 優先取人工英文字幕（乾淨句級）；退取非自動變體；最後任一——自動字幕（en-orig/auto）為逐字滾動、句數暴增且到句暫停體驗差。
+            var vtts = Directory.EnumerateFiles(dir, "*.vtt").ToList();
+            var vtt = vtts.FirstOrDefault(f => f.EndsWith(".en.vtt", StringComparison.OrdinalIgnoreCase))
+                   ?? vtts.FirstOrDefault(f => f.IndexOf("orig", StringComparison.OrdinalIgnoreCase) < 0
+                                            && f.IndexOf("auto", StringComparison.OrdinalIgnoreCase) < 0)
+                   ?? vtts.FirstOrDefault();
             if (vtt is null)
             {
                 if (exit != 0)
