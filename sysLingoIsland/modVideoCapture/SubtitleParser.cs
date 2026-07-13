@@ -127,6 +127,44 @@ public static class SubtitleParser
         e.ValueKind == JsonValueKind.Number ? e.GetDouble()
         : double.TryParse(e.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? v : 0;
 
+    /// <summary>
+    /// 併合過細之相鄰 cue 為句級（json3 事件級常過碎，如單字「shovel.」「Incoming.」——到句暫停過頻）：
+    /// 累積相鄰 cue，遇下列任一即斷句起新句——目前句已以句末標點（<c>. ? ! …</c>）結束、與下一 cue 時間間隔過大
+    /// （&gt; <paramref name="maxGapSec"/>）、下一 cue 以換說話者標記 <c>&gt;&gt;</c> 起始、或目前句已達字數上限
+    /// （&gt;= <paramref name="maxWords"/>）。保留首 cue 起點、末 cue 訖點。純函式、internal 供單元測試。
+    /// </summary>
+    internal static IReadOnlyList<SubtitleCue> CoalesceCues(
+        IReadOnlyList<SubtitleCue> cues, int maxWords = 14, double maxGapSec = 1.2)
+    {
+        var result = new List<SubtitleCue>();
+        SubtitleCue? cur = null;
+        foreach (var cue in cues)
+        {
+            if (cur is null) { cur = cue; continue; }
+            var gap = cue.StartSec - cur.EndSec;
+            var startsNewSpeaker = cue.Text.StartsWith(">>", StringComparison.Ordinal);
+            if (EndsSentence(cur.Text) || gap > maxGapSec || CountWords(cur.Text) >= maxWords || startsNewSpeaker)
+            {
+                result.Add(cur);
+                cur = cue;
+            }
+            else
+            {
+                cur = cur with { Text = cur.Text + " " + cue.Text, EndSec = cue.EndSec };
+            }
+        }
+        if (cur is not null) result.Add(cur);
+        return result;
+    }
+
+    private static bool EndsSentence(string text)
+    {
+        var t = text.TrimEnd();
+        return t.Length > 0 && t[^1] is '.' or '?' or '!' or '…';
+    }
+
+    private static int CountWords(string text) => text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+
     private static string Clean(string s)
     {
         s = Tag.Replace(s, "");

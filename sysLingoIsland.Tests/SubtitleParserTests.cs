@@ -191,4 +191,58 @@ public class SubtitleParserTests
         Assert.Empty(SubtitleParser.ParseJson3("{\"nope\":1}")); // 無 events
         Assert.Empty(SubtitleParser.ParseJson3("[1,2,3]"));      // 非物件根
     }
+
+    // ── CoalesceCues：json3 過細 cue 併為句級（#143）──
+
+    private static SubtitleCue C(string text, double start, double end) => new(text, start, end);
+
+    [Fact]
+    public void CoalesceCues_MergesShortUntilSentenceEnd()
+    {
+        var cues = new[] { C("the storm blew", 1.0, 2.0), C("over almost all", 2.0, 3.0),
+                           C("the bins.", 3.0, 4.0), C("Ready?", 4.0, 5.0) };
+        var r = SubtitleParser.CoalesceCues(cues);
+        Assert.Equal(2, r.Count);
+        Assert.Equal("the storm blew over almost all the bins.", r[0].Text);
+        Assert.Equal(1.0, r[0].StartSec, 3);
+        Assert.Equal(4.0, r[0].EndSec, 3); // 保留末 cue 訖點
+        Assert.Equal("Ready?", r[1].Text);
+    }
+
+    [Fact]
+    public void CoalesceCues_BreaksOnTimeGap()
+    {
+        var r = SubtitleParser.CoalesceCues(new[] { C("hello there", 1.0, 2.0), C("friend", 5.0, 6.0) }); // gap 3.0 > 1.2
+        Assert.Equal(2, r.Count);
+        Assert.Equal("hello there", r[0].Text);
+        Assert.Equal("friend", r[1].Text);
+    }
+
+    [Fact]
+    public void CoalesceCues_BreaksBeforeNewSpeaker()
+    {
+        var r = SubtitleParser.CoalesceCues(new[] { C("I want to win", 1.0, 2.0), C(">> You have to beat me", 2.0, 3.0) });
+        Assert.Equal(2, r.Count);
+        Assert.Equal("I want to win", r[0].Text);
+        Assert.StartsWith(">>", r[1].Text);
+    }
+
+    [Fact]
+    public void CoalesceCues_BreaksAtMaxWords()
+    {
+        var cues = new[] { C("one two three four five", 0, 1), C("six seven eight nine ten", 1, 2),
+                           C("eleven twelve thirteen fourteen", 2, 3), C("more", 3, 4) };
+        var r = SubtitleParser.CoalesceCues(cues, maxWords: 14);
+        Assert.Equal(2, r.Count); // 5+5+4=14 達上限 → "more" 另起
+        Assert.Equal("more", r[1].Text);
+    }
+
+    [Fact]
+    public void CoalesceCues_EmptyAndSingle()
+    {
+        Assert.Empty(SubtitleParser.CoalesceCues(System.Array.Empty<SubtitleCue>()));
+        var one = SubtitleParser.CoalesceCues(new[] { C("solo", 1, 2) });
+        Assert.Single(one);
+        Assert.Equal("solo", one[0].Text);
+    }
 }
