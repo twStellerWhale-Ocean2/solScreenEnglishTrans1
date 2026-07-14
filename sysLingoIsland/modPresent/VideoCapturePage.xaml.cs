@@ -21,6 +21,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private readonly ISubtitleFetcher _fetcher;
     private readonly VideoStore _videoStore;                       // 影片清單持久化（epic #145 增量4）
     private readonly Func<(string? Id, string? Name)> _activeTheme; // 加入影片時記錄使用中主題（跨媒體歸屬）
+    private readonly ISpeakerEnricher _enricher;                   // 說話人來源疊加（epic #145 增量6：AI 推斷；會用到 API、按鈕觸發）
     private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private readonly DispatcherTimer _poll;
     private IReadOnlyList<SubtitleCue> _cues = new List<SubtitleCue>();
@@ -34,6 +35,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private bool _isAuto;              // 目前字幕為自動生成（逐字滾動、較破碎）——供狀態提示
     private bool _loading;             // 抓字幕中（LoadBtn 兼作 Cancel）
     private CancellationTokenSource? _loadCts; // 抓字幕可取消（新 Load／取消鈕）
+    private CancellationTokenSource? _inferCts; // AI 說話人推斷可取消（新 Load／新推斷取代，增量6）
 
     // 說話人字幕（epic #145 增量5）：CueList 綁 CueRow view-model（保留原始 _cues index，篩選/顯示不動播放 index）
     private List<CueRow> _rows = new();
@@ -42,6 +44,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private bool _filterNoSpeaker;     // true＝僅顯示未標示說話人之句
     private bool _refreshingCues;      // 重建/篩選/程式化選取期間，抑制 SelectionChanged→跳播
     private bool _yamlEditing;         // 整檔 YAML 編修模式中
+    private bool _inferring;           // AI 說話人推斷中（防重入、按鈕停用）（增量6）
+    private string? _currentTitle;     // 目前影片標題（起播後取得，供 AI 推斷輔助判斷角色）（增量6）
     private const string AllSpeakers = "All speakers";
     private const string NoSpeaker = "(no speaker)";
 
@@ -53,12 +57,14 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     /// <summary>加入我的筆記（目前句原文；App 重譯後入既有 NotesStore）。</summary>
     public event Action<string>? AddToNotesRequested;
 
-    public VideoCapturePage(ISubtitleFetcher fetcher, VideoStore videoStore, Func<(string? Id, string? Name)> activeTheme)
+    public VideoCapturePage(ISubtitleFetcher fetcher, VideoStore videoStore, Func<(string? Id, string? Name)> activeTheme,
+                            ISpeakerEnricher enricher)
     {
         InitializeComponent();
         _fetcher = fetcher;
         _videoStore = videoStore;
         _activeTheme = activeTheme;
+        _enricher = enricher;
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _poll.Tick += OnPoll;
 
@@ -69,8 +75,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         NextBtn.Click += (_, _) => _ = SkipNextAsync();
         AddNoteBtn.Click += (_, _) => AddCurrent();
         CueList.SelectionChanged += (_, _) => _ = JumpToSelectedAsync();
-        // 說話人篩選＋整檔 YAML 編修（epic #145 增量5）
+        // 說話人篩選＋來源疊加＋整檔 YAML 編修（epic #145 增量5／6）
         SpeakerFilter.SelectionChanged += (_, _) => ApplySpeakerFilter();
+        InferSpeakersBtn.Click += (_, _) => _ = InferSpeakersAsync();
         EditYamlBtn.Click += (_, _) => EnterYamlEdit();
         ApplyYamlBtn.Click += (_, _) => _ = ApplyYamlEditAsync();
         CancelYamlBtn.Click += (_, _) => CancelYamlEdit();
@@ -152,6 +159,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private async Task LoadVideoAsync(string id, bool addToStore)
     {
         _loadCts?.Cancel();
+        _inferCts?.Cancel(); // 增量6：載入新片取消進行中的 AI 說話人推斷（免浪費 API、免過時結果跑到逾時）
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
 
@@ -159,6 +167,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         SetStatus("Fetching subtitles…");
         _guiding = false; _poll.Stop();
         _lastPausedIndex = -1; _shownCue = -1; _playbackStarted = false;
+        _currentTitle = null; // 增量6：新片重置標題（起播後自播放器重新取得）
         ClearCues();
         SubtitleBand.Inlines.Clear();
         SetControls(false);
@@ -282,6 +291,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             var title = JsonSerializer.Deserialize<string>(raw) ?? "";
             if (!string.IsNullOrWhiteSpace(title))
             {
+                _currentTitle = title;                 // 增量6：供 AI 說話人推斷輔助判斷角色
                 _videoStore.UpdateTitle(_currentVideoItemId, title);
                 RefreshVideoList();
             }
@@ -468,6 +478,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         PopulateSpeakerFilter();
         var has = _cues.Count > 0;
         SpeakerFilter.IsEnabled = has;
+        InferSpeakersBtn.IsEnabled = has;
         EditYamlBtn.IsEnabled = has;
     }
 
@@ -484,6 +495,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         _refreshingCues = false;
         _speakerFilter = null; _filterNoSpeaker = false;
         SpeakerFilter.IsEnabled = false;
+        InferSpeakersBtn.IsEnabled = false;
         EditYamlBtn.IsEnabled = false;
     }
 
@@ -526,6 +538,47 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         return string.Equals(row.Cue.Speaker, _speakerFilter, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// AI 說話人疊加（epic #145 增量6，#156）：以 <see cref="ISpeakerEnricher"/> 依台詞逐句推斷說話人、非破壞併回
+    /// （僅填補未標示、保留既有 ground truth）。**會用到 API、故按鈕觸發**。推斷期間停用按鈕、播放持續（僅補說話人、
+    /// 文字/時間/播放 index 不變，保留當前句與到句暫停進度）；期間若載入新片／套用 YAML 使字幕換手則丟棄結果（stale guard）。
+    /// </summary>
+    private async Task InferSpeakersAsync()
+    {
+        if (_cues.Count == 0 || _yamlEditing || _inferring || _loading) return;
+        _inferCts?.Cancel();
+        _inferCts = new CancellationTokenSource();
+        var ct = _inferCts.Token;
+        _inferring = true;
+        InferSpeakersBtn.IsEnabled = false;
+        EditYamlBtn.IsEnabled = false;
+        SetStatus("Inferring speakers from the dialogue with AI…");
+        var target = _cues; // stale guard 基準
+        try
+        {
+            var speakers = await _enricher.InferSpeakersAsync(target, _currentTitle, ct);
+            if (ct.IsCancellationRequested || !ReferenceEquals(_cues, target)) return; // 被取代／已換片／套用 YAML → 丟棄過時結果
+            var merged = SpeakerInference.MergeSpeakers(target, speakers);
+            var filled = SpeakerInference.CountNewlyLabeled(target, merged);
+            var keepShown = _shownCue;       // index 不變（僅補說話人）→ 保留當前句
+            SetCues(merged);
+            if (keepShown >= 0 && keepShown < _rows.Count) ShowCue(keepShown); // 重繪字幕帶（含新說話人前綴）
+            SetStatus(filled > 0
+                ? $"AI labeled {filled} more line(s) with a speaker (inference from dialogue, not ground truth)."
+                : "AI couldn't confidently add any new speaker labels for this subtitle.");
+        }
+        catch (SpeakerEnrichException ex) { SetStatus(ex.Message); }
+        catch (OperationCanceledException) { /* 被新載入／新推斷取代 → 靜默，狀態由後續操作接手 */ }
+        catch (Exception ex) { SetStatus("Speaker inference failed: " + ex.Message); }
+        finally
+        {
+            _inferring = false;
+            var enable = _cues.Count > 0 && !_yamlEditing && !_loading; // 載入中不啟用（避免併發載入時短暫可按但無效）
+            InferSpeakersBtn.IsEnabled = enable;
+            EditYamlBtn.IsEnabled = enable;
+        }
+    }
+
     /// <summary>進入整檔 YAML 編修：序列化目前字幕入編輯框、停導引＋暫停播放、切換清單→編輯面板。</summary>
     private void EnterYamlEdit()
     {
@@ -537,6 +590,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         CueList.Visibility = System.Windows.Visibility.Collapsed;
         YamlEditor.Visibility = System.Windows.Visibility.Visible;
         SpeakerFilter.IsEnabled = false;
+        InferSpeakersBtn.IsEnabled = false;
         EditYamlBtn.IsEnabled = false;
         SetStatus("Editing subtitle as YAML — merge/split lines and set speakers, then Apply.");
     }
@@ -569,6 +623,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         ExitYamlEditUi();
         var has = _cues.Count > 0;
         SpeakerFilter.IsEnabled = has;
+        InferSpeakersBtn.IsEnabled = has;
         EditYamlBtn.IsEnabled = has;
         if (_webReady && IsVisible && has) { _guiding = true; _poll.Start(); }
     }

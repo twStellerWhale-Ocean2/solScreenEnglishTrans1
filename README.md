@@ -106,7 +106,21 @@
 
 ![Edit YAML＝把整份字幕攤成 YAML 一次編修（speaker/start/end/text，未標示句留空白 speaker 供填寫），Apply 解析回清單、Cancel 放棄](docs/manual-assets/video-yaml-edit.png)
 
-> **說話人來源（本版）**：僅取自人工字幕內含的 `<v 名字>` 語音標記，或你在 YAML 編修時**手動標註**——皆為確定來源、非推斷。以 AI 推斷／參考網路資料**自動補全**說話人為後續版本；「指定某說話人才暫停」亦為後續版本。
+> **說話人來源（本版）**：僅取自人工字幕內含的 `<v 名字>` 語音標記，或你在 YAML 編修時**手動標註**——皆為確定來源、非推斷。以 **AI 推斷**自動補全說話人見下節（v2.6.0）；參考網路資料（wiki）為後續版本；「指定某說話人才暫停」亦為後續版本。
+
+### AI 說話人推斷疊加（v2.6.0）
+
+人工／YAML 是「確定來源」；這一版加上**第一個推斷來源**——按一顆按鈕，讓 AI 依台詞替沒有標示說話人的句子補上「大概是誰說的」：
+
+- 影片頁右側「**AI speakers**」按鈕（會用到你的 OpenAI 金鑰，故手動觸發、非自動）。
+- **非破壞疊加**：只補**未標示**的句子；人工字幕原本就有的說話人（VTT `<v>` ground truth）一律保留，AI 判斷不出的句子（如背景音）維持空白。
+- 這是**根據台詞文字＋常識的推斷、不是看畫面**——狀態列明白標示「inference from dialogue, not ground truth」；不準的地方可再用整檔 YAML 編修手動修正。
+
+![疊加前：多數句未標示，僅第一句有人工字幕的 Ryder；右上「AI speakers」按鈕](docs/manual-assets/video-ai-before.png)
+
+![按 AI speakers 後：未標示句補上推斷說話人（Rubble／Rocky／Zuma／Skye…），第一句既有 Ryder 保留、背景音維持未標示；狀態列標示為推斷非 ground truth](docs/manual-assets/video-ai-after.png)
+
+> 之後版本再加**第二顆來源按鈕**（參考 PAW Patrol Wiki 等網路台詞、同一套疊加架構）與「指定某說話人才暫停」。
 
 ## 發音練習畫面（v0.31.0）
 
