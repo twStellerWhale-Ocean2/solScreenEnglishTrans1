@@ -10,7 +10,7 @@ namespace LingoIsland.Tests;
 /// </summary>
 public class SpeakerInferenceTests
 {
-    private static SubtitleCue C(string text, string? speaker = null) => new(text, 0, 1, speaker);
+    private static SubtitleCue C(string text, string? speaker = null) => new(text, 0, speaker);
 
     /// <summary>把逐句說話人內容包成 OpenAI chat/completions 回應形狀。</summary>
     private static string Api(string innerContent) =>

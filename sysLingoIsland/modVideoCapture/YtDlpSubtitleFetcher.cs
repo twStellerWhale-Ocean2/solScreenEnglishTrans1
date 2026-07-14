@@ -63,7 +63,7 @@ public sealed class YtDlpSubtitleFetcher : ISubtitleFetcher
             }
 
             // json3 事件級常過碎（單字 cue）→ 併為句級，讓到句暫停節奏順暢。
-            var autoCues = SubtitleParser.CoalesceCues(SubtitleParser.ParseJson3(await File.ReadAllTextAsync(auto, ct)));
+            var autoCues = SubtitleParser.CoalesceCues(SubtitleParser.ParseJson3Timed(await File.ReadAllTextAsync(auto, ct)));
             if (autoCues.Count == 0)
             {
                 throw new SubtitleException("Subtitles were found but contained no readable lines.");

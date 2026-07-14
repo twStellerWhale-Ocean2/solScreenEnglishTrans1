@@ -626,8 +626,8 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         SetCues(parsed);
 
         var t = await CurrentTimeAsync();               // 對齊目前播放時間，續從當前位置（不跳回開頭）
-        _lastPausedIndex = LastCueEndedBy(t, parsed);
-        var at = PauseDecider.CueAt(t, parsed);
+        var at = PauseDecider.CueAt(t, parsed);         // start-only：當前句＝起點<=t 之最後一句
+        _lastPausedIndex = Math.Max(-1, at - 1);        // 下一次暫停自當前句起（暫停點＝下一句起點或本句起點＋上限）
         if (at >= 0) ShowCue(at); else { _shownCue = -1; SubtitleBand.Inlines.Clear(); }
         _guiding = _webReady;
         if (_webReady && IsVisible) _poll.Start();
@@ -663,17 +663,6 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
             return double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var t) && t > 0 ? t : 0;
         }
         catch { return 0; }
-    }
-
-    /// <summary>回 <paramref name="sec"/> 前（含）最後一個已播畢 cue 之 index（供 YAML 編修後對齊暫停進度），無則 -1。cues 依起點遞增。</summary>
-    private static int LastCueEndedBy(double sec, IReadOnlyList<SubtitleCue> cues)
-    {
-        var idx = -1;
-        for (var i = 0; i < cues.Count; i++)
-        {
-            if (cues[i].EndSec <= sec) idx = i; else break;
-        }
-        return idx;
     }
 
     /// <summary>右側字幕清單一列 view-model：保留原始 cue 於 <see cref="Index"/>（篩選/顯示不動播放 index）；<see cref="Display"/> 說話人前置。</summary>

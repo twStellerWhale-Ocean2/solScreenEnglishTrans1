@@ -4,13 +4,13 @@ using Xunit;
 namespace LingoIsland.Tests;
 
 /// <summary>
-/// [modVideoCapture模組] 字幕解析（SubtitleParser，spec#2）：VTT／SRT→逐句 cue、時間解析、
-/// 標籤/實體剝除、多行併行、去連續重複、空輸入降級。
+/// [modVideoCapture模組] 字幕解析（SubtitleParser，spec#2；start-only #158）：VTT／SRT→逐句 start-only cue、
+/// 時間解析、標籤/實體剝除、多行併行、去連續重複、空輸入降級；json3→TimedCue（內部含 end）→ 併句為 start-only。
 /// </summary>
 public class SubtitleParserTests
 {
     [Fact]
-    public void Parse_Vtt_ReturnsCuesWithTimes()
+    public void Parse_Vtt_ReturnsCuesWithStart()
     {
         var vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nOnce upon a time\n\n"
                 + "00:00:04.500 --> 00:00:07.000\nYou must venture beyond\n";
@@ -18,7 +18,6 @@ public class SubtitleParserTests
         Assert.Equal(2, cues.Count);
         Assert.Equal("Once upon a time", cues[0].Text);
         Assert.Equal(1.0, cues[0].StartSec, 3);
-        Assert.Equal(4.0, cues[0].EndSec, 3);
         Assert.Equal("You must venture beyond", cues[1].Text);
         Assert.Equal(4.5, cues[1].StartSec, 3);
     }
@@ -59,7 +58,6 @@ public class SubtitleParserTests
         var cues = SubtitleParser.Parse(vtt);
         Assert.Single(cues);
         Assert.Equal(3723.0, cues[0].StartSec, 3); // 1h 2m 3s
-        Assert.Equal(3725.0, cues[0].EndSec, 3);
     }
 
     [Fact]
@@ -77,7 +75,7 @@ public class SubtitleParserTests
     [Fact]
     public void Parse_CollapsesRollingCaptions_KeepsFullestLine()
     {
-        // YouTube 自動字幕逐字滾動：後句延伸前句 → 收斂為最完整那句（起始保留、結束延長）；換句才另起
+        // YouTube 自動字幕逐字滾動：後句延伸前句 → 收斂為最完整那句（起始保留）；換句才另起
         var vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nthe pups are\n\n"
                 + "00:00:02.000 --> 00:00:03.000\nthe pups are ready\n\n"
                 + "00:00:03.000 --> 00:00:04.000\nthe pups are ready to help\n\n"
@@ -85,8 +83,7 @@ public class SubtitleParserTests
         var cues = SubtitleParser.Parse(vtt);
         Assert.Equal(2, cues.Count);
         Assert.Equal("the pups are ready to help", cues[0].Text);
-        Assert.Equal(1.0, cues[0].StartSec, 3);
-        Assert.Equal(4.0, cues[0].EndSec, 3);
+        Assert.Equal(1.0, cues[0].StartSec, 3); // 起點保留
         Assert.Equal("let's roll", cues[1].Text);
     }
 
@@ -112,10 +109,10 @@ public class SubtitleParserTests
         Assert.Equal(63.5, SubtitleParser.ParseTime("00:01:03,500"), 3); // HH:MM:SS,mmm
     }
 
-    // ── json3（自動字幕改用之乾淨事件級格式，spec#2）──
+    // ── json3（自動字幕改用之乾淨事件級格式，spec#2）→ TimedCue（內部含 end 供併句）──
 
     [Fact]
-    public void ParseJson3_EventsToCues_ConcatSegsAndTimes()
+    public void ParseJson3Timed_EventsToCues_ConcatSegsAndTimes()
     {
         var json = """
         {"events":[
@@ -123,7 +120,7 @@ public class SubtitleParserTests
           {"tStartMs":3500,"dDurationMs":1500,"segs":[{"utf8":"Goodbye"}]}
         ]}
         """;
-        var cues = SubtitleParser.ParseJson3(json);
+        var cues = SubtitleParser.ParseJson3Timed(json);
         Assert.Equal(2, cues.Count);
         Assert.Equal("Hello world", cues[0].Text);
         Assert.Equal(1.2, cues[0].StartSec, 3);
@@ -134,7 +131,7 @@ public class SubtitleParserTests
     }
 
     [Fact]
-    public void ParseJson3_SkipsEmptyTextAndSegless()
+    public void ParseJson3Timed_SkipsEmptyTextAndSegless()
     {
         var json = """
         {"events":[
@@ -143,13 +140,13 @@ public class SubtitleParserTests
           {"tStartMs":2000,"dDurationMs":1000,"segs":[]}
         ]}
         """;
-        var cues = SubtitleParser.ParseJson3(json);
+        var cues = SubtitleParser.ParseJson3Timed(json);
         Assert.Single(cues);
         Assert.Equal("real", cues[0].Text);
     }
 
     [Fact]
-    public void ParseJson3_DropsConsecutiveDuplicates()
+    public void ParseJson3Timed_DropsConsecutiveDuplicates()
     {
         var json = """
         {"events":[
@@ -158,43 +155,43 @@ public class SubtitleParserTests
           {"tStartMs":2000,"dDurationMs":1000,"segs":[{"utf8":"next"}]}
         ]}
         """;
-        var cues = SubtitleParser.ParseJson3(json);
+        var cues = SubtitleParser.ParseJson3Timed(json);
         Assert.Equal(2, cues.Count);
         Assert.Equal("same", cues[0].Text);
         Assert.Equal("next", cues[1].Text);
     }
 
     [Fact]
-    public void ParseJson3_ToleratesStringNumericFields()
+    public void ParseJson3Timed_ToleratesStringNumericFields()
     {
         var json = """{"events":[{"tStartMs":"2500","dDurationMs":"1500","segs":[{"utf8":"x"}]}]}""";
-        var cues = SubtitleParser.ParseJson3(json);
+        var cues = SubtitleParser.ParseJson3Timed(json);
         Assert.Single(cues);
         Assert.Equal(2.5, cues[0].StartSec, 3);
         Assert.Equal(4.0, cues[0].EndSec, 3);
     }
 
     [Fact]
-    public void ParseJson3_ZeroDuration_GivesShortNonZeroSpan()
+    public void ParseJson3Timed_ZeroDuration_GivesShortNonZeroSpan()
     {
-        var cues = SubtitleParser.ParseJson3("""{"events":[{"tStartMs":5000,"dDurationMs":0,"segs":[{"utf8":"blip"}]}]}""");
+        var cues = SubtitleParser.ParseJson3Timed("""{"events":[{"tStartMs":5000,"dDurationMs":0,"segs":[{"utf8":"blip"}]}]}""");
         Assert.Single(cues);
         Assert.True(cues[0].EndSec > cues[0].StartSec);
     }
 
     [Fact]
-    public void ParseJson3_NullEmptyOrMalformed_ReturnsEmpty()
+    public void ParseJson3Timed_NullEmptyOrMalformed_ReturnsEmpty()
     {
-        Assert.Empty(SubtitleParser.ParseJson3(null));
-        Assert.Empty(SubtitleParser.ParseJson3(""));
-        Assert.Empty(SubtitleParser.ParseJson3("not json"));
-        Assert.Empty(SubtitleParser.ParseJson3("{\"nope\":1}")); // 無 events
-        Assert.Empty(SubtitleParser.ParseJson3("[1,2,3]"));      // 非物件根
+        Assert.Empty(SubtitleParser.ParseJson3Timed(null));
+        Assert.Empty(SubtitleParser.ParseJson3Timed(""));
+        Assert.Empty(SubtitleParser.ParseJson3Timed("not json"));
+        Assert.Empty(SubtitleParser.ParseJson3Timed("{\"nope\":1}")); // 無 events
+        Assert.Empty(SubtitleParser.ParseJson3Timed("[1,2,3]"));      // 非物件根
     }
 
-    // ── CoalesceCues：json3 過細 cue 併為句級（#143）──
+    // ── CoalesceCues：json3 過細 TimedCue 併為句級（#143）→ 輸出 start-only SubtitleCue（#158）──
 
-    private static SubtitleCue C(string text, double start, double end, string? speaker = null) => new(text, start, end, speaker);
+    private static TimedCue C(string text, double start, double end, string? speaker = null) => new(text, start, end, speaker);
 
     [Fact]
     public void CoalesceCues_MergesShortUntilSentenceEnd()
@@ -204,8 +201,7 @@ public class SubtitleParserTests
         var r = SubtitleParser.CoalesceCues(cues);
         Assert.Equal(2, r.Count);
         Assert.Equal("the storm blew over almost all the bins.", r[0].Text);
-        Assert.Equal(1.0, r[0].StartSec, 3);
-        Assert.Equal(4.0, r[0].EndSec, 3); // 保留末 cue 訖點
+        Assert.Equal(1.0, r[0].StartSec, 3); // 保留首 cue 起點（start-only：無 end）
         Assert.Equal("Ready?", r[1].Text);
     }
 
@@ -240,7 +236,7 @@ public class SubtitleParserTests
     [Fact]
     public void CoalesceCues_EmptyAndSingle()
     {
-        Assert.Empty(SubtitleParser.CoalesceCues(System.Array.Empty<SubtitleCue>()));
+        Assert.Empty(SubtitleParser.CoalesceCues(System.Array.Empty<TimedCue>()));
         var one = SubtitleParser.CoalesceCues(new[] { C("solo", 1, 2) });
         Assert.Single(one);
         Assert.Equal("solo", one[0].Text);

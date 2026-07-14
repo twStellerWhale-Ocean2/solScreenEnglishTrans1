@@ -56,32 +56,33 @@ public static class SubtitleParser
             }
 
             var text = Ws.Replace(sb.ToString(), " ").Trim();
-            if (text.Length == 0 || end <= start) continue;
+            if (text.Length == 0 || end <= start) continue;                                // end 僅用於濾零長/反向 cue，不入 start-only 模型
             if (cues.Count > 0)
             {
                 var prev = cues[^1];
                 if (text == prev.Text) continue;                                           // 完全重複
-                if (text.StartsWith(prev.Text, StringComparison.Ordinal))                  // 滾動延伸（後句含前句）→ 以較完整者取代、延長結束時間
+                if (text.StartsWith(prev.Text, StringComparison.Ordinal))                  // 滾動延伸（後句含前句）→ 以較完整者取代（start-only：僅換文字、保留起點）
                 {
-                    cues[^1] = prev with { Text = text, EndSec = end, Speaker = prev.Speaker ?? speaker };
+                    cues[^1] = prev with { Text = text, Speaker = prev.Speaker ?? speaker };
                     continue;
                 }
                 if (prev.Text.StartsWith(text, StringComparison.Ordinal)) continue;        // 為前句之較短前綴 → 略過
             }
-            cues.Add(new SubtitleCue(text, start, end, speaker));
+            cues.Add(new SubtitleCue(text, start, speaker));
         }
         return cues;
     }
 
     /// <summary>
-    /// 解析 YouTube <c>json3</c> 字幕（[techItem字幕擷取]，spec#2）為逐句 <see cref="SubtitleCue"/>。
+    /// 解析 YouTube <c>json3</c> 字幕（[techItem字幕擷取]，spec#2）為含結束時間之 <see cref="TimedCue"/>（供 <see cref="CoalesceCues"/> 之間隔判斷）。
     /// json3 為<b>事件級</b>結構（非 VTT 之逐字滾動渲染），自動字幕改抓此格式即乾淨、無滾動重複：
     /// 每個 <c>event</c>（含 <c>segs[].utf8</c> 與 <c>tStartMs</c>／<c>dDurationMs</c>）→ 一句 cue。
     /// 空文字／缺時間之 event 略過；去連續完全重複；malformed／null 回空清單、不擲例外。
+    /// start-only（#158）：結束時間僅內部（TimedCue）保留供併句，最終併合輸出對外 <see cref="SubtitleCue"/> 時丟棄。internal 供單元測試。
     /// </summary>
-    public static IReadOnlyList<SubtitleCue> ParseJson3(string? content)
+    internal static IReadOnlyList<TimedCue> ParseJson3Timed(string? content)
     {
-        var cues = new List<SubtitleCue>();
+        var cues = new List<TimedCue>();
         if (string.IsNullOrWhiteSpace(content)) return cues;
         try
         {
@@ -117,10 +118,10 @@ public static class SubtitleParser
 
                 var start = startMs / 1000.0;
                 var end = (startMs + durMs) / 1000.0;
-                if (end <= start) end = start + 0.1; // 保底：零長 event 給極短區間，供到句暫停
+                if (end <= start) end = start + 0.1; // 保底：零長 event 給極短區間，供併句間隔判斷
 
                 if (cues.Count > 0 && cues[^1].Text == text) continue; // 去連續完全重複
-                cues.Add(new SubtitleCue(text, start, end));
+                cues.Add(new TimedCue(text, start, end));
             }
         }
         catch (JsonException)
@@ -140,13 +141,14 @@ public static class SubtitleParser
     /// 累積相鄰 cue，遇下列任一即斷句起新句——目前句已以句末標點（<c>. ? ! …</c>）結束、與下一 cue 時間間隔過大
     /// （&gt; <paramref name="maxGapSec"/>）、下一 cue 以換說話者標記 <c>&gt;&gt;</c> 起始、下一 cue 帶不同<b>具名說話人</b>
     /// （<see cref="SubtitleCue.Speaker"/>，epic #145 增量5——不同人不併句）、或目前句已達字數上限（&gt;= <paramref name="maxWords"/>）。
-    /// 保留首 cue 起點、訖點延至末 cue、併句沿用首 cue 說話人。純函式、internal 供單元測試。
+    /// 保留首 cue 起點、併句沿用首 cue 說話人；輸入為含結束時間之 <see cref="TimedCue"/>（間隔＝下一 cue 起點－目前累積訖點），
+    /// 輸出對外 start-only <see cref="SubtitleCue"/>（#158，丟棄結束時間）。純函式、internal 供單元測試。
     /// </summary>
     internal static IReadOnlyList<SubtitleCue> CoalesceCues(
-        IReadOnlyList<SubtitleCue> cues, int maxWords = 14, double maxGapSec = 1.2)
+        IReadOnlyList<TimedCue> cues, int maxWords = 14, double maxGapSec = 1.2)
     {
         var result = new List<SubtitleCue>();
-        SubtitleCue? cur = null;
+        TimedCue? cur = null;
         foreach (var cue in cues)
         {
             if (cur is null) { cur = cue; continue; }
@@ -157,15 +159,15 @@ public static class SubtitleParser
             if (EndsSentence(cur.Text) || gap > maxGapSec || CountWords(cur.Text) >= maxWords
                 || startsNewSpeaker || speakerChange)
             {
-                result.Add(cur);
+                result.Add(new SubtitleCue(cur.Text, cur.StartSec, cur.Speaker)); // 輸出丟棄 end
                 cur = cue;
             }
             else
             {
-                cur = cur with { Text = cur.Text + " " + cue.Text, EndSec = cue.EndSec }; // 沿用 cur.Speaker
+                cur = cur with { Text = cur.Text + " " + cue.Text, EndSec = cue.EndSec }; // 沿用 cur.Speaker、延長 end 供下一間隔
             }
         }
-        if (cur is not null) result.Add(cur);
+        if (cur is not null) result.Add(new SubtitleCue(cur.Text, cur.StartSec, cur.Speaker));
         return result;
     }
 
