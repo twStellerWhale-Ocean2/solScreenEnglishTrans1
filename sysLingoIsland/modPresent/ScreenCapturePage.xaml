@@ -1,7 +1,7 @@
 <UserControl x:Class="LingoIsland.Present.ScreenCapturePage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-  <!-- 版面（#165）：左＝截圖清單（上方 Clear all＋依 theme 篩選）｜右上＝水平擷取控制｜右下＝圖片預覽 -->
+  <!-- 統一版面（#167）：左＝清單（Clear all＋theme 篩選；右鍵/Delete 刪）｜右上＝獲取區塊卡片｜右下＝內容區塊卡片 -->
   <Grid Margin="10">
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="260" MinWidth="200"/>
@@ -9,31 +9,31 @@
       <ColumnDefinition Width="*" MinWidth="240"/>
     </Grid.ColumnDefinitions>
 
-    <!-- 左：Clear all（置頂）＋依 theme 篩選＋截圖清單 -->
-    <Border Grid.Column="0" Style="{StaticResource Card}" Padding="10">
-      <Grid>
-        <Grid.RowDefinitions>
-          <RowDefinition Height="Auto"/>
-          <RowDefinition Height="Auto"/>
-          <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-        <Grid Grid.Row="0">
-          <TextBlock Text="Screenshots" FontWeight="Bold" FontSize="14"
-                     Foreground="{StaticResource PinkText}" VerticalAlignment="Center"/>
-          <Button x:Name="ClearShotsBtn" Content="Clear all" Style="{StaticResource GhostButton}"
-                  HorizontalAlignment="Right"/>
-        </Grid>
-        <!-- 依 theme 篩選（圖文下拉，多媒體主題管理·B） -->
-        <ComboBox x:Name="ShotThemeFilter" Grid.Row="1" Height="26" Margin="0,8,0,4"
-                  VerticalContentAlignment="Center" ToolTip="Filter screenshots by theme"/>
-        <ListBox x:Name="ShotList" Grid.Row="2" BorderThickness="0" Background="Transparent"
-                 HorizontalContentAlignment="Stretch"/>
+    <!-- 左：Screenshots＋Clear all（置頂）＋依 theme 篩選＋清單 -->
+    <Grid Grid.Column="0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+      <Grid Grid.Row="0">
+        <TextBlock Text="Screenshots" FontWeight="Bold" FontSize="13"
+                   Foreground="{StaticResource PinkText}" VerticalAlignment="Center"/>
+        <Button x:Name="ClearShotsBtn" Content="Clear all" Style="{StaticResource GhostButton}"
+                HorizontalAlignment="Right"/>
       </Grid>
-    </Border>
+      <!-- 依 theme 篩選（圖文下拉，多媒體主題管理·B） -->
+      <ComboBox x:Name="ShotThemeFilter" Grid.Row="1" Height="26" Margin="0,6,0,4"
+                VerticalContentAlignment="Center" ToolTip="Filter screenshots by theme"/>
+      <Border Grid.Row="2" Style="{StaticResource Card}">
+        <ListBox x:Name="ShotList" BorderThickness="0" Background="Transparent" Margin="4"
+                 HorizontalContentAlignment="Stretch" ToolTip="Right-click or press Delete to remove"/>
+      </Border>
+    </Grid>
 
     <GridSplitter Grid.Column="1" Style="{StaticResource ColSplitter}"/>
 
-    <!-- 右：上＝水平擷取控制（Capture Screen＋快捷鍵 Change）、下＝圖片預覽（＋Delete） -->
+    <!-- 右：上＝獲取區塊（擷取控制）｜下＝內容區塊（放大預覽） -->
     <Grid Grid.Column="2" Margin="6,0,0,0">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
@@ -57,18 +57,10 @@
 
       <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,8,0,0" Padding="6">
         <Grid>
-          <Grid.RowDefinitions>
-            <RowDefinition Height="*"/>
-            <RowDefinition Height="Auto"/>
-          </Grid.RowDefinitions>
-          <Grid Grid.Row="0">
-            <Image x:Name="ShotPreview" Stretch="Uniform" Margin="6"/>
-            <TextBlock x:Name="ShotEmptyHint" Text="No screenshots yet. Capture a screen (button or hotkey) to save it here."
-                       Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="260"
-                       TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-          </Grid>
-          <Button x:Name="DeleteShotBtn" Grid.Row="1" Content="Delete" Foreground="#B23B3B"
-                  Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,6,0,0" IsEnabled="False"/>
+          <Image x:Name="ShotPreview" Stretch="Uniform" Margin="6"/>
+          <TextBlock x:Name="ShotEmptyHint" Text="No screenshots yet. Capture a screen (button or hotkey) to save it here."
+                     Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="260"
+                     TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
         </Grid>
       </Border>
     </Grid>

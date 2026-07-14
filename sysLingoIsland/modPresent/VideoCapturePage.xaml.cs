@@ -89,11 +89,14 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         Loaded += async (_, _) => await EnsureWebAsync();
         IsVisibleChanged += OnVisibleChanged; // 切走分頁：停輪詢＋暫停播放；切回：恢復輪詢
 
-        // 影片清單（epic #145 增量4）＋依 theme 篩選（B）：點清單載入該片、刪除、篩選、初次載入
+        // 影片清單（epic #145 增量4）＋依 theme 篩選（B）：點清單載入該片、篩選、初次載入
         VideoList.SelectionChanged += OnVideoSelect;
-        DeleteVideoBtn.Click += (_, _) => OnDeleteVideo();
         ClearVideosBtn.Click += (_, _) => OnClearVideos(); // #165 清空影片清單
         VideoThemeFilter.SelectionChanged += (_, _) => { if (!_populatingVideoFilter) { RefreshVideoList(); } };
+        // 刪除改右鍵選單/Delete 鍵（#167，取代 Delete 按鈕）
+        VideoList.ContextMenu = ListDeleteSupport.DeleteMenu(OnDeleteVideo);
+        VideoList.PreviewMouseRightButtonDown += ListDeleteSupport.SelectItemUnderMouse;
+        VideoList.KeyDown += (_, e) => { if (e.Key == Key.Delete) { OnDeleteVideo(); } };
         PopulateVideoThemeFilter();
         RefreshVideoList();
     }
@@ -251,7 +254,6 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             ? "No videos yet. Paste a YouTube link above and Load."
             : "No videos for this theme."; // 有影片但本 theme 無
         VideoEmptyHint.Visibility = shown.Count > 0 ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
-        DeleteVideoBtn.IsEnabled = VideoList.SelectedItem is not null;
     }
 
     /// <summary>以目前主題重填「依 theme 篩選」下拉（圖文）；期間抑制重整、保留選取。</summary>
@@ -288,7 +290,6 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private void OnVideoSelect(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
         var it = (VideoList.SelectedItem as System.Windows.Controls.ListBoxItem)?.Tag as VideoItem;
-        DeleteVideoBtn.IsEnabled = it is not null;
         if (it is null || it.Id == _currentVideoItemId) return; // 無選取或已是目前載入 → 不重載
         _currentVideoItemId = it.Id;
         UrlBox.Text = it.VideoId;

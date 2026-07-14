@@ -63,12 +63,14 @@ public partial class ScreenCapturePage : UserControl
         CaptureScreenBtn.Click += (_, _) => CaptureRequested?.Invoke();
         Unloaded += (_, _) => StopListening();
 
-        // 截圖管理＋依 theme 篩選（B）
+        // 截圖管理＋依 theme 篩選（B）；刪除改右鍵選單/Delete 鍵（#167，取代 Delete 按鈕）
         ShotList.SelectionChanged += OnShotSelect;
-        DeleteShotBtn.Click += OnDeleteShot;
         ClearShotsBtn.Click += OnClearShots;
         ShotThemeFilter.SelectionChanged += (_, _) => { if (!_populatingFilter) { RefreshScreenshots(); } };
         IsVisibleChanged += (_, e) => { if (e.NewValue is true) { PopulateThemeFilter(); RefreshScreenshots(); } }; // 切回本頁重填（反映主題增刪改）
+        ShotList.ContextMenu = ListDeleteSupport.DeleteMenu(DeleteSelectedShot);
+        ShotList.PreviewMouseRightButtonDown += ListDeleteSupport.SelectItemUnderMouse;
+        ShotList.KeyDown += (_, e) => { if (e.Key == Key.Delete) { DeleteSelectedShot(); } };
 
         _hotkey = HotKeyBinding.Parse(initialHotkey); // 目前快捷鍵初值（自 AppConfig.Hotkey）
         UpdateHotkeyStatus();
@@ -108,7 +110,6 @@ public partial class ScreenCapturePage : UserControl
         if (!any)
         {
             ShotPreview.Source = null;
-            DeleteShotBtn.IsEnabled = false;
             _selectedShotId = null;
         }
     }
@@ -139,10 +140,10 @@ public partial class ScreenCapturePage : UserControl
         var it = (ShotList.SelectedItem as ListBoxItem)?.Tag as ScreenshotItem;
         _selectedShotId = it?.Id;
         ShotPreview.Source = it is not null ? LoadImage(_shots.ImagePathFor(it.File)) : null;
-        DeleteShotBtn.IsEnabled = it is not null;
     }
 
-    private void OnDeleteShot(object? sender, RoutedEventArgs e)
+    /// <summary>刪除選取截圖（#167：右鍵選單「Delete」或按 Delete 鍵觸發）。</summary>
+    private void DeleteSelectedShot()
     {
         if (_selectedShotId is null) { return; }
         _shots.Remove(_selectedShotId);

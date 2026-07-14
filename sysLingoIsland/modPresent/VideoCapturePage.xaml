@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              Background="Transparent">
-  <!-- 版面（#165）：左＝影片清單到頂（上方 Clear all＋依 theme 篩選＋Delete）｜右上＝網址輸入｜右下＝播放器＋字幕（現有影片功能） -->
+  <!-- 統一版面（#167）：左＝影片清單（Clear all＋theme 篩選；右鍵/Delete 刪）｜右上＝獲取區塊（網址載入）｜右下＝內容區塊（播放器＋字幕） -->
   <Grid Margin="10">
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="200" MinWidth="150"/>
@@ -11,13 +11,12 @@
       <ColumnDefinition Width="*" MinWidth="300"/>
     </Grid.ColumnDefinitions>
 
-    <!-- 左：影片清單到頂——Clear all（置頂）＋依 theme 篩選＋清單＋Delete -->
+    <!-- 左：Videos＋Clear all（置頂）＋依 theme 篩選＋清單 -->
     <Grid Grid.Column="0">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
-        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
       <Grid Grid.Row="0">
         <TextBlock Text="Videos" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PinkText}" VerticalAlignment="Center"/>
@@ -30,132 +29,128 @@
         <Grid>
           <ListBox x:Name="VideoList" BorderThickness="0" Background="Transparent" Margin="4"
                    HorizontalContentAlignment="Stretch"
-                   ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a video to load it"/>
+                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                   ToolTip="Click to load; right-click or press Delete to remove"/>
           <TextBlock x:Name="VideoEmptyHint" Text="No videos yet. Paste a YouTube link and Load."
                      Foreground="#9A6A82" FontSize="12" TextWrapping="Wrap" MaxWidth="160"
                      TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
         </Grid>
       </Border>
-      <Button Grid.Row="3" x:Name="DeleteVideoBtn" Content="Delete" Foreground="#B23B3B"
-              Style="{StaticResource GhostButton}" Margin="0,6,0,0" HorizontalAlignment="Left" IsEnabled="False"/>
     </Grid>
 
     <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
 
-    <!-- 右：網址輸入（上）＋狀態＋現有影片功能（播放器｜字幕，下） -->
+    <!-- 右：上＝獲取區塊（網址輸入＋Load＋狀態）｜下＝內容區塊（播放器｜逐句字幕） -->
     <Grid Grid.Column="2">
       <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
       </Grid.RowDefinitions>
 
-      <!-- 貼片列（spec#2：選定 YouTube 影片為擷取來源） -->
-      <Grid Grid.Row="0">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="*"/>
-          <ColumnDefinition Width="Auto"/>
-        </Grid.ColumnDefinitions>
-        <TextBox x:Name="UrlBox" Grid.Column="0" Height="30" VerticalContentAlignment="Center" Padding="6,0"
-                 Background="#66FFFFFF" ToolTip="Paste a YouTube link or 11-character video ID"/>
-        <Button x:Name="LoadBtn" Grid.Column="1" Content="Load" Width="90" Height="30" Margin="8,0,0,0"/>
-      </Grid>
-
-      <TextBlock x:Name="StatusText" Grid.Row="1" Margin="2,6,2,2" FontSize="12" Foreground="#B0578D" TextWrapping="Wrap"
-                 Text="Paste a YouTube video with English subtitles, then Load."/>
-
-      <!-- 現有影片功能（兩欄）：中＝播放器＋當前句字幕帶＋控制｜右＝逐句字幕清單／YAML 編修 -->
-      <Grid Grid.Row="2" Margin="0,6,0,0">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="*" MinWidth="280"/>
-          <ColumnDefinition Width="6"/>
-          <ColumnDefinition Width="230" MinWidth="150"/>
-        </Grid.ColumnDefinitions>
-
-        <!-- 中：播放器＋當前句字幕帶＋控制 -->
-        <Grid Grid.Column="0">
-          <Grid.RowDefinitions>
-            <RowDefinition Height="*" MinHeight="120"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-          </Grid.RowDefinitions>
-
-          <Border Grid.Row="0" Background="Black" CornerRadius="6" ClipToBounds="True">
-            <wv2:WebView2 x:Name="Web"/>
-          </Border>
-
-          <!-- 當前句字幕帶：逐字可點（spec#2：暫停句點字查詢） -->
-          <Border Grid.Row="1" Background="#88FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1" CornerRadius="6"
-                  Margin="0,8,0,0" Padding="10" MinHeight="52">
-            <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" FontSize="16" Foreground="#2A2A2A"/>
-          </Border>
-
-          <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
-            <Button x:Name="ReplayBtn" Content="&#x23EE; Replay" Width="92" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
-            <Button x:Name="ResumeBtn" Content="&#x25B6; Continue" Width="96" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
-            <Button x:Name="NextBtn" Content="&#x23ED; Next" Width="84" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
-            <Button x:Name="AddNoteBtn" Content="&#xFF0B; Add to Notes" Width="132" Height="28" Margin="10,0,0,4" IsEnabled="False"/>
-            <!-- 指定說話人才暫停（增量7）：只在該說話人之句到句暫停、其餘續播 -->
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,4">
-              <TextBlock Text="Pause at:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
-              <ComboBox x:Name="PauseAtSpeaker" MinWidth="110" Height="26" VerticalContentAlignment="Center"
-                        IsEnabled="False" ToolTip="Only pause at this speaker's lines (others play through)"/>
-            </StackPanel>
-          </WrapPanel>
-        </Grid>
-
-        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
-
-        <!-- 右：說話人篩選＋來源疊加＋逐句字幕清單（點跳）／整檔 YAML 編修（epic #145 增量5／6） -->
-        <Grid Grid.Column="2">
-          <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="*"/>
-          </Grid.RowDefinitions>
-
-          <!-- 依說話人篩選 -->
-          <ComboBox x:Name="SpeakerFilter" Grid.Row="0" Height="26" VerticalContentAlignment="Center"
-                    IsEnabled="False" ToolTip="Filter lines by speaker"/>
-
-          <!-- 說話人來源疊加（AI；會用到 API）＋整檔 YAML 編修切換 -->
-          <Grid Grid.Row="1" Margin="0,4,0,4">
+      <Border Grid.Row="0" Style="{StaticResource Card}" Padding="12">
+        <StackPanel>
+          <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*"/>
-              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <Button x:Name="InferSpeakersBtn" Grid.Column="0" Content="AI speakers" Height="26" Margin="0,0,3,0"
-                    IsEnabled="False" ToolTip="Infer likely speakers from the dialogue using AI (uses your OpenAI key; inference, not ground truth)"/>
-            <Button x:Name="EditYamlBtn" Grid.Column="1" Content="Edit YAML" Height="26" Margin="3,0,0,0"
-                    IsEnabled="False" ToolTip="Edit the whole subtitle as one YAML file (fix line breaks / speakers)"/>
+            <TextBox x:Name="UrlBox" Grid.Column="0" Height="30" VerticalContentAlignment="Center" Padding="6,0"
+                     Background="#66FFFFFF" ToolTip="Paste a YouTube link or 11-character video ID"/>
+            <Button x:Name="LoadBtn" Grid.Column="1" Content="Load" Width="90" Height="30" Margin="8,0,0,0"/>
           </Grid>
+          <TextBlock x:Name="StatusText" Margin="2,6,2,0" FontSize="12" Foreground="#B0578D" TextWrapping="Wrap"
+                     Text="Paste a YouTube video with English subtitles, then Load."/>
+        </StackPanel>
+      </Border>
 
-          <!-- 一般：逐句字幕清單（說話人前置、點跳） -->
-          <ListBox x:Name="CueList" Grid.Row="2" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"
-                   ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a line to jump there">
-            <ListBox.ItemTemplate>
-              <DataTemplate>
-                <TextBlock Text="{Binding Display}" TextWrapping="Wrap" Margin="2" FontSize="12"/>
-              </DataTemplate>
-            </ListBox.ItemTemplate>
-          </ListBox>
+      <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,8,0,0" Padding="8">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" MinWidth="260"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="230" MinWidth="150"/>
+          </Grid.ColumnDefinitions>
 
-          <!-- 編修：整檔 YAML 編輯（預設隱藏，按 Edit YAML 顯示） -->
-          <Grid x:Name="YamlEditor" Grid.Row="2" Visibility="Collapsed">
+          <!-- 中：播放器＋當前句字幕帶＋控制 -->
+          <Grid Grid.Column="0">
             <Grid.RowDefinitions>
-              <RowDefinition Height="*"/>
+              <RowDefinition Height="*" MinHeight="120"/>
+              <RowDefinition Height="Auto"/>
               <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <TextBox x:Name="YamlBox" Grid.Row="0" AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap"
-                     FontFamily="Consolas" FontSize="12" Background="#EEFFFFFF" Padding="6"
-                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
-            <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
-              <Button x:Name="ApplyYamlBtn" Content="Apply" Width="76" Height="26" Margin="0,0,6,0"/>
-              <Button x:Name="CancelYamlBtn" Content="Cancel" Width="76" Height="26"/>
-            </StackPanel>
+
+            <Border Grid.Row="0" Background="Black" CornerRadius="6" ClipToBounds="True">
+              <wv2:WebView2 x:Name="Web"/>
+            </Border>
+
+            <Border Grid.Row="1" Background="#88FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1" CornerRadius="6"
+                    Margin="0,8,0,0" Padding="10" MinHeight="52">
+              <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" FontSize="16" Foreground="#2A2A2A"/>
+            </Border>
+
+            <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+              <Button x:Name="ReplayBtn" Content="&#x23EE; Replay" Width="92" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
+              <Button x:Name="ResumeBtn" Content="&#x25B6; Continue" Width="96" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
+              <Button x:Name="NextBtn" Content="&#x23ED; Next" Width="84" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
+              <Button x:Name="AddNoteBtn" Content="&#xFF0B; Add to Notes" Width="132" Height="28" Margin="10,0,0,4" IsEnabled="False"/>
+              <!-- 指定說話人才暫停（增量7） -->
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,4">
+                <TextBlock Text="Pause at:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
+                <ComboBox x:Name="PauseAtSpeaker" MinWidth="110" Height="26" VerticalContentAlignment="Center"
+                          IsEnabled="False" ToolTip="Only pause at this speaker's lines (others play through)"/>
+              </StackPanel>
+            </WrapPanel>
+          </Grid>
+
+          <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+
+          <!-- 右：說話人篩選＋來源疊加＋逐句字幕清單（點跳）／整檔 YAML 編修 -->
+          <Grid Grid.Column="2">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <ComboBox x:Name="SpeakerFilter" Grid.Row="0" Height="26" VerticalContentAlignment="Center"
+                      IsEnabled="False" ToolTip="Filter lines by speaker"/>
+
+            <Grid Grid.Row="1" Margin="0,4,0,4">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <Button x:Name="InferSpeakersBtn" Grid.Column="0" Content="AI speakers" Height="26" Margin="0,0,3,0"
+                      IsEnabled="False" ToolTip="Infer likely speakers from the dialogue using AI (uses your OpenAI key; inference, not ground truth)"/>
+              <Button x:Name="EditYamlBtn" Grid.Column="1" Content="Edit YAML" Height="26" Margin="3,0,0,0"
+                      IsEnabled="False" ToolTip="Edit the whole subtitle as one YAML file (fix line breaks / speakers)"/>
+            </Grid>
+
+            <ListBox x:Name="CueList" Grid.Row="2" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a line to jump there">
+              <ListBox.ItemTemplate>
+                <DataTemplate>
+                  <TextBlock Text="{Binding Display}" TextWrapping="Wrap" Margin="2" FontSize="12"/>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+
+            <Grid x:Name="YamlEditor" Grid.Row="2" Visibility="Collapsed">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+              <TextBox x:Name="YamlBox" Grid.Row="0" AcceptsReturn="True" AcceptsTab="True" TextWrapping="NoWrap"
+                       FontFamily="Consolas" FontSize="12" Background="#EEFFFFFF" Padding="6"
+                       VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"/>
+              <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
+                <Button x:Name="ApplyYamlBtn" Content="Apply" Width="76" Height="26" Margin="0,0,6,0"/>
+                <Button x:Name="CancelYamlBtn" Content="Cancel" Width="76" Height="26"/>
+              </StackPanel>
+            </Grid>
           </Grid>
         </Grid>
-      </Grid>
+      </Border>
     </Grid>
   </Grid>
 </UserControl>
