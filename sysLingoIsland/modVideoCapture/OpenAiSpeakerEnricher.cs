@@ -15,10 +15,13 @@ public sealed class OpenAiSpeakerEnricher : ISpeakerEnricher
     private readonly int _timeoutSec;
     private static readonly HttpClient Http = new();
 
+    /// <summary>逐句補全一整份字幕（長片可達數百句）較久，逾時至少放寬到此秒數——沿用 word 查詢的短逾時（如 15s）會誤切長片。</summary>
+    private const int MinTimeoutSec = 120;
+
     public OpenAiSpeakerEnricher(string model, int timeoutSec)
     {
         _model = model;
-        _timeoutSec = timeoutSec;
+        _timeoutSec = Math.Max(timeoutSec, MinTimeoutSec);
     }
 
     public async Task<SpeakerEnrichResult> InferSpeakersAsync(

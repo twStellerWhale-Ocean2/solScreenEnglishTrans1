@@ -175,8 +175,8 @@
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a line to jump there">
               <ListBox.ItemTemplate>
                 <DataTemplate>
-                  <!-- 說話人名稱粗體、台詞正常（#字幕說話人標粗體） -->
-                  <TextBlock TextWrapping="Wrap" Margin="2" FontSize="12"><Run Text="{Binding SpeakerLabel}" FontWeight="Bold"/><Run Text="{Binding Text}"/></TextBlock>
+                  <!-- 說話人名稱粗體、台詞正常（#字幕說話人標粗體）。Run.Text 綁定預設 TwoWay，對唯讀屬性會擲例外 → 明指 OneWay -->
+                  <TextBlock TextWrapping="Wrap" Margin="2" FontSize="12"><Run Text="{Binding SpeakerLabel, Mode=OneWay}" FontWeight="Bold"/><Run Text="{Binding Text, Mode=OneWay}"/></TextBlock>
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
