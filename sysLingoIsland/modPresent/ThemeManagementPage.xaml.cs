@@ -32,6 +32,7 @@ using HorizontalAlignment = System.Windows.HorizontalAlignment;
 using DragEventArgs = System.Windows.DragEventArgs;
 using DragDropEffects = System.Windows.DragDropEffects;
 using DataFormats = System.Windows.DataFormats;
+using Key = System.Windows.Input.Key;
 
 namespace LingoIsland.Present;
 
@@ -58,11 +59,14 @@ public partial class ThemeManagementPage : UserControl
         AddBtn.Click += OnAdd;
         SaveBtn.Click += OnSave;
         ActiveBtn.Click += OnSetActive;
-        DeleteBtn.Click += OnDelete;
         PasteBtn.Click += OnPaste;
         UploadBtn.Click += OnUpload;
         DescribeBtn.Click += OnDescribe;
         List.SelectionChanged += OnSelect;
+        // 刪除主題改右鍵選單/Delete 鍵（#169，取代編輯區 Delete 按鈕，統一版面）
+        List.ContextMenu = ListDeleteSupport.DeleteMenu(DeleteSelectedTheme);
+        List.PreviewMouseRightButtonDown += ListDeleteSupport.SelectItemUnderMouse;
+        List.KeyDown += (_, e) => { if (e.Key == Key.Delete) { DeleteSelectedTheme(); } };
 
         // 圖片卡拖放圖片檔（Issue #69）
         ImageDropCard.DragOver += (_, e) => { e.Effects = HasImageFile(e) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; };
@@ -303,7 +307,8 @@ public partial class ThemeManagementPage : UserControl
         StatusLine.Text = "Set active; queries will use this theme.";
     }
 
-    private void OnDelete(object? sender, RoutedEventArgs e)
+    /// <summary>刪除選取主題（#169：清單右鍵選單「Delete」或按 Delete 鍵；含確認）。</summary>
+    private void DeleteSelectedTheme()
     {
         if (_selected is null) { return; }
         if (MessageBox.Show($"Delete theme “{_selected.Name}”?", "Delete Theme",

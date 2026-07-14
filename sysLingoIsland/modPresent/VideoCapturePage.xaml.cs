@@ -78,7 +78,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         ResumeBtn.Click += (_, _) => _ = ResumeAsync();
         NextBtn.Click += (_, _) => _ = SkipNextAsync();
         AddNoteBtn.Click += (_, _) => AddCurrent();
-        CueList.SelectionChanged += (_, _) => _ = JumpToSelectedAsync();
+        CueList.MouseDoubleClick += (_, _) => _ = JumpToSelectedAsync(); // 雙擊字幕句才跳播（單擊僅選取，#169）
         // 說話人篩選＋來源疊加＋整檔 YAML 編修（epic #145 增量5／6）
         SpeakerFilter.SelectionChanged += (_, _) => ApplySpeakerFilter();
         InferSpeakersBtn.Click += (_, _) => _ = InferSpeakersAsync();
@@ -484,13 +484,12 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         await SeekAsync(_cues[next].StartSec);
     }
 
+    /// <summary>雙擊字幕句→跳到該句起點並播放（#169：改雙擊觸發，單擊僅選取）。</summary>
     private async Task JumpToSelectedAsync()
     {
-        if (_refreshingCues) return; // 程式化選取／篩選重整，非使用者點選
         if (CueList.SelectedItem is not CueRow row || !_webReady) return;
         var i = row.Index;
-        if (i == _shownCue) return; // 由 ShowCue 程式化選取觸發者早退，僅使用者手動點清單才跳播
-        _lastPausedIndex = i - 1;
+        _lastPausedIndex = i - 1; // 允許雙擊當前句＝自其起點重播
         ShowCue(i);
         await SeekAsync(_cues[i].StartSec);
     }
