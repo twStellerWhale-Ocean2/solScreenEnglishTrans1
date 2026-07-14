@@ -49,7 +49,7 @@ public sealed class YtDlpSubtitleFetcher : ISubtitleFetcher
             }
 
             // 第二趟：無人工字幕→退自動字幕，取 json3——YouTube 自動字幕之 VTT 為逐字滾動渲染（每 cue 重複前一 cue ~半）會破碎；
-            // json3 為事件級結構、乾淨無滾動。以 SubtitleParser.ParseJson3 解析、標記為自動（機器轉錄）供 UI 提示。
+            // json3 為事件級結構、乾淨無滾動。以 SubtitleParser.ParseJson3Timed 解析＋CoalesceCues 併句為 start-only、標記為自動（機器轉錄）供 UI 提示。
             ClearSubs(dir);
             var (exit, stderr) = await RunAsync($"{common} --sub-format json3 --write-auto-subs -o \"{outTemplate}\" \"{url}\"", ct);
             var auto = PickSub(dir, ".json3");
