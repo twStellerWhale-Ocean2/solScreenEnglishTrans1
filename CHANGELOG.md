@@ -2,6 +2,19 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [2.6.0] - 2026-07-14
+
+說話人多來源疊加（一）——AI 推斷按鈕（epic #145 增量 6，#156）。
+
+### 新增
+- **AI 說話人推斷疊加**：影片頁右欄新增「**AI speakers**」按鈕——以 `OpenAiSpeakerEnricher`（讀 `OPENAI_API_KEY`、json_schema 結構化輸出）依台詞逐句推斷說話人，**非破壞併回**（僅填補未標示之句、既有具名 ground truth 保留、AI 判不出者維持空白）。**推斷自台詞文字＋常識、非觀看畫面**，狀態列標示為推斷非 ground truth。會用到 API 故按鈕觸發。
+- **可插拔 `ISpeakerEnricher` 架構**：AI／wiki 等多來源共用，供後續增量（wiki／網路台詞）以第二顆按鈕接入。
+- 純函式 `SpeakerInference`（BuildPrompt／ParseSpeakers／MergeSpeakers／CountNewlyLabeled）＋11 單元測試；全套 418 綠。
+
+### 備註
+- 推斷期間停用按鈕、播放持續、保留當前句與到句暫停 index；期間換片／套用 YAML 使字幕換手則丟棄過時結果（stale guard）。
+- wiki／網路台詞來源與「指定說話人才暫停」為後續增量（epic #145 增量 6b／7）。
+
 ## [2.5.0] - 2026-07-14
 
 說話人字幕＋依說話人篩選＋整檔 YAML 編修（epic #145 增量 5，#154）。
