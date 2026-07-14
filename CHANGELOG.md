@@ -2,6 +2,21 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [2.8.0] - 2026-07-14
+
+多媒體·依 theme 篩選＋字幕 start-only＋指定說話人才暫停（批次：#163／#158／epic #145 增量7）。
+
+### 新增
+- **截圖／影片清單依 theme 篩選（圖文下拉）**：兩清單頂端各一 theme 下拉（縮圖＋名稱，共用 `ThemeFilter`），依選中 theme 篩選顯示（`All themes` 看全部）；切回分頁反映主題增刪改。
+- **指定說話人才暫停（epic #145 增量7）**：影片播放控制列「Pause at」下拉（Everyone＋各具名說話人）；`PauseDecider.NextPause` 加 `pauseSpeaker`——選定後導引播放只在該說話人之句到句暫停、其餘句略過續播。
+
+### 變更
+- **字幕改 start-only（#158）**：`SubtitleCue` 移除結束時間（只留 Text/StartSec/Speaker）；一句**顯示至下一句開始**（無空窗），到句暫停於「下一句開始，或本句開始＋上限（預設 8s，防超長間隔乾等）」——顯示與暫停解耦、節奏更順。整檔 YAML 編修欄位隨之為 `speaker`／`start`／`text`。json3 併句/VTT 去滾動之結束時間僅解析階段內部 `TimedCue` 保留、對外丟棄。
+
+### 備註
+- 純函式測試全面更新（Parser／PauseDecider〔start-only＋pause-at-speaker〕／Yaml／ThemeFilter）；全套 426 綠。
+- wiki／網路台詞說話人來源（同疊加架構第二顆按鈕）為後續增量。
+
 ## [2.7.1] - 2026-07-14
 
 ### 修正
