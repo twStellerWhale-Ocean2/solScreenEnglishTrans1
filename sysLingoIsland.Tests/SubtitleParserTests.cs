@@ -194,7 +194,7 @@ public class SubtitleParserTests
 
     // ── CoalesceCues：json3 過細 cue 併為句級（#143）──
 
-    private static SubtitleCue C(string text, double start, double end) => new(text, start, end);
+    private static SubtitleCue C(string text, double start, double end, string? speaker = null) => new(text, start, end, speaker);
 
     [Fact]
     public void CoalesceCues_MergesShortUntilSentenceEnd()
@@ -244,5 +244,68 @@ public class SubtitleParserTests
         var one = SubtitleParser.CoalesceCues(new[] { C("solo", 1, 2) });
         Assert.Single(one);
         Assert.Equal("solo", one[0].Text);
+    }
+
+    // ── 說話人（VTT <v> 語音標記解析＋依說話人斷句，epic #145 增量5）──
+
+    [Fact]
+    public void Parse_ExtractsVoiceTagSpeaker()
+    {
+        var vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n<v Ryder>Paw Patrol, to the Lookout!\n";
+        var cues = SubtitleParser.Parse(vtt);
+        Assert.Single(cues);
+        Assert.Equal("Ryder", cues[0].Speaker);
+        Assert.Equal("Paw Patrol, to the Lookout!", cues[0].Text); // <v Ryder> 標記已剝除、不入文字
+    }
+
+    [Fact]
+    public void Parse_VoiceTagWithClass_ExtractsSpeaker()
+    {
+        var vtt = "WEBVTT\n\n00:00:01.000 --> 00:00:03.000\n<v.loud Rocky>Green means go!\n";
+        var cues = SubtitleParser.Parse(vtt);
+        Assert.Single(cues);
+        Assert.Equal("Rocky", cues[0].Speaker);
+        Assert.Equal("Green means go!", cues[0].Text);
+    }
+
+    [Fact]
+    public void Parse_NoVoiceTag_SpeakerNull()
+    {
+        var cues = SubtitleParser.Parse("WEBVTT\n\n00:00:01.000 --> 00:00:03.000\nJust a plain line\n");
+        Assert.Single(cues);
+        Assert.Null(cues[0].Speaker);
+    }
+
+    [Fact]
+    public void CoalesceCues_BreaksOnNamedSpeakerChange()
+    {
+        // 兩具名說話人相鄰、無句末標點、間隔小、未達字數上限——僅「說話人變更」觸發斷句
+        var r = SubtitleParser.CoalesceCues(new[] { C("green means", 1, 2, "Rocky"), C("go now", 2, 3, "Zuma") });
+        Assert.Equal(2, r.Count);
+        Assert.Equal("Rocky", r[0].Speaker);
+        Assert.Equal("Zuma", r[1].Speaker);
+    }
+
+    [Fact]
+    public void CoalesceCues_SameSpeaker_MergesAndKeepsSpeaker()
+    {
+        var r = SubtitleParser.CoalesceCues(new[] { C("green means", 1, 2, "Rocky"), C("go now", 2, 3, "Rocky") });
+        Assert.Single(r);
+        Assert.Equal("green means go now", r[0].Text);
+        Assert.Equal("Rocky", r[0].Speaker);
+    }
+
+    [Fact]
+    public void CoalesceCues_UnlabeledFollowedByNamed_Breaks()
+    {
+        // 未標示→具名＝說話人變更（斷句）；具名→未標示則視為延續（併入、沿用具名）
+        var r = SubtitleParser.CoalesceCues(new[] { C("mystery line", 1, 2, null), C("hello", 2, 3, "Ryder") });
+        Assert.Equal(2, r.Count);
+        Assert.Null(r[0].Speaker);
+        Assert.Equal("Ryder", r[1].Speaker);
+
+        var r2 = SubtitleParser.CoalesceCues(new[] { C("green means", 1, 2, "Rocky"), C("go now", 2, 3, null) });
+        Assert.Single(r2);
+        Assert.Equal("Rocky", r2[0].Speaker);
     }
 }

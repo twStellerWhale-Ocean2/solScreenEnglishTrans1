@@ -42,6 +42,8 @@
     <PackageReference Include="Velopack" Version="1.2.0" />
     <!-- 影片擷取（#139，spec#2）：WebView2 內嵌 YouTube IFrame Player API（[techItem影片播放]）；runtime 於 Win11 內建 -->
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2792.45" />
+    <!-- 字幕整檔 YAML 編修（epic #145 增量5，#154）：說話人/斷句以整檔 YAML 一次編修，SubtitleYaml 往返序列化（MIT） -->
+    <PackageReference Include="YamlDotNet" Version="18.1.0" />
   </ItemGroup>
 
   <ItemGroup>

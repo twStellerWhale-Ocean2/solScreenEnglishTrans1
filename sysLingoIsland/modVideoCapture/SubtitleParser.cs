@@ -18,6 +18,8 @@ public static class SubtitleParser
         RegexOptions.Compiled);
     private static readonly Regex Tag = new("<[^>]+>", RegexOptions.Compiled);
     private static readonly Regex Ws = new(@"\s+", RegexOptions.Compiled);
+    // VTT 語音標記 <v Speaker>／<v.loud Speaker>（可帶 .class）——擷取說話人名（epic #145 增量5）。於 Tag 剝除前先取。
+    private static readonly Regex VoiceTag = new(@"<v(?:\.[^\s>]+)*\s+(?<who>[^>]+)>", RegexOptions.Compiled);
 
     /// <summary>解析字幕全文為逐句 cue（依出現順序、去連續重複、空文字略過）。null／無時間軸回空清單。</summary>
     public static IReadOnlyList<SubtitleCue> Parse(string? content)
@@ -36,8 +38,14 @@ public static class SubtitleParser
             i++;
 
             var sb = new StringBuilder();
+            string? speaker = null; // 取本 cue 首個 <v Speaker> 語音標記之說話人（有則用，多數字幕無）
             while (i < lines.Length && lines[i].Trim().Length > 0 && !TimeLine.IsMatch(lines[i]))
             {
+                if (speaker is null)
+                {
+                    var vm = VoiceTag.Match(lines[i]);
+                    if (vm.Success) speaker = vm.Groups["who"].Value.Trim();
+                }
                 var clean = Clean(lines[i]);
                 if (clean.Length > 0)
                 {
@@ -55,12 +63,12 @@ public static class SubtitleParser
                 if (text == prev.Text) continue;                                           // 完全重複
                 if (text.StartsWith(prev.Text, StringComparison.Ordinal))                  // 滾動延伸（後句含前句）→ 以較完整者取代、延長結束時間
                 {
-                    cues[^1] = prev with { Text = text, EndSec = end };
+                    cues[^1] = prev with { Text = text, EndSec = end, Speaker = prev.Speaker ?? speaker };
                     continue;
                 }
                 if (prev.Text.StartsWith(text, StringComparison.Ordinal)) continue;        // 為前句之較短前綴 → 略過
             }
-            cues.Add(new SubtitleCue(text, start, end));
+            cues.Add(new SubtitleCue(text, start, end, speaker));
         }
         return cues;
     }
@@ -130,8 +138,9 @@ public static class SubtitleParser
     /// <summary>
     /// 併合過細之相鄰 cue 為句級（json3 事件級常過碎，如單字「shovel.」「Incoming.」——到句暫停過頻）：
     /// 累積相鄰 cue，遇下列任一即斷句起新句——目前句已以句末標點（<c>. ? ! …</c>）結束、與下一 cue 時間間隔過大
-    /// （&gt; <paramref name="maxGapSec"/>）、下一 cue 以換說話者標記 <c>&gt;&gt;</c> 起始、或目前句已達字數上限
-    /// （&gt;= <paramref name="maxWords"/>）。保留首 cue 起點、末 cue 訖點。純函式、internal 供單元測試。
+    /// （&gt; <paramref name="maxGapSec"/>）、下一 cue 以換說話者標記 <c>&gt;&gt;</c> 起始、下一 cue 帶不同<b>具名說話人</b>
+    /// （<see cref="SubtitleCue.Speaker"/>，epic #145 增量5——不同人不併句）、或目前句已達字數上限（&gt;= <paramref name="maxWords"/>）。
+    /// 保留首 cue 起點、訖點延至末 cue、併句沿用首 cue 說話人。純函式、internal 供單元測試。
     /// </summary>
     internal static IReadOnlyList<SubtitleCue> CoalesceCues(
         IReadOnlyList<SubtitleCue> cues, int maxWords = 14, double maxGapSec = 1.2)
@@ -143,14 +152,17 @@ public static class SubtitleParser
             if (cur is null) { cur = cue; continue; }
             var gap = cue.StartSec - cur.EndSec;
             var startsNewSpeaker = cue.Text.StartsWith(">>", StringComparison.Ordinal);
-            if (EndsSentence(cur.Text) || gap > maxGapSec || CountWords(cur.Text) >= maxWords || startsNewSpeaker)
+            var speakerChange = !string.IsNullOrEmpty(cue.Speaker)
+                && !string.Equals(cue.Speaker, cur.Speaker, StringComparison.OrdinalIgnoreCase);
+            if (EndsSentence(cur.Text) || gap > maxGapSec || CountWords(cur.Text) >= maxWords
+                || startsNewSpeaker || speakerChange)
             {
                 result.Add(cur);
                 cur = cue;
             }
             else
             {
-                cur = cur with { Text = cur.Text + " " + cue.Text, EndSec = cue.EndSec };
+                cur = cur with { Text = cur.Text + " " + cue.Text, EndSec = cue.EndSec }; // 沿用 cur.Speaker
             }
         }
         if (cur is not null) result.Add(cur);
