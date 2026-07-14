@@ -12,7 +12,7 @@ public partial class AiActionWindow : Window
 {
     private readonly System.Threading.CancellationTokenSource _cts = new();
     private bool _done;
-    private Func<Action<string>, System.Threading.CancellationToken, Task<AiUsage?>>? _action;
+    private Func<Action<string>, System.Threading.CancellationToken, Task<IReadOnlyList<AiUsage>?>>? _action;
 
     /// <summary>一次 AI 呼叫之用量（供費用顯示）：輸入/輸出 tokens＋模型＋是否含 web_search 工具費。</summary>
     public sealed record AiUsage(int InputTokens, int OutputTokens, string Model, bool WebSearch = false);
@@ -27,11 +27,11 @@ public partial class AiActionWindow : Window
     }
 
     /// <summary>設定要執行的 AI 動作（回傳用量供費用顯示；null＝無用量/被丟棄）。於 <c>ShowDialog</c> 前呼叫。</summary>
-    public void Start(Func<Action<string>, System.Threading.CancellationToken, Task<AiUsage?>> action) => _action = action;
+    public void Start(Func<Action<string>, System.Threading.CancellationToken, Task<IReadOnlyList<AiUsage>?>> action) => _action = action;
 
     /// <summary>建立、設定動作並模態顯示；動作於視窗內執行、完成後由使用者按 OK 關閉。</summary>
     public static void RunAndShow(Window? owner, string title,
-        Func<Action<string>, System.Threading.CancellationToken, Task<AiUsage?>> action)
+        Func<Action<string>, System.Threading.CancellationToken, Task<IReadOnlyList<AiUsage>?>> action)
     {
         var dlg = new AiActionWindow(title) { Owner = owner };
         dlg.Start(action);
@@ -56,20 +56,24 @@ public partial class AiActionWindow : Window
         finally { Finish(); }
     }
 
-    private void ShowCost(AiUsage? u)
+    private void ShowCost(IReadOnlyList<AiUsage>? usages)
     {
-        if (u is null) { CostText.Text = "AI cost: no usage was reported for this call."; return; }
-        var tokens = $"Tokens: {u.InputTokens:N0} in + {u.OutputTokens:N0} out";
-        var est = AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch);
-        if (est is null)
+        if (usages is null || usages.Count == 0) { CostText.Text = "AI cost: no usage was reported."; return; }
+        var inTot = usages.Sum(u => u.InputTokens);
+        var outTot = usages.Sum(u => u.OutputTokens);
+        double costSum = 0; var anyUnknown = false; var anyWeb = false;
+        foreach (var u in usages)
         {
-            CostText.Text = $"{tokens}. Est. AI cost: n/a (no rate on file for “{u.Model}”).";
+            var est = AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch);
+            if (est is null) { anyUnknown = true; } else { costSum += est.Value; }
+            if (u.WebSearch) { anyWeb = true; }
         }
-        else
-        {
-            var webNote = u.WebSearch ? $" (incl. ~US${AiCost.WebSearchCallUsd:0.###} web-search fee)" : "";
-            CostText.Text = $"{tokens}.\nEst. AI cost ≈ US${est.Value:0.#####}{webNote} on {u.Model}.\n(Estimate only — check OpenAI for current rates.)";
-        }
+        var tokens = $"Tokens: {inTot:N0} in + {outTot:N0} out across {usages.Count} call(s)";
+        var cost = anyUnknown
+            ? $"Est. AI cost ≈ US${costSum:0.#####}+ (some models had no rate on file)"
+            : $"Est. AI cost ≈ US${costSum:0.#####}";
+        if (anyWeb) { cost += " (incl. web-search fee)"; }
+        CostText.Text = $"{tokens}.\n{cost}.\n(Estimate only — check OpenAI for current rates.)";
     }
 
     private void Finish()

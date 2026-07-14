@@ -847,10 +847,8 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
             web ? "Web speaker lookup" : "AI speaker inference",
             async (report, ct) =>
             {
-                report(web
-                    ? "Searching the web for this show's transcript…"
-                    : "Analyzing the dialogue with AI…");
-                var result = await enricher.InferSpeakersAsync(target, titleForAi, ct);
+                var progress = new System.Progress<string>(s => report(s)); // enricher 逐步進度→對話視窗（減少等待焦慮）
+                var result = await enricher.InferSpeakersAsync(target, titleForAi, progress, ct);
                 if (!ReferenceEquals(_cues, target)) { report("Subtitle changed meanwhile — result discarded."); return null; }
                 var merged = SpeakerInference.MergeSpeakers(target, result.Speakers);
                 var filled = SpeakerInference.CountNewlyLabeled(target, merged);
@@ -864,9 +862,10 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
                 SetStatus(filled > 0
                     ? $"{(web ? "Web lookup" : "AI")} labeled {filled} more line(s) with a speaker."
                     : $"{(web ? "Web lookup" : "AI")}: no new speaker labels for this subtitle.");
-                return result.Usage is null
-                    ? null
-                    : new AiActionWindow.AiUsage(result.Usage.InputTokens, result.Usage.OutputTokens, result.Model, web);
+                if (result.Usages.Count == 0) { return null; }
+                return result.Usages
+                    .Select(u => new AiActionWindow.AiUsage(u.InputTokens, u.OutputTokens, u.Model, u.WebSearch))
+                    .ToList();
             });
         _inferring = false;
         var enable = _cues.Count > 0 && !_yamlEditing && !_loading;

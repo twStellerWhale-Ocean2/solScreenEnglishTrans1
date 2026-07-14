@@ -133,7 +133,7 @@ public partial class App : System.Windows.Application
         _videoPage = new VideoCapturePage(new YtDlpSubtitleFetcher(), _videoStore,
             _themeStore, // 影片清單＋加入時記錄使用中主題（增量4）＋依 theme 篩選（B）＋搜尋關鍵字預填（#171）
             new OpenAiSpeakerEnricher(_config.Model, _config.TimeoutSec),          // 增量6：依台詞 AI 推斷說話人
-            new OpenAiWebSpeakerEnricher("gpt-4.1", _config.TimeoutSec),           // 增量6b：OpenAI 網搜工具上網找逐字稿補說話人（#145 §D；gpt-4o-mini 不支援 web_search；gpt-4.1-mini 品質差退化，改用 gpt-4.1）
+            new OpenAiWebSpeakerEnricher("gpt-4.1", "gpt-4o-mini", _config.TimeoutSec), // 增量6b 重做：find（gpt-4.1＋web_search 找逐字稿）→逐塊 align（gpt-4o-mini 對照、不上網）→組合（#145 §D）
             new YtDlpVideoSearcher(), // 依關鍵字搜尋 YouTube（#171）
             new SubtitleStore()); // 字幕存檔：重開/重選同片還原、免重抓、保留說話人與 YAML 編修（#174）
         _videoPage.WordLookupRequested += LookupWordFromVideo;

@@ -225,4 +225,51 @@ public class SpeakerInferenceTests
         var u = SpeakerInference.ParseUsage("{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}");
         Assert.Equal(15, u!.TotalTokens);
     }
+
+    // ── 逐字稿管線（增量6b 重做）：find/align 提示與 ParseFindResult ──
+
+    [Fact]
+    public void BuildFindTranscriptPrompt_InstructsWebSearch_IncludesTitle()
+    {
+        var p = SpeakerInference.BuildFindTranscriptPrompt("PAW Patrol S1E1");
+        Assert.Contains("上網搜尋", p);
+        Assert.Contains("PAW Patrol S1E1", p);
+        Assert.Contains("transcript", p);   // JSON 欄位
+    }
+
+    [Fact]
+    public void BuildAlignPrompt_IncludesTranscriptAndNumberedLines()
+    {
+        var p = SpeakerInference.BuildAlignPrompt("Ryder: Hi\nChase: Yo", new[] { C("Hello there"), C("Bye") });
+        Assert.Contains("Ryder: Hi", p);      // 逐字稿放進提示
+        Assert.Contains("1. Hello there", p);
+        Assert.Contains("2. Bye", p);
+        Assert.Contains("speakers", p);
+    }
+
+    [Fact]
+    public void ParseFindResult_FromMessageOutputText()
+    {
+        var inner = "{\"found\":true,\"source\":\"fandom wiki\",\"complete\":true,\"transcript\":\"Ryder: Paw Patrol!\\nChase: On it!\"}";
+        var find = SpeakerInference.ParseFindResult(WebApi(inner));
+        Assert.True(find.Found);
+        Assert.True(find.Complete);
+        Assert.Equal("fandom wiki", find.Source);
+        Assert.Contains("Ryder:", find.Transcript);
+    }
+
+    [Fact]
+    public void ParseFindResult_NotFound()
+    {
+        var find = SpeakerInference.ParseFindResult(WebApi("{\"found\":false,\"source\":\"\",\"complete\":false,\"transcript\":\"\"}"));
+        Assert.False(find.Found);
+    }
+
+    [Fact]
+    public void ParseFindResult_MalformedOrNoMessage_NotFound()
+    {
+        Assert.False(SpeakerInference.ParseFindResult(WebApi("no json at all")).Found);
+        var noMsg = JsonSerializer.Serialize(new { output = new object[] { new { type = "web_search_call" } } });
+        Assert.False(SpeakerInference.ParseFindResult(noMsg).Found);
+    }
 }

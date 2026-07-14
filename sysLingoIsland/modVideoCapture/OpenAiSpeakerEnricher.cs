@@ -25,9 +25,9 @@ public sealed class OpenAiSpeakerEnricher : ISpeakerEnricher
     }
 
     public async Task<SpeakerEnrichResult> InferSpeakersAsync(
-        IReadOnlyList<SubtitleCue> cues, string? videoTitle, CancellationToken ct = default)
+        IReadOnlyList<SubtitleCue> cues, string? videoTitle, IProgress<string>? progress = null, CancellationToken ct = default)
     {
-        if (cues.Count == 0) return new SpeakerEnrichResult(Array.Empty<string?>(), null, _model);
+        if (cues.Count == 0) return new SpeakerEnrichResult(Array.Empty<string?>(), Array.Empty<SpeakerUsage>());
 
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(key))
@@ -35,6 +35,7 @@ public sealed class OpenAiSpeakerEnricher : ISpeakerEnricher
             throw new SpeakerEnrichException(
                 "OPENAI_API_KEY environment variable is not set — cannot infer speakers. Set it and restart.");
         }
+        progress?.Report("Analyzing the dialogue with AI…");
 
         using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
         req.Headers.Add("Authorization", "Bearer " + key);
@@ -70,7 +71,8 @@ public sealed class OpenAiSpeakerEnricher : ISpeakerEnricher
             }
             try
             {
-                return new SpeakerEnrichResult(SpeakerInference.ParseSpeakers(json), SpeakerInference.ParseUsage(json), _model);
+                var usage = (SpeakerInference.ParseUsage(json) ?? new SpeakerUsage(0, 0, 0)) with { Model = _model, WebSearch = false };
+                return new SpeakerEnrichResult(SpeakerInference.ParseSpeakers(json), new[] { usage });
             }
             catch (Exception ex)
             {

@@ -193,6 +193,57 @@ public static class SpeakerInference
         return s;
     }
 
+    // ---- 逐字稿管線（增量6b 重做）：find（上網找完整逐字稿）→ 逐塊 align（不上網、對照逐字稿標說話人） ----
+
+    /// <summary>find 步驟結果：是否找到、來源、模型自評是否完整、逐字稿全文（每行「角色：台詞」）。</summary>
+    public sealed record TranscriptFind(bool Found, string Source, bool Complete, string Transcript);
+
+    /// <summary>組「上網找完整逐字稿」提示（web_search）：回 <c>{found, source, complete, transcript}</c>；找不到可信完整逐字稿則 found=false。</summary>
+    public static string BuildFindTranscriptPrompt(string? videoTitle, string? retryHint = null)
+    {
+        var sb = new StringBuilder();
+        sb.Append("請【上網搜尋】並取得這支影片／影集的**完整逐字稿**（優先官方或熱門 fandom wiki 等公評良好來源）。逐字稿需含**每句台詞與其說話者（角色名）**。");
+        if (!string.IsNullOrWhiteSpace(videoTitle)) { sb.Append("\n影片標題：").Append(videoTitle.Trim()); }
+        if (!string.IsNullOrWhiteSpace(retryHint)) { sb.Append("\n（前次結果不佳，請換**不同**來源再找：").Append(retryHint!.Trim()).Append("）"); }
+        sb.Append("\n只回傳 JSON：{\"found\":true/false, \"source\":\"來源網址或名稱\", \"complete\":true/false（逐字稿是否完整涵蓋全片且看得出說話者）, \"transcript\":\"逐字稿全文，每行格式『角色：台詞』\"}。");
+        sb.Append("找不到可信且完整之逐字稿時 found=false、transcript 留空。不要輸出任何搜尋過程／思考／說明文字。");
+        return sb.ToString();
+    }
+
+    /// <summary>組「以逐字稿對齊一塊字幕」提示（不上網）：給逐字稿與該塊逐句，回每句說話者（恰好該塊句數）。</summary>
+    public static string BuildAlignPrompt(string transcript, IReadOnlyList<SubtitleCue> chunk)
+    {
+        var sb = new StringBuilder();
+        sb.Append("以下是一支影片的逐字稿（每行『角色：台詞』）：\n---\n").Append(transcript.Trim()).Append("\n---\n");
+        sb.Append("下面是該影片自動字幕的其中 ").Append(chunk.Count).Append(" 句（已編號）。請**對照上面的逐字稿**判斷每一句最可能的說話者（具體角色名）。");
+        sb.Append("一句若混了多位說話者取**開頭**那位；非台詞（音效／音樂／掌聲）或對不上逐字稿者回空字串——寧可留空勿硬填。");
+        sb.Append("\n只回傳 JSON：{\"speakers\":[...]}，speakers 長度恰好 ").Append(chunk.Count).Append(" 個、依序對應。不要輸出任何說明文字。\n\n逐句：");
+        for (var i = 0; i < chunk.Count; i++) { sb.Append('\n').Append(i + 1).Append(". ").Append(chunk[i].Text); }
+        return sb.ToString();
+    }
+
+    /// <summary>解析 find 之 Responses 回應為 <see cref="TranscriptFind"/>（取 output_text 內之 JSON）；缺欄／解析失敗回 found=false。</summary>
+    public static TranscriptFind ParseFindResult(string responsesApiJson)
+    {
+        using var doc = JsonDocument.Parse(responsesApiJson);
+        var text = ExtractOutputText(doc.RootElement);
+        if (string.IsNullOrWhiteSpace(text)) { return new TranscriptFind(false, "", false, ""); }
+        var s = text!;
+        var start = s.IndexOf('{'); var end = s.LastIndexOf('}');
+        if (start < 0 || end <= start) { return new TranscriptFind(false, "", false, ""); }
+        try
+        {
+            using var inner = JsonDocument.Parse(s.Substring(start, end - start + 1));
+            var r = inner.RootElement;
+            var found = r.TryGetProperty("found", out var f) && f.ValueKind == JsonValueKind.True;
+            var source = r.TryGetProperty("source", out var so) && so.ValueKind == JsonValueKind.String ? so.GetString() ?? "" : "";
+            var complete = r.TryGetProperty("complete", out var c) && c.ValueKind == JsonValueKind.True;
+            var transcript = r.TryGetProperty("transcript", out var tr) && tr.ValueKind == JsonValueKind.String ? tr.GetString() ?? "" : "";
+            return new TranscriptFind(found, source, complete, transcript);
+        }
+        catch (JsonException) { return new TranscriptFind(false, "", false, ""); }
+    }
+
     /// <summary>
     /// 非破壞疊加：把逐句推斷之 <paramref name="speakers"/> 併回 <paramref name="cues"/>——僅填補**未標示**說話人之句，
     /// 既有具名說話人（如 VTT ground truth）一律保留。長度不符時以較短者為界、其餘 cue 原樣。文字/時間不動。
