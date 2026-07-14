@@ -1,10 +1,6 @@
 using System.IO;
-using System.Windows.Input;
 using System.Windows.Media.Imaging;
-using LingoIsland.Capture;
 using LingoIsland.Query;
-using KeyEventArgs = System.Windows.Input.KeyEventArgs;
-using MouseButtonEventArgs = System.Windows.Input.MouseButtonEventArgs;
 using UserControl = System.Windows.Controls.UserControl;
 using ListBoxItem = System.Windows.Controls.ListBoxItem;
 using StackPanel = System.Windows.Controls.StackPanel;
@@ -40,10 +36,11 @@ using DataFormats = System.Windows.DataFormats;
 namespace LingoIsland.Present;
 
 /// <summary>
-/// 應用情境分頁（Issue #36，spec#9）：左命名情境清單（名稱＋縮圖＋使用中標記），右編輯區
-/// （名稱、描述、貼上剪貼簿圖片／上傳檔、以 vision 自動解釋、設為使用中、刪除、儲存）。查詢注入來源＝使用中情境描述。
+/// 多媒體主題管理分頁（Issue #36，spec#9；epic #145 增量2：自 Capture 頁獨立為專屬頁籤）：左命名主題清單
+/// （名稱＋縮圖＋使用中標記），右編輯區（名稱、描述、貼上剪貼簿圖片／上傳檔、以 vision 自動解釋、設為使用中、刪除、儲存）。
+/// 查詢注入來源＝使用中主題描述。螢幕擷取與喚起快捷鍵已移至 <see cref="ScreenCapturePage"/>。
 /// </summary>
-public partial class ContextPage : UserControl
+public partial class ThemeManagementPage : UserControl
 {
     private readonly ThemeStore _store;
     private readonly Func<byte[], Task<ImageContext>> _describe;
@@ -52,24 +49,7 @@ public partial class ContextPage : UserControl
     private byte[]? _pending; // 剛貼上/上傳、尚未儲存之圖片
     private readonly Dictionary<string, TextBox> _colorBoxes = new(); // 各色描述輸入框（Issue #69）
 
-    // 喚起快捷鍵設定（#133：#3 自選項頁整套搬入；保留 #127 視窗層擷取寫法、不依賴本頁鍵盤焦點）
-    private HotKeyBinding _hotkey = HotKeyBinding.Default;
-    private bool _listening; // 是否正在監聽擷取喚起快捷鍵
-    private System.Windows.Window? _listenWindow; // 監聽期間掛載擷取事件之宿主視窗（#127：改視窗層擷取、不依賴本頁鍵盤焦點）
-
-    /// <summary>手動觸發螢幕擷取（#5：擷取頁「Capture Screen」鈕）；呼叫端收合主視窗後走既有喚起主動線。</summary>
-    public event Action? CaptureRequested;
-
-    /// <summary>
-    /// 監聽指定快捷鍵之開始（<c>true</c>）／結束（<c>false</c>）；呼叫端（App）據此暫停/恢復全域熱鍵，
-    /// 避免監聽期間按下與現行相同之鍵誤觸喚起，並讓鍵盤組合不被 <c>RegisterHotKey</c> 吞鍵（Issue #89）。
-    /// </summary>
-    public event Action<bool>? ListeningChanged;
-
-    /// <summary>擷取到新綁定時觸發（#133：#3）；呼叫端據此持久化 <c>Hotkey</c>、重註冊全域熱鍵、更新狀態。</summary>
-    public event Action<HotKeyBinding>? HotkeyChanged;
-
-    public ContextPage(ThemeStore store, Func<byte[], Task<ImageContext>> describeAsync, string initialHotkey)
+    public ThemeManagementPage(ThemeStore store, Func<byte[], Task<ImageContext>> describeAsync)
     {
         InitializeComponent();
         _store = store;
@@ -84,18 +64,10 @@ public partial class ContextPage : UserControl
         DescribeBtn.Click += OnDescribe;
         List.SelectionChanged += OnSelect;
 
-        // 喚起快捷鍵：Change 起手監聽、Capture Screen 手動擷取（#133）；監聽於宿主視窗層掛載（見 StartListening，#127），
-        // 監聽中本頁被切離（切分頁致 Unloaded）→ 視同取消，確保全域熱鍵必恢復（Issue #89）。
-        ChangeHotkeyBtn.Click += (_, _) => StartListening();
-        CaptureScreenBtn.Click += (_, _) => CaptureRequested?.Invoke();
-        Unloaded += (_, _) => StopListening();
-
         // 圖片卡拖放圖片檔（Issue #69）
         ImageDropCard.DragOver += (_, e) => { e.Effects = HasImageFile(e) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; };
         ImageDropCard.Drop += OnImageDrop;
 
-        _hotkey = HotKeyBinding.Parse(initialHotkey); // 目前快捷鍵初值（自 AppConfig.Hotkey）
-        UpdateHotkeyStatus();
         BuildColorRuleRows(); // 各色描述輸入列（Issue #69）
         Reload();
     }
@@ -267,7 +239,7 @@ public partial class ContextPage : UserControl
         }
         NameBox.Text = _selected.Name;
         DescBox.Text = _selected.Text;
-        StatusLine.Text = _selected.IsActive ? "This context is active." : "";
+        StatusLine.Text = _selected.IsActive ? "This theme is active." : "";
         ShowPreview(!string.IsNullOrEmpty(_selected.Image) ? LoadImage(_store.ImagePathFor(_selected.Image!)) : null);
         // 載入各色描述（Issue #69）
         foreach (var (name, box) in _colorBoxes)
@@ -328,13 +300,13 @@ public partial class ContextPage : UserControl
         _store.Save(_data);
         BuildList();
         SelectById(_selected.Id);
-        StatusLine.Text = "Set active; queries will use this context.";
+        StatusLine.Text = "Set active; queries will use this theme.";
     }
 
     private void OnDelete(object? sender, RoutedEventArgs e)
     {
         if (_selected is null) { return; }
-        if (MessageBox.Show($"Delete context “{_selected.Name}”?", "Delete Context",
+        if (MessageBox.Show($"Delete theme “{_selected.Name}”?", "Delete Theme",
                 MessageBoxButton.OKCancel, MessageBoxImage.Warning) != MessageBoxResult.OK)
         {
             return;
@@ -420,123 +392,6 @@ public partial class ContextPage : UserControl
             DescribeBtn.IsEnabled = true;
         }
     }
-
-    // ---- 喚起快捷鍵監聽（#133：#3 自選項頁整套搬入；保留 #127 視窗層擷取寫法、不依賴本頁鍵盤焦點） ----
-
-    private void UpdateHotkeyStatus()
-    {
-        HotkeyStatus.Text = "Current: " + _hotkey.DisplayName;
-    }
-
-    private void StartListening()
-    {
-        if (_listening)
-        {
-            return; // 已在監聽 → 不重入
-        }
-        _listening = true;
-        ListeningChanged?.Invoke(true); // 暫停全域熱鍵，避免監聽期間按現行鍵誤觸喚起（Issue #89）
-        HotkeyStatus.Text = "Press a hotkey… (Esc to cancel)";
-        ChangeHotkeyBtn.IsEnabled = false;
-        // 於宿主視窗層擷取按鍵/滑鼠——不依賴 UserControl 取得鍵盤焦點（修 #127）。
-        _listenWindow = System.Windows.Window.GetWindow(this);
-        if (_listenWindow is not null)
-        {
-            _listenWindow.PreviewKeyDown += OnListenKeyDown;
-            _listenWindow.PreviewMouseDown += OnListenMouseDown;
-            _listenWindow.Deactivated += OnListenAborted; // 切到他視窗＝取消監聽、恢復全域熱鍵
-        }
-        // 仍嘗試聚焦本頁（利於事件路由與 Esc），但擷取已不依賴之
-        Focus();
-        Keyboard.Focus(this);
-    }
-
-    private void StopListening()
-    {
-        if (!_listening)
-        {
-            return; // 已非監聽 → 不重覆恢復
-        }
-        _listening = false;
-        ChangeHotkeyBtn.IsEnabled = true;
-        UpdateHotkeyStatus();
-        if (_listenWindow is not null)
-        {
-            _listenWindow.PreviewKeyDown -= OnListenKeyDown;
-            _listenWindow.PreviewMouseDown -= OnListenMouseDown;
-            _listenWindow.Deactivated -= OnListenAborted;
-            _listenWindow = null;
-        }
-        ListeningChanged?.Invoke(false); // 恢復全域熱鍵（Issue #89）
-    }
-
-    private void OnListenAborted(object? sender, System.EventArgs e) => StopListening();
-
-    private void OnListenKeyDown(object sender, KeyEventArgs e)
-    {
-        if (!_listening)
-        {
-            return;
-        }
-        e.Handled = true;
-        var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (key == Key.Escape)
-        {
-            StopListening();
-            return;
-        }
-        if (IsModifierKey(key))
-        {
-            return;
-        }
-        uint mods = 0;
-        var m = Keyboard.Modifiers;
-        if (m.HasFlag(ModifierKeys.Control)) mods |= HotKeyBinding.ModControl;
-        if (m.HasFlag(ModifierKeys.Alt)) mods |= HotKeyBinding.ModAlt;
-        if (m.HasFlag(ModifierKeys.Shift)) mods |= HotKeyBinding.ModShift;
-        if (m.HasFlag(ModifierKeys.Windows)) mods |= HotKeyBinding.ModWin;
-        SetListenedBinding(HotKeyBinding.Keyboard(mods, (uint)KeyInterop.VirtualKeyFromKey(key)));
-    }
-
-    private void OnListenMouseDown(object sender, MouseButtonEventArgs e)
-    {
-        if (!_listening)
-        {
-            return;
-        }
-        if (e.LeftButton == MouseButtonState.Pressed && e.RightButton == MouseButtonState.Pressed)
-        {
-            e.Handled = true;
-            SetListenedBinding(HotKeyBinding.OfMouse(MouseTrigger.LeftRight));
-            return;
-        }
-        MouseTrigger? trig = e.ChangedButton switch
-        {
-            MouseButton.Middle => MouseTrigger.Middle,
-            MouseButton.XButton1 => MouseTrigger.XButton1,
-            MouseButton.XButton2 => MouseTrigger.XButton2,
-            _ => null,
-        };
-        if (trig is null)
-        {
-            return;
-        }
-        e.Handled = true;
-        SetListenedBinding(HotKeyBinding.OfMouse(trig.Value));
-    }
-
-    /// <summary>把擷取到的綁定寫入喚起快捷鍵、通知呼叫端持久化＋重註冊（#133），並結束監聽。</summary>
-    private void SetListenedBinding(HotKeyBinding binding)
-    {
-        _hotkey = binding;
-        HotkeyChanged?.Invoke(binding); // App 據此存 config、重註冊全域熱鍵、resync 選項頁快照
-        StopListening();
-    }
-
-    private static bool IsModifierKey(Key k) => k is
-        Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or
-        Key.LeftShift or Key.RightShift or Key.LWin or Key.RWin or
-        Key.System or Key.None;
 
     // ---- 圖片工具 ----
 

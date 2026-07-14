@@ -23,7 +23,8 @@ public partial class App : System.Windows.Application
     private MainWindow? _main;
     private NotesPage? _notesPage;
     private HistoryPage? _historyPage;
-    private ContextPage? _contextPage;
+    private ThemeManagementPage? _themePage;
+    private ScreenCapturePage? _capturePage;
     private OptionsPage? _optionsPage;
     private HotKeyService? _hotkey;
     private HotkeyListenGuard? _listenGuard; // 指定快捷鍵監聽期間暫停/恢復全域熱鍵（Issue #89）
@@ -77,7 +78,7 @@ public partial class App : System.Windows.Application
         menu.Items.Add("Dictionary", null, (_, _) => SummonResult()); // 喚出獨立字典視窗（顯示最近查詢；v1.0.1）
         menu.Items.Add("Query History", null, (_, _) => OpenMain(MainTab.History));
         menu.Items.Add("My Notes", null, (_, _) => OpenMain(MainTab.Notes));
-        menu.Items.Add("Capture", null, (_, _) => OpenMain(MainTab.Context)); // #133：分頁改名 Capture（enum 內部名沿用 Context）
+        menu.Items.Add("Capture", null, (_, _) => OpenMain(MainTab.Capture)); // 系統匣「Capture」→螢幕截圖頁（epic #145 增量2）
         menu.Items.Add("Options", null, (_, _) => OpenMain(MainTab.Options));
         menu.Items.Add("About", null, (_, _) => OpenMain(MainTab.About));
         menu.Items.Add(new WinForms.ToolStripSeparator());
@@ -103,14 +104,14 @@ public partial class App : System.Windows.Application
         _listenGuard = new HotkeyListenGuard(
             suspend: () => _hotkey?.Unregister(),
             resume: RegisterHotkeyOrWarn);
-        _themeStore.LoadMigrated(_config.Context); // #14 單一情境提示相容遷移為一則命名情境
-        _contextPage = new ContextPage(_themeStore,
-            bytes => new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries).DescribeImageAsync(bytes),
-            _config.Hotkey); // 目前喚起快捷鍵初值（#133：#3 設定整塊搬至擷取頁）
-        // 喚起快捷鍵設定＋監聽暫停守衛＋手動擷取皆由擷取頁承載（#133：#3 快捷鍵搬遷、#5 手動擷取）
-        _contextPage.ListeningChanged += _listenGuard.OnListeningChanged;
-        _contextPage.HotkeyChanged += OnHotkeyChanged;
-        _contextPage.CaptureRequested += TriggerManualCapture;
+        _themeStore.LoadMigrated(_config.Context); // #14 單一主題提示相容遷移為一則命名主題
+        _themePage = new ThemeManagementPage(_themeStore,
+            bytes => new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries).DescribeImageAsync(bytes));
+        _capturePage = new ScreenCapturePage(_config.Hotkey); // 目前喚起快捷鍵初值（#133）
+        // 喚起快捷鍵設定＋監聽暫停守衛＋手動擷取皆由螢幕截圖頁承載（#133／#5；epic #145 增量2 自主題頁拆出）
+        _capturePage.ListeningChanged += _listenGuard.OnListeningChanged;
+        _capturePage.HotkeyChanged += OnHotkeyChanged;
+        _capturePage.CaptureRequested += TriggerManualCapture;
 
         _updates = new UpdateService();
         _updates.UpdateReady += v => Dispatcher.BeginInvoke(() => _main?.ShowUpdateReady(v));
@@ -128,7 +129,7 @@ public partial class App : System.Windows.Application
         videoPage.WordLookupRequested += LookupWordFromVideo;
         videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
 
-        _main = new MainWindow(_notesPage, _historyPage, _contextPage, videoPage, _optionsPage, new AboutPage(_updates));
+        _main = new MainWindow(_themePage, _capturePage, videoPage, _notesPage, _historyPage, _optionsPage, new AboutPage(_updates));
         _main.RefreshStatus(keyReady, HotkeyDisplay());
         _main.ResultRequested += SummonResult; // 功能列「Dictionary」鈕→喚出獨立字典視窗（v1.0.1 恢復）
         _main.ExitRequested += ExitApp;        // 主視窗關閉(✕)→結束整個程式（v1.0.1：移除原「關閉＝收合」防關閉行為，USR 回饋）

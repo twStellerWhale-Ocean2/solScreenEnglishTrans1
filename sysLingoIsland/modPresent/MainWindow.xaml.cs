@@ -4,7 +4,7 @@ using CancelEventArgs = System.ComponentModel.CancelEventArgs;
 namespace LingoIsland.Present;
 
 /// <summary>統一主視窗之分頁。</summary>
-public enum MainTab { Notes, History, Context, Video, Options, About }
+public enum MainTab { Themes, Capture, Video, Notes, History, Options, About }
 
 /// <summary>
 /// 統一 Office 式主視窗（Issue #34）：頂部功能列分頁（圖示＋文字）＋下方對應功能頁，取代原
@@ -22,20 +22,22 @@ public partial class MainWindow : Window
     /// <summary>使用者按主視窗關閉（✕）：請求結束整個常駐程式（v1.0.1，取代原「關閉＝收合」；由 App 走統一結束流程）。</summary>
     public event Action? ExitRequested;
 
+    private readonly ThemeManagementPage _themes;
+    private readonly ScreenCapturePage _capture;
+    private readonly VideoCapturePage _video;
     private readonly NotesPage _notes;
     private readonly HistoryPage _history;
-    private readonly ContextPage _context;
-    private readonly VideoCapturePage _video;
     private readonly OptionsPage _options;
     private readonly AboutPage _about;
 
-    public MainWindow(NotesPage notes, HistoryPage history, ContextPage context, VideoCapturePage video, OptionsPage options, AboutPage about)
+    public MainWindow(ThemeManagementPage themes, ScreenCapturePage capture, VideoCapturePage video, NotesPage notes, HistoryPage history, OptionsPage options, AboutPage about)
     {
         InitializeComponent();
+        _themes = themes;
+        _capture = capture;
+        _video = video;
         _notes = notes;
         _history = history;
-        _context = context;
-        _video = video;
         _options = options;
         _about = about;
 
@@ -47,7 +49,8 @@ public partial class MainWindow : Window
         // 切至筆記/歷史時於狀態列顯目前檢視條目數，其餘分頁隱藏（#132）。
         TabNotes.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _notes.Reload(); Host.Content = _notes; ShowEntryCount(_notes.CurrentEntryCount); };
         TabHistory.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _history.Reload(); Host.Content = _history; ShowEntryCount(_history.CurrentEntryCount); };
-        TabContext.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _context.Reload(); Host.Content = _context; ShowEntryCount(null); };
+        TabThemes.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _themes.Reload(); Host.Content = _themes; ShowEntryCount(null); };
+        TabCapture.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } Host.Content = _capture; ShowEntryCount(null); };
         TabVideo.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } Host.Content = _video; ShowEntryCount(null); };
         TabOptions.Checked += (_, _) => { Host.Content = _options; ShowEntryCount(null); };
         TabAbout.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } Host.Content = _about; ShowEntryCount(null); };
@@ -96,7 +99,8 @@ public partial class MainWindow : Window
         {
             case MainTab.Notes: TabNotes.IsChecked = true; break;
             case MainTab.History: TabHistory.IsChecked = true; break;
-            case MainTab.Context: TabContext.IsChecked = true; break;
+            case MainTab.Themes: TabThemes.IsChecked = true; break;
+            case MainTab.Capture: TabCapture.IsChecked = true; break;
             case MainTab.Video: TabVideo.IsChecked = true; break;
             case MainTab.Options: TabOptions.IsChecked = true; break;
             case MainTab.About: TabAbout.IsChecked = true; break;
