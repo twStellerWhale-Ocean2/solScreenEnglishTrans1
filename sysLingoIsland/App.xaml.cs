@@ -36,6 +36,7 @@ public partial class App : System.Windows.Application
     private readonly HistoryStore _historyStore = new();
     private readonly NotesStore _notesStore = new();
     private readonly ThemeStore _themeStore = new();
+    private readonly ScreenshotStore _screenshotStore = new(); // epic #145 增量3：截圖持久化
     private readonly INotificationService _notify = new WinToastNotificationService(); // 發音回饋系統通知（#101）
     private UpdateService? _updates;
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "LingoIsland-error.log");
@@ -107,7 +108,7 @@ public partial class App : System.Windows.Application
         _themeStore.LoadMigrated(_config.Context); // #14 單一主題提示相容遷移為一則命名主題
         _themePage = new ThemeManagementPage(_themeStore,
             bytes => new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries).DescribeImageAsync(bytes));
-        _capturePage = new ScreenCapturePage(_config.Hotkey); // 目前喚起快捷鍵初值（#133）
+        _capturePage = new ScreenCapturePage(_config.Hotkey, _screenshotStore); // 快捷鍵初值（#133）＋截圖儲存（增量3）
         // 喚起快捷鍵設定＋監聽暫停守衛＋手動擷取皆由螢幕截圖頁承載（#133／#5；epic #145 增量2 自主題頁拆出）
         _capturePage.ListeningChanged += _listenGuard.OnListeningChanged;
         _capturePage.HotkeyChanged += OnHotkeyChanged;
@@ -266,6 +267,11 @@ public partial class App : System.Windows.Application
         _dictionaryWindow!.Page.SetNoteTargets(TopFolderNames(), ActiveThemeName()); // #55「加入至」下拉來源
         _dictionaryWindow.Page.ShowLoading();
         _dictionaryWindow.ShowAndActivate(); // 顯示獨立字典視窗（Topmost 疊於無邊框遊戲）
+
+        // epic #145 增量3：保存本次截圖（不論查詢成敗），記錄擷取當下使用中主題（跨媒體主題歸屬）
+        var capturedTheme = ThemeStore.GetActive(_themeStore.Load());
+        _screenshotStore.Add(capture.PngBytes, capturedTheme?.Id, capturedTheme?.Name, DateTimeOffset.Now);
+        _capturePage?.RefreshScreenshots();
 
         try
         {
