@@ -184,7 +184,7 @@ public partial class ScreenCapturePage : UserControl
 
     private void UpdateHotkeyStatus()
     {
-        HotkeyStatus.Text = "Current: " + _hotkey.DisplayName;
+        HotkeyStatus.Text = _hotkey.DisplayName; // 標籤已為「Hotkey:」，此處僅顯示值（#165）
     }
 
     private void StartListening()

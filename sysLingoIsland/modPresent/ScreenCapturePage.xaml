@@ -1,95 +1,76 @@
 <UserControl x:Class="LingoIsland.Present.ScreenCapturePage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-  <Grid>
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto"/>  <!-- 螢幕擷取控制 -->
-      <RowDefinition Height="*"/>      <!-- 截圖管理（epic #145 增量3） -->
-    </Grid.RowDefinitions>
+  <!-- 版面（#165）：左＝截圖清單（上方 Clear all＋依 theme 篩選）｜右上＝水平擷取控制｜右下＝圖片預覽 -->
+  <Grid Margin="10">
+    <Grid.ColumnDefinitions>
+      <ColumnDefinition Width="260" MinWidth="200"/>
+      <ColumnDefinition Width="Auto"/>
+      <ColumnDefinition Width="*" MinWidth="240"/>
+    </Grid.ColumnDefinitions>
 
-    <!-- 螢幕截圖（epic #145 增量2）：兩種擷圖方式各一行——By button＝手動擷取鈕、By hotkey＝喚起快捷鍵。 -->
-    <Border Grid.Row="0" Style="{StaticResource Card}" Padding="12" Margin="10,10,10,2">
-      <StackPanel>
-        <TextBlock Text="Screen capture" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}"/>
-        <Grid Margin="0,8,0,0">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="96"/>
-            <ColumnDefinition Width="*"/>
-          </Grid.ColumnDefinitions>
-          <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-          </Grid.RowDefinitions>
-          <TextBlock Grid.Row="0" Grid.Column="0" Text="By button" VerticalAlignment="Center" Foreground="{StaticResource PinkText}"/>
-          <Button Grid.Row="0" Grid.Column="1" x:Name="CaptureScreenBtn" Content="Capture Screen"
-                  Style="{StaticResource GhostButton}" HorizontalAlignment="Left"/>
-          <TextBlock Grid.Row="1" Grid.Column="0" Text="By hotkey" VerticalAlignment="Center"
-                     Foreground="{StaticResource PinkText}" Margin="0,8,0,0"/>
-          <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
-            <TextBlock x:Name="HotkeyStatus" MinWidth="90" VerticalAlignment="Center"
-                       Foreground="{StaticResource PinkText}" FontWeight="SemiBold"/>
-            <Button x:Name="ChangeHotkeyBtn" Content="Change" Style="{StaticResource GhostButton}" Margin="10,0,0,0"/>
-          </StackPanel>
-        </Grid>
-      </StackPanel>
-    </Border>
-
-    <!-- 截圖管理（epic #145 增量3）：擷取之截圖保存於此，可檢視／刪除；標記擷取當下使用中主題 -->
-    <Border Grid.Row="1" Style="{StaticResource Card}" Padding="12" Margin="10,2,10,10">
+    <!-- 左：Clear all（置頂）＋依 theme 篩選＋截圖清單 -->
+    <Border Grid.Column="0" Style="{StaticResource Card}" Padding="10">
       <Grid>
         <Grid.RowDefinitions>
-          <RowDefinition Height="Auto"/>  <!-- 標題＋Clear all -->
-          <RowDefinition Height="*"/>      <!-- 左清單 | splitter | 右預覽 -->
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
         <Grid Grid.Row="0">
-          <TextBlock Text="Captured screenshots" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="Screenshots" FontWeight="Bold" FontSize="14"
+                     Foreground="{StaticResource PinkText}" VerticalAlignment="Center"/>
           <Button x:Name="ClearShotsBtn" Content="Clear all" Style="{StaticResource GhostButton}"
                   HorizontalAlignment="Right"/>
         </Grid>
-
-        <Grid Grid.Row="1" Margin="0,8,0,0">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="240" MinWidth="180"/>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="*" MinWidth="200"/>
-          </Grid.ColumnDefinitions>
-
-          <Border Grid.Column="0" Style="{StaticResource Card}">
-            <Grid>
-              <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-              </Grid.RowDefinitions>
-              <!-- 依 theme 篩選（圖文下拉，多媒體主題管理·B） -->
-              <ComboBox x:Name="ShotThemeFilter" Grid.Row="0" Height="26" Margin="4,4,4,2"
-                        VerticalContentAlignment="Center" ToolTip="Filter screenshots by theme"/>
-              <ListBox x:Name="ShotList" Grid.Row="1" BorderThickness="0" Background="Transparent" Margin="4"
-                       HorizontalContentAlignment="Stretch"/>
-            </Grid>
-          </Border>
-
-          <GridSplitter Grid.Column="1" Style="{StaticResource ColSplitter}"/>
-
-          <Grid Grid.Column="2" Margin="6,0,0,0">
-            <Grid.RowDefinitions>
-              <RowDefinition Height="*"/>
-              <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-            <Border Grid.Row="0" Style="{StaticResource Card}">
-              <Grid>
-                <Image x:Name="ShotPreview" Stretch="Uniform" Margin="6"/>
-                <TextBlock x:Name="ShotEmptyHint" Text="No screenshots yet. Capture a screen (button or hotkey) to save it here."
-                           Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="260"
-                           TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-              </Grid>
-            </Border>
-            <WrapPanel Grid.Row="1" Margin="0,8,0,0">
-              <Button x:Name="DeleteShotBtn" Content="Delete" Foreground="#B23B3B"
-                      Style="{StaticResource GhostButton}" IsEnabled="False"/>
-            </WrapPanel>
-          </Grid>
-        </Grid>
+        <!-- 依 theme 篩選（圖文下拉，多媒體主題管理·B） -->
+        <ComboBox x:Name="ShotThemeFilter" Grid.Row="1" Height="26" Margin="0,8,0,4"
+                  VerticalContentAlignment="Center" ToolTip="Filter screenshots by theme"/>
+        <ListBox x:Name="ShotList" Grid.Row="2" BorderThickness="0" Background="Transparent"
+                 HorizontalContentAlignment="Stretch"/>
       </Grid>
     </Border>
+
+    <GridSplitter Grid.Column="1" Style="{StaticResource ColSplitter}"/>
+
+    <!-- 右：上＝水平擷取控制（Capture Screen＋快捷鍵 Change）、下＝圖片預覽（＋Delete） -->
+    <Grid Grid.Column="2" Margin="6,0,0,0">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+      </Grid.RowDefinitions>
+
+      <Border Grid.Row="0" Style="{StaticResource Card}" Padding="12">
+        <StackPanel>
+          <TextBlock Text="Screen capture" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}" Margin="0,0,0,8"/>
+          <WrapPanel Orientation="Horizontal">
+            <Button x:Name="CaptureScreenBtn" Content="Capture Screen" Style="{StaticResource GhostButton}" Margin="0,0,16,4"/>
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,0,4">
+              <TextBlock Text="Hotkey:" VerticalAlignment="Center" Foreground="{StaticResource PinkText}" Margin="0,0,4,0"/>
+              <TextBlock x:Name="HotkeyStatus" MinWidth="80" VerticalAlignment="Center"
+                         Foreground="{StaticResource PinkText}" FontWeight="SemiBold"/>
+              <Button x:Name="ChangeHotkeyBtn" Content="Change" Style="{StaticResource GhostButton}" Margin="8,0,0,0"/>
+            </StackPanel>
+          </WrapPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,8,0,0" Padding="6">
+        <Grid>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+          </Grid.RowDefinitions>
+          <Grid Grid.Row="0">
+            <Image x:Name="ShotPreview" Stretch="Uniform" Margin="6"/>
+            <TextBlock x:Name="ShotEmptyHint" Text="No screenshots yet. Capture a screen (button or hotkey) to save it here."
+                       Foreground="#9A6A82" FontSize="13" TextWrapping="Wrap" MaxWidth="260"
+                       TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Grid>
+          <Button x:Name="DeleteShotBtn" Grid.Row="1" Content="Delete" Foreground="#B23B3B"
+                  Style="{StaticResource GhostButton}" HorizontalAlignment="Left" Margin="0,6,0,0" IsEnabled="False"/>
+        </Grid>
+      </Border>
+    </Grid>
   </Grid>
 </UserControl>

@@ -92,6 +92,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         // 影片清單（epic #145 增量4）＋依 theme 篩選（B）：點清單載入該片、刪除、篩選、初次載入
         VideoList.SelectionChanged += OnVideoSelect;
         DeleteVideoBtn.Click += (_, _) => OnDeleteVideo();
+        ClearVideosBtn.Click += (_, _) => OnClearVideos(); // #165 清空影片清單
         VideoThemeFilter.SelectionChanged += (_, _) => { if (!_populatingVideoFilter) { RefreshVideoList(); } };
         PopulateVideoThemeFilter();
         RefreshVideoList();
@@ -300,6 +301,20 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         if (it is null) return;
         _videoStore.Remove(it.Id);
         if (it.Id == _currentVideoItemId) _currentVideoItemId = null;
+        RefreshVideoList();
+    }
+
+    /// <summary>清空影片清單（#165 Clear all，含確認）；不影響目前載入中之播放。</summary>
+    private void OnClearVideos()
+    {
+        if (_videoStore.Load().Items.Count == 0) return;
+        if (System.Windows.MessageBox.Show("Remove all videos from the list?", "Clear videos",
+                System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Warning) != System.Windows.MessageBoxResult.OK)
+        {
+            return;
+        }
+        _videoStore.Clear();
+        _currentVideoItemId = null;
         RefreshVideoList();
     }
 

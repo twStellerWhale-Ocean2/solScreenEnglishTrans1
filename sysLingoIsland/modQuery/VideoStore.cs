@@ -70,6 +70,9 @@ public sealed class VideoStore
         return it;
     }
 
+    /// <summary>清空影片清單（#165 Clear all）。</summary>
+    public void Clear() => Save(new VideosData());
+
     /// <summary>回寫某項標題（自播放器取得標題後）。</summary>
     public void UpdateTitle(string id, string title)
     {
