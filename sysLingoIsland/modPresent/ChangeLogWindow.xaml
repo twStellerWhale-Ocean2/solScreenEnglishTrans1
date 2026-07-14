@@ -4,6 +4,7 @@
         Title="Change Log" Width="560" Height="620"
         MinWidth="380" MinHeight="300"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        ResizeMode="CanResizeWithGrip"
         Background="{StaticResource PinkBg}">
   <!-- About 頁「Change Log」按鈕跳出之獨立更新紀錄視窗（#159）：沿用嵌入 CHANGELOG.md、唯讀可捲動可選取 -->
   <Border Style="{StaticResource Card}" Margin="12" Padding="12">

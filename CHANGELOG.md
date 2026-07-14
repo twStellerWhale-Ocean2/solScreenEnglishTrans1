@@ -2,6 +2,11 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [2.7.1] - 2026-07-14
+
+### 修正
+- **ChangeLogWindow 補右下角縮放握把**：`ResizeMode="CanResizeWithGrip"`，與 MainWindow／DictionaryWindow 一致（原用預設 `CanResize`、缺可見握把）。
+
 ## [2.7.0] - 2026-07-14
 
 About 頁更新紀錄改按鈕跳出獨立視窗（#159）。
