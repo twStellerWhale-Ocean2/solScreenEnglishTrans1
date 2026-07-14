@@ -35,6 +35,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private bool _isAuto;              // 目前字幕為自動生成（逐字滾動、較破碎）——供狀態提示
     private bool _loading;             // 抓字幕中（LoadBtn 兼作 Cancel）
     private CancellationTokenSource? _loadCts; // 抓字幕可取消（新 Load／取消鈕）
+    private CancellationTokenSource? _inferCts; // AI 說話人推斷可取消（新 Load／新推斷取代，增量6）
 
     // 說話人字幕（epic #145 增量5）：CueList 綁 CueRow view-model（保留原始 _cues index，篩選/顯示不動播放 index）
     private List<CueRow> _rows = new();
@@ -158,6 +159,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private async Task LoadVideoAsync(string id, bool addToStore)
     {
         _loadCts?.Cancel();
+        _inferCts?.Cancel(); // 增量6：載入新片取消進行中的 AI 說話人推斷（免浪費 API、免過時結果跑到逾時）
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
 
@@ -544,6 +546,9 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
     private async Task InferSpeakersAsync()
     {
         if (_cues.Count == 0 || _yamlEditing || _inferring || _loading) return;
+        _inferCts?.Cancel();
+        _inferCts = new CancellationTokenSource();
+        var ct = _inferCts.Token;
         _inferring = true;
         InferSpeakersBtn.IsEnabled = false;
         EditYamlBtn.IsEnabled = false;
@@ -551,8 +556,8 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         var target = _cues; // stale guard 基準
         try
         {
-            var speakers = await _enricher.InferSpeakersAsync(target, _currentTitle);
-            if (!ReferenceEquals(_cues, target)) return; // 期間已換片／套用 YAML → 丟棄過時結果
+            var speakers = await _enricher.InferSpeakersAsync(target, _currentTitle, ct);
+            if (ct.IsCancellationRequested || !ReferenceEquals(_cues, target)) return; // 被取代／已換片／套用 YAML → 丟棄過時結果
             var merged = SpeakerInference.MergeSpeakers(target, speakers);
             var filled = SpeakerInference.CountNewlyLabeled(target, merged);
             var keepShown = _shownCue;       // index 不變（僅補說話人）→ 保留當前句
@@ -563,12 +568,12 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
                 : "AI couldn't confidently add any new speaker labels for this subtitle.");
         }
         catch (SpeakerEnrichException ex) { SetStatus(ex.Message); }
-        catch (OperationCanceledException) { SetStatus("Speaker inference canceled."); }
+        catch (OperationCanceledException) { /* 被新載入／新推斷取代 → 靜默，狀態由後續操作接手 */ }
         catch (Exception ex) { SetStatus("Speaker inference failed: " + ex.Message); }
         finally
         {
             _inferring = false;
-            var enable = _cues.Count > 0 && !_yamlEditing;
+            var enable = _cues.Count > 0 && !_yamlEditing && !_loading; // 載入中不啟用（避免併發載入時短暫可按但無效）
             InferSpeakersBtn.IsEnabled = enable;
             EditYamlBtn.IsEnabled = enable;
         }

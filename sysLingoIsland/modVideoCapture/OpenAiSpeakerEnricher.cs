@@ -58,19 +58,21 @@ public sealed class OpenAiSpeakerEnricher : ISpeakerEnricher
             throw new SpeakerEnrichException("Network error while inferring speakers: " + ex.Message);
         }
 
-        var json = await resp.Content.ReadAsStringAsync(ct);
-        if (!resp.IsSuccessStatusCode)
+        using (resp)
         {
-            throw new SpeakerEnrichException($"OpenAI responded {(int)resp.StatusCode} while inferring speakers.");
-        }
-
-        try
-        {
-            return SpeakerInference.ParseSpeakers(json);
-        }
-        catch (Exception ex)
-        {
-            throw new SpeakerEnrichException("Could not parse speaker-inference response: " + ex.Message);
+            var json = await resp.Content.ReadAsStringAsync(ct);
+            if (!resp.IsSuccessStatusCode)
+            {
+                throw new SpeakerEnrichException($"OpenAI responded {(int)resp.StatusCode} while inferring speakers.");
+            }
+            try
+            {
+                return SpeakerInference.ParseSpeakers(json);
+            }
+            catch (Exception ex)
+            {
+                throw new SpeakerEnrichException("Could not parse speaker-inference response: " + ex.Message);
+            }
         }
     }
 
