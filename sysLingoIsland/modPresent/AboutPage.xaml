@@ -3,13 +3,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <!-- Issue #79：資訊卡 + 更新紀錄（ChangeLog）；#97 UI：About 卡改橫向（左 logo、右資訊），Change Log 於其下整條寬 -->
   <Grid Margin="16">
-    <Grid.RowDefinitions>
-      <RowDefinition Height="Auto"/>
-      <RowDefinition Height="*"/>
-    </Grid.RowDefinitions>
-
-    <!-- About 卡：女孩圖在左、資訊在右 -->
-    <Border Grid.Row="0" Style="{StaticResource Card}" Padding="20" Margin="0,0,0,10">
+    <!-- About 卡：女孩圖在左、資訊在右（#159：更新紀錄改「Change Log」按鈕跳出獨立視窗、不再常駐佔頁） -->
+    <Border VerticalAlignment="Top" Style="{StaticResource Card}" Padding="20">
       <Grid>
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto"/>
@@ -33,6 +28,9 @@
           </TextBlock>
           <TextBlock Text="Recognition &amp; translation by OpenAI; speech by Windows built-in voices." FontSize="11.5"
                      Foreground="#9A6A82" Margin="0,10,0,0" TextWrapping="Wrap"/>
+          <!-- #159：更新紀錄改按鈕跳出獨立視窗 -->
+          <Button x:Name="ChangeLogBtn" Content="Change Log" Style="{StaticResource GhostButton}"
+                  HorizontalAlignment="Left" Margin="0,12,0,0" ToolTip="View what changed in each version"/>
           <!-- 更新區（Issue #51）：僅 Velopack 安裝形態顯示；dev 裸跑隱藏 -->
           <StackPanel x:Name="UpdatePanel" Orientation="Horizontal" Margin="0,12,0,0" Visibility="Collapsed">
             <TextBlock x:Name="UpdateStatusText" FontSize="12.5" Foreground="{StaticResource PinkSub}"
@@ -42,22 +40,6 @@
                     Visibility="Collapsed"/>
           </StackPanel>
         </StackPanel>
-      </Grid>
-    </Border>
-
-    <!-- 更新紀錄（ChangeLog）：於 About 下方、整條寬；嵌入資源、唯讀可捲動可選取（Issue #79） -->
-    <Border Grid.Row="1" Style="{StaticResource Card}" Padding="12">
-      <Grid>
-        <Grid.RowDefinitions>
-          <RowDefinition Height="Auto"/>
-          <RowDefinition Height="*"/>
-        </Grid.RowDefinitions>
-        <TextBlock Grid.Row="0" Text="Change Log" FontWeight="SemiBold"
-                   Foreground="{StaticResource PinkText}" Margin="0,0,0,6"/>
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-          <TextBox x:Name="ChangeLogBox" IsReadOnly="True" BorderThickness="0" Background="Transparent"
-                   TextWrapping="Wrap" FontSize="12" Foreground="#3A2C33" IsTabStop="False" Padding="0"/>
-        </ScrollViewer>
       </Grid>
     </Border>
   </Grid>

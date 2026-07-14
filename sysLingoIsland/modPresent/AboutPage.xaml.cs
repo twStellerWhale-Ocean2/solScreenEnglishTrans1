@@ -1,4 +1,3 @@
-using System.IO;
 using System.Reflection;
 using System.Windows;
 using UserControl = System.Windows.Controls.UserControl;
@@ -19,7 +18,9 @@ public partial class AboutPage : UserControl
         InitializeComponent();
         var ver = Assembly.GetExecutingAssembly().GetName().Version;
         VersionText.Text = "Version v" + (ver is null ? "?" : $"{ver.Major}.{ver.Minor}.{ver.Build}");
-        ChangeLogBox.Text = LoadChangeLog(); // 更新紀錄（Issue #79）
+        // 更新紀錄改按鈕跳出獨立視窗（#159）——不再常駐佔頁
+        ChangeLogBtn.Click += (_, _) =>
+            new ChangeLogWindow { Owner = System.Windows.Window.GetWindow(this) }.ShowDialog();
 
         _updates = updates;
         if (_updates is null || !_updates.IsSupported)
@@ -36,33 +37,6 @@ public partial class AboutPage : UserControl
         if (_updates.ReadyVersion is not null)
         {
             ShowReady(_updates.ReadyVersion);
-        }
-    }
-
-    /// <summary>讀嵌入之 CHANGELOG.md（Issue #79）供「更新紀錄」顯示；缺失/失敗回提示、不致命。</summary>
-    private static string LoadChangeLog()
-    {
-        try
-        {
-            using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("CHANGELOG.md");
-            if (s is null)
-            {
-                return "(No change log found)";
-            }
-            using var r = new StreamReader(s);
-            // #複查（USR 回饋）：About 已自有「Change Log」標題——略去檔首「# Changelog」H1 與 SemVer 註解，
-            // 自首個版本條目（行首「## 」）起顯示，免與 UI 標題重複、免多餘註解。
-            var text = r.ReadToEnd().TrimStart();
-            if (text.StartsWith("## ", StringComparison.Ordinal))
-            {
-                return text; // 檔首已是版本條目（無 H1）
-            }
-            int idx = text.IndexOf("\n## ", StringComparison.Ordinal);
-            return idx >= 0 ? text[(idx + 1)..] : text;
-        }
-        catch
-        {
-            return "(Couldn't load change log)";
         }
     }
 

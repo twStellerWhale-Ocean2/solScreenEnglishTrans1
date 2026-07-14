@@ -167,6 +167,14 @@
 
 ![選項分頁「Notes / History entries」（條目字級／粗體／換行）與「Dictionary result」（結果基準字級）兩區；v1.0.0 起失焦自動隱藏已隨浮動視窗移除](docs/manual-assets/options-entry-window-settings.png)
 
+## 關於頁 · 更新紀錄（v2.7.0）
+
+「關於」分頁只放版本／版權／連結；**更新紀錄改一顆「Change Log」按鈕**，按了才**跳出獨立視窗**（可捲動、Close 關閉）——不再常駐佔掉半頁（一般慣例）。
+
+![關於分頁：版本／版權／GitHub＋「Change Log」按鈕，不再常駐更新紀錄](docs/manual-assets/about-changelog-button.png)
+
+![按 Change Log 跳出的獨立更新紀錄視窗（可捲動、Close）](docs/manual-assets/about-changelog-window.png)
+
 ## 成功判定
 
 - 啟動後工作列出現 LingoIsland 按鈕（可 `Alt+Tab` 尋得）、主控視窗**底部狀態列**顯示「金鑰已備妥」；換版／換資料夾後仍可從工作列找到，不需重設系統匣顯示。
