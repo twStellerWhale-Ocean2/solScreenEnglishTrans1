@@ -127,8 +127,10 @@ public partial class App : System.Windows.Application
         _dictionaryWindow.Page.HistoryRequested += RefreshDictionaryHistory; // 下拉開啟→以查詢歷史填入
 
         // 影片擷取分頁（#139，spec#2）：yt-dlp 取字幕 → WebView2 導引播放到句暫停 → 暫停句點字沿用既有查詢、加入既有筆記
+        // 增量6：AI 說話人推斷疊加（按鈕觸發、沿用既有查詢模型/逾時；讀 OPENAI_API_KEY）
         var videoPage = new VideoCapturePage(new YtDlpSubtitleFetcher(), _videoStore,
-            () => { var a = ThemeStore.GetActive(_themeStore.Load()); return (a?.Id, a?.Name); }); // 影片清單＋加入時記錄使用中主題（增量4）
+            () => { var a = ThemeStore.GetActive(_themeStore.Load()); return (a?.Id, a?.Name); }, // 影片清單＋加入時記錄使用中主題（增量4）
+            new OpenAiSpeakerEnricher(_config.Model, _config.TimeoutSec));
         videoPage.WordLookupRequested += LookupWordFromVideo;
         videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
 
