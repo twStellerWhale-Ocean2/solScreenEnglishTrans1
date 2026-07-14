@@ -4,7 +4,9 @@ using System.Text.RegularExpressions;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Threading;
+using System.Text.Json;
 using LingoIsland.Video;
+using LingoIsland.Query;
 
 namespace LingoIsland.Present;
 
@@ -17,6 +19,9 @@ namespace LingoIsland.Present;
 public partial class VideoCapturePage : System.Windows.Controls.UserControl
 {
     private readonly ISubtitleFetcher _fetcher;
+    private readonly VideoStore _videoStore;                       // 影片清單持久化（epic #145 增量4）
+    private readonly Func<(string? Id, string? Name)> _activeTheme; // 加入影片時記錄使用中主題（跨媒體歸屬）
+    private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private readonly DispatcherTimer _poll;
     private IReadOnlyList<SubtitleCue> _cues = new List<SubtitleCue>();
     private int _lastPausedIndex = -1; // 上次已暫停之 cue（PauseDecider 用）
@@ -37,15 +42,17 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     /// <summary>加入我的筆記（目前句原文；App 重譯後入既有 NotesStore）。</summary>
     public event Action<string>? AddToNotesRequested;
 
-    public VideoCapturePage(ISubtitleFetcher fetcher)
+    public VideoCapturePage(ISubtitleFetcher fetcher, VideoStore videoStore, Func<(string? Id, string? Name)> activeTheme)
     {
         InitializeComponent();
         _fetcher = fetcher;
+        _videoStore = videoStore;
+        _activeTheme = activeTheme;
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _poll.Tick += OnPoll;
 
-        LoadBtn.Click += (_, _) => { if (_loading) _loadCts?.Cancel(); else _ = LoadAsync(); }; // 載入中兼作取消
-        UrlBox.KeyDown += (_, e) => { if (e.Key == Key.Enter && !_loading) _ = LoadAsync(); };
+        LoadBtn.Click += (_, _) => { if (_loading) _loadCts?.Cancel(); else _ = LoadFromInputAsync(); }; // 載入中兼作取消
+        UrlBox.KeyDown += (_, e) => { if (e.Key == Key.Enter && !_loading) _ = LoadFromInputAsync(); };
         ReplayBtn.Click += (_, _) => _ = ReplayCurrentAsync();
         ResumeBtn.Click += (_, _) => _ = ResumeAsync();
         NextBtn.Click += (_, _) => _ = SkipNextAsync();
@@ -53,6 +60,11 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         CueList.SelectionChanged += (_, _) => _ = JumpToSelectedAsync();
         Loaded += async (_, _) => await EnsureWebAsync();
         IsVisibleChanged += OnVisibleChanged; // 切走分頁：停輪詢＋暫停播放；切回：恢復輪詢
+
+        // 影片清單（epic #145 增量4）：點清單載入該片、刪除、初次載入
+        VideoList.SelectionChanged += OnVideoSelect;
+        DeleteVideoBtn.Click += (_, _) => OnDeleteVideo();
+        RefreshVideoList();
     }
 
     /// <summary>切走 Video 分頁即停輪詢並暫停播放（免背景永久 100ms 輪詢與音訊續播）；切回恢復輪詢（不自動續播，由使用者 Continue）。</summary>
@@ -112,11 +124,17 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         return m.Success ? m.Groups[1].Value : null;
     }
 
-    private async Task LoadAsync()
+    /// <summary>貼片列 Load／Enter：解析 UrlBox 之影片 ID → 載入並加入影片清單（epic #145 增量4）。</summary>
+    private async Task LoadFromInputAsync()
     {
         var id = ExtractVideoId(UrlBox.Text);
         if (id is null) { SetStatus("Enter a valid YouTube link or 11-character video ID."); return; }
+        await LoadVideoAsync(id, addToStore: true);
+    }
 
+    /// <summary>載入指定影片（抓字幕→導引播放）。<paramref name="addToStore"/>＝true 時加入影片清單（貼連結載入）；點清單載入者已在清單、不重加。</summary>
+    private async Task LoadVideoAsync(string id, bool addToStore)
+    {
         _loadCts?.Cancel();
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
@@ -142,6 +160,13 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                 Web.CoreWebView2.Navigate($"https://{HostName}/player.html?v={id}");
                 _guiding = true;
                 _poll.Start();
+                if (addToStore) // 貼連結載入＝加入影片清單（依 VideoId 去重、記錄使用中主題）；標題先用 id、起播後自播放器更新
+                {
+                    var (tid, tname) = _activeTheme();
+                    var vi = _videoStore.Add(id, id, tid, tname, DateTimeOffset.Now);
+                    _currentVideoItemId = vi.Id;
+                    RefreshVideoList();
+                }
                 // 「逐句暫停」成功訊息延到 OnPoll 確認實際起播才顯示——避免可嵌入被禁／無效影片時謊報成功。
                 SetStatus(_isAuto
                     ? $"{_cues.Count} auto-generated caption lines (machine-transcribed) — starting playback…"
@@ -156,6 +181,98 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         catch (SubtitleException ex) { SetStatus(ex.Message); }
         catch (Exception ex) { SetStatus("Failed to load: " + ex.Message); }
         finally { SetLoading(false); }
+    }
+
+    // ---- 影片清單（epic #145 增量4） ----
+
+    /// <summary>重載影片清單（標題／加入時間／主題名）；目前載入影片自動選中（不觸發載入）。空清單顯提示。</summary>
+    public void RefreshVideoList()
+    {
+        var d = _videoStore.Load();
+        VideoList.SelectionChanged -= OnVideoSelect;
+        VideoList.Items.Clear();
+        foreach (var it in d.Items)
+        {
+            VideoList.Items.Add(new System.Windows.Controls.ListBoxItem
+            {
+                Content = VideoItemView(it),
+                Tag = it,
+                Padding = new System.Windows.Thickness(4),
+            });
+        }
+        if (_currentVideoItemId is not null)
+        {
+            for (int i = 0; i < VideoList.Items.Count; i++)
+            {
+                if ((VideoList.Items[i] as System.Windows.Controls.ListBoxItem)?.Tag is VideoItem v && v.Id == _currentVideoItemId)
+                {
+                    VideoList.SelectedIndex = i;
+                    break;
+                }
+            }
+        }
+        VideoList.SelectionChanged += OnVideoSelect;
+        VideoEmptyHint.Visibility = d.Items.Count > 0 ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+        DeleteVideoBtn.IsEnabled = VideoList.SelectedItem is not null;
+    }
+
+    private System.Windows.Controls.StackPanel VideoItemView(VideoItem it)
+    {
+        var col = new System.Windows.Controls.StackPanel();
+        col.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = it.Title,
+            FontSize = 12.5,
+            TextTrimming = System.Windows.TextTrimming.CharacterEllipsis,
+            Foreground = System.Windows.Media.Brushes.DarkSlateGray,
+        });
+        var meta = FormatTime(it.AddedAt) + (string.IsNullOrWhiteSpace(it.ThemeName) ? "" : "  ·  " + it.ThemeName);
+        col.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = meta,
+            FontSize = 10.5,
+            Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x9A, 0x6A, 0x82)),
+        });
+        return col;
+    }
+
+    private static string FormatTime(string iso) =>
+        DateTimeOffset.TryParse(iso, out var t) ? t.LocalDateTime.ToString("yyyy-MM-dd HH:mm") : iso;
+
+    private void OnVideoSelect(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        var it = (VideoList.SelectedItem as System.Windows.Controls.ListBoxItem)?.Tag as VideoItem;
+        DeleteVideoBtn.IsEnabled = it is not null;
+        if (it is null || it.Id == _currentVideoItemId) return; // 無選取或已是目前載入 → 不重載
+        _currentVideoItemId = it.Id;
+        UrlBox.Text = it.VideoId;
+        _ = LoadVideoAsync(it.VideoId, addToStore: false); // 已在清單、不重加
+    }
+
+    private void OnDeleteVideo()
+    {
+        var it = (VideoList.SelectedItem as System.Windows.Controls.ListBoxItem)?.Tag as VideoItem;
+        if (it is null) return;
+        _videoStore.Remove(it.Id);
+        if (it.Id == _currentVideoItemId) _currentVideoItemId = null;
+        RefreshVideoList();
+    }
+
+    /// <summary>起播後自 YouTube 播放器取標題、回寫影片清單項（epic #145 增量4）。</summary>
+    private async Task UpdateCurrentVideoTitleAsync()
+    {
+        if (_currentVideoItemId is null || !_webReady) return;
+        try
+        {
+            var raw = await Web.ExecuteScriptAsync("window.li_title?window.li_title():''");
+            var title = JsonSerializer.Deserialize<string>(raw) ?? "";
+            if (!string.IsNullOrWhiteSpace(title))
+            {
+                _videoStore.UpdateTitle(_currentVideoItemId, title);
+                RefreshVideoList();
+            }
+        }
+        catch { /* 取標題失敗維持 id 為標題 */ }
     }
 
     /// <summary>承載 YouTube IFrame Player API 之最小 HTML（自 query 之 <c>v</c> 取影片 ID）；宿主以 li_time/li_err/li_pause/li_play/li_seek 控制。
@@ -175,6 +292,7 @@ function onYouTubeIframeAPIReady(){player=new YT.Player('p',{height:'100%',width
  events:{'onReady':function(){ready=true;player.playVideo();},
          'onError':function(e){lastErr=e.data;}}});}
 window.li_time=function(){return (ready&&player&&player.getCurrentTime)?player.getCurrentTime():-1;};
+window.li_title=function(){return (ready&&player&&player.getVideoData)?(player.getVideoData().title||''):'';};
 window.li_err=function(){return lastErr;};
 window.li_pause=function(){if(ready&&player)player.pauseVideo();};
 window.li_play=function(){if(ready&&player)player.playVideo();};
@@ -205,6 +323,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
             if (!_playbackStarted) // 確認實際起播後才宣稱「逐句暫停」
             {
                 _playbackStarted = true;
+                _ = UpdateCurrentVideoTitleAsync(); // epic #145 增量4：起播後自播放器取標題回寫影片清單
                 SetStatus(_isAuto
                     ? $"{_cues.Count} auto-generated caption lines (machine-transcribed) — playback pauses at each line; tap a word to look it up."
                     : $"{_cues.Count} subtitle lines loaded — playback pauses at each line; tap a word to look it up.");

@@ -37,6 +37,7 @@ public partial class App : System.Windows.Application
     private readonly NotesStore _notesStore = new();
     private readonly ThemeStore _themeStore = new();
     private readonly ScreenshotStore _screenshotStore = new(); // epic #145 增量3：截圖持久化
+    private readonly VideoStore _videoStore = new();           // epic #145 增量4：影片清單
     private readonly INotificationService _notify = new WinToastNotificationService(); // 發音回饋系統通知（#101）
     private UpdateService? _updates;
     private static readonly string LogPath = Path.Combine(Path.GetTempPath(), "LingoIsland-error.log");
@@ -126,7 +127,8 @@ public partial class App : System.Windows.Application
         _dictionaryWindow.Page.HistoryRequested += RefreshDictionaryHistory; // 下拉開啟→以查詢歷史填入
 
         // 影片擷取分頁（#139，spec#2）：yt-dlp 取字幕 → WebView2 導引播放到句暫停 → 暫停句點字沿用既有查詢、加入既有筆記
-        var videoPage = new VideoCapturePage(new YtDlpSubtitleFetcher());
+        var videoPage = new VideoCapturePage(new YtDlpSubtitleFetcher(), _videoStore,
+            () => { var a = ThemeStore.GetActive(_themeStore.Load()); return (a?.Id, a?.Name); }); // 影片清單＋加入時記錄使用中主題（增量4）
         videoPage.WordLookupRequested += LookupWordFromVideo;
         videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
 

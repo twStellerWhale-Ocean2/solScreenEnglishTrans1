@@ -25,25 +25,41 @@
     <TextBlock x:Name="StatusText" Grid.Row="1" Margin="2,6,2,2" FontSize="12" Foreground="#B0578D" TextWrapping="Wrap"
                Text="Paste a YouTube video with English subtitles, then Load."/>
 
-    <!-- 左：逐句字幕清單｜右：播放器＋當前句字幕帶＋控制 -->
+    <!-- 三欄（epic #145 增量4）：左＝影片清單｜中＝播放器＋當前句字幕帶＋控制｜右＝逐句字幕清單 -->
     <Grid Grid.Row="2" Margin="0,6,0,0">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="230" MinWidth="150"/>
+        <ColumnDefinition Width="200" MinWidth="150"/>  <!-- 影片清單 -->
         <ColumnDefinition Width="6"/>
-        <ColumnDefinition Width="*" MinWidth="280"/>
+        <ColumnDefinition Width="*" MinWidth="280"/>     <!-- 播放器區 -->
+        <ColumnDefinition Width="6"/>
+        <ColumnDefinition Width="230" MinWidth="150"/>   <!-- 字幕清單 -->
       </Grid.ColumnDefinitions>
 
-      <ListBox x:Name="CueList" Grid.Column="0" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"
-               ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a line to jump there">
-        <ListBox.ItemTemplate>
-          <DataTemplate>
-            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="2" FontSize="12"/>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
+      <!-- 左：影片清單（比照主題/截圖清單，可管理、欄寬可拖拉；綁擷取當下使用中主題） -->
+      <Grid Grid.Column="0">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="*"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBlock Grid.Row="0" Text="Videos" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PinkText}" Margin="2,0,0,4"/>
+        <Border Grid.Row="1" Style="{StaticResource Card}">
+          <Grid>
+            <ListBox x:Name="VideoList" BorderThickness="0" Background="Transparent" Margin="4"
+                     HorizontalContentAlignment="Stretch"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a video to load it"/>
+            <TextBlock x:Name="VideoEmptyHint" Text="No videos yet. Paste a YouTube link above and Load."
+                       Foreground="#9A6A82" FontSize="12" TextWrapping="Wrap" MaxWidth="160"
+                       TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+          </Grid>
+        </Border>
+        <Button Grid.Row="2" x:Name="DeleteVideoBtn" Content="Delete" Foreground="#B23B3B"
+                Style="{StaticResource GhostButton}" Margin="0,6,0,0" HorizontalAlignment="Left" IsEnabled="False"/>
+      </Grid>
 
       <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
 
+      <!-- 中：播放器＋當前句字幕帶＋控制 -->
       <Grid Grid.Column="2">
         <Grid.RowDefinitions>
           <RowDefinition Height="*" MinHeight="120"/>
@@ -68,6 +84,18 @@
           <Button x:Name="AddNoteBtn" Content="&#xFF0B; Add to Notes" Width="132" Height="28" Margin="16,0,0,0" IsEnabled="False"/>
         </StackPanel>
       </Grid>
+
+      <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+
+      <!-- 右：逐句字幕清單（點跳） -->
+      <ListBox x:Name="CueList" Grid.Column="4" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a line to jump there">
+        <ListBox.ItemTemplate>
+          <DataTemplate>
+            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="2" FontSize="12"/>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
     </Grid>
   </Grid>
 </UserControl>
