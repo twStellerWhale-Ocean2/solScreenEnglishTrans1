@@ -120,8 +120,8 @@
 
             <Border Grid.Row="1" Background="#88FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1" CornerRadius="6"
                     Margin="0,8,0,0" Padding="10" MinHeight="52">
-              <!-- 字級/粗體由 SubtitleDisplaySettings 於 ApplySubtitleDisplay() 套用（設定可調，比照筆記） -->
-              <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" Foreground="#2A2A2A"/>
+              <!-- 字級/粗體由 SubtitleDisplaySettings 於 ApplySubtitleDisplay() 套用（設定可調，比照筆記）；文字色比照筆記條目 #3A2C33 -->
+              <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" Foreground="#3A2C33"/>
             </Border>
 
             <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
@@ -175,7 +175,8 @@
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a line to jump there">
               <ListBox.ItemTemplate>
                 <DataTemplate>
-                  <TextBlock Text="{Binding Display}" TextWrapping="Wrap" Margin="2" FontSize="12"/>
+                  <!-- 說話人名稱粗體、台詞正常（#字幕說話人標粗體） -->
+                  <TextBlock TextWrapping="Wrap" Margin="2" FontSize="12"><Run Text="{Binding SpeakerLabel}" FontWeight="Bold"/><Run Text="{Binding Text}"/></TextBlock>
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>

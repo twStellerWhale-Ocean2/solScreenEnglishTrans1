@@ -152,6 +152,33 @@ public static class SpeakerInference
         catch (JsonException) { return Array.Empty<string?>(); }
     }
 
+    // ---- API 用量（供費用估算，AI 動作對話視窗）：chat（prompt/completion）與 Responses（input/output）皆掛 root.usage ----
+
+    /// <summary>自 OpenAI 回應取 token 用量（chat 的 prompt/completion_tokens 或 Responses 的 input/output_tokens，皆在 root.usage）；缺 usage／解析失敗回 null。</summary>
+    public static SpeakerUsage? ParseUsage(string apiJson)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(apiJson);
+            if (!doc.RootElement.TryGetProperty("usage", out var u) || u.ValueKind != JsonValueKind.Object) { return null; }
+            var inTok = GetInt(u, "prompt_tokens", "input_tokens");
+            var outTok = GetInt(u, "completion_tokens", "output_tokens");
+            var total = GetInt(u, "total_tokens") ?? ((inTok ?? 0) + (outTok ?? 0));
+            if (inTok is null && outTok is null && total == 0) { return null; }
+            return new SpeakerUsage(inTok ?? 0, outTok ?? 0, total);
+        }
+        catch { return null; }
+    }
+
+    private static int? GetInt(JsonElement obj, params string[] names)
+    {
+        foreach (var n in names)
+        {
+            if (obj.TryGetProperty(n, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var i)) { return i; }
+        }
+        return null;
+    }
+
     /// <summary>
     /// 非破壞疊加：把逐句推斷之 <paramref name="speakers"/> 併回 <paramref name="cues"/>——僅填補**未標示**說話人之句，
     /// 既有具名說話人（如 VTT ground truth）一律保留。長度不符時以較短者為界、其餘 cue 原樣。文字/時間不動。

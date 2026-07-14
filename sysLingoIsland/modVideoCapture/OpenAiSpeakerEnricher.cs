@@ -21,10 +21,10 @@ public sealed class OpenAiSpeakerEnricher : ISpeakerEnricher
         _timeoutSec = timeoutSec;
     }
 
-    public async Task<IReadOnlyList<string?>> InferSpeakersAsync(
+    public async Task<SpeakerEnrichResult> InferSpeakersAsync(
         IReadOnlyList<SubtitleCue> cues, string? videoTitle, CancellationToken ct = default)
     {
-        if (cues.Count == 0) return Array.Empty<string?>();
+        if (cues.Count == 0) return new SpeakerEnrichResult(Array.Empty<string?>(), null, _model);
 
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(key))
@@ -67,7 +67,7 @@ public sealed class OpenAiSpeakerEnricher : ISpeakerEnricher
             }
             try
             {
-                return SpeakerInference.ParseSpeakers(json);
+                return new SpeakerEnrichResult(SpeakerInference.ParseSpeakers(json), SpeakerInference.ParseUsage(json), _model);
             }
             catch (Exception ex)
             {

@@ -44,7 +44,6 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private bool _isAuto;              // 目前字幕為自動生成（逐字滾動、較破碎）——供狀態提示
     private bool _loading;             // 抓字幕中（LoadBtn 兼作 Cancel）
     private CancellationTokenSource? _loadCts; // 抓字幕可取消（新 Load／取消鈕）
-    private CancellationTokenSource? _inferCts; // AI 說話人推斷可取消（新 Load／新推斷取代，增量6）
 
     // 說話人字幕（epic #145 增量5）：CueList 綁 CueRow view-model（保留原始 _cues index，篩選/顯示不動播放 index）
     private List<CueRow> _rows = new();
@@ -100,8 +99,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         CueList.MouseDoubleClick += (_, _) => { _cueClickTimer.Stop(); _ = JumpToSelectedAsync(); };
         // 說話人篩選＋來源疊加＋整檔 YAML 編修（epic #145 增量5／6）
         SpeakerFilter.SelectionChanged += (_, _) => ApplySpeakerFilter();
-        InferSpeakersBtn.Click += (_, _) => _ = InferSpeakersAsync(_enricher, SpeakerSource.Dialogue);
-        WebSpeakersBtn.Click += (_, _) => _ = InferSpeakersAsync(_webEnricher, SpeakerSource.Web); // 增量6b：網搜上網找
+        InferSpeakersBtn.Click += (_, _) => InferSpeakers(_enricher, SpeakerSource.Dialogue);
+        WebSpeakersBtn.Click += (_, _) => InferSpeakers(_webEnricher, SpeakerSource.Web); // 增量6b：網搜上網找
         EditYamlBtn.Click += (_, _) => EnterYamlEdit();
         PauseAtSpeaker.SelectionChanged += (_, _) => { if (!_populatingPauseAt) { ApplyPauseAtSpeaker(); } }; // 指定說話人才暫停（增量7）
         ApplyYamlBtn.Click += (_, _) => _ = ApplyYamlEditAsync();
@@ -205,7 +204,6 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private async Task LoadVideoAsync(string id, bool addToStore)
     {
         _loadCts?.Cancel();
-        _inferCts?.Cancel(); // 增量6：載入新片取消進行中的 AI 說話人推斷（免浪費 API、免過時結果跑到逾時）
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
 
@@ -502,7 +500,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     /// <summary>清空主內容區塊（#175：刪至無上一筆／Clear all）：取消進行中載入、停播放器（about:blank）、清字幕與控制、停用主題下拉。</summary>
     private void ClearContentArea()
     {
-        _loadCts?.Cancel(); _inferCts?.Cancel(); // 取消進行中載入/推斷，避免其完成後又蓋回內容
+        _loadCts?.Cancel(); // 取消進行中載入，避免其完成後又蓋回內容（AI 動作為模態、不會併發於此）
         _currentVideoItemId = null;
         _currentVideoId = null;
         _guiding = false; _poll.Stop();
@@ -618,7 +616,16 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         RenderClickable(_cues[i]);
     }
 
-    /// <summary>把字幕句以逐字可點呈現（說話人前置非可點；單字＝Hyperlink→WordLookupRequested；分隔＝純文字），沿用 EnglishWordTokenizer。</summary>
+    /// <summary>字幕與筆記條目同色（比照筆記 #3A2C33）；說話人前綴另加粗。凍結共用、免每句重配。</summary>
+    private static readonly System.Windows.Media.SolidColorBrush EntryTextBrush = MakeFrozen(0x3A, 0x2C, 0x33);
+    private static System.Windows.Media.SolidColorBrush MakeFrozen(byte r, byte g, byte b)
+    {
+        var br = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(r, g, b));
+        br.Freeze();
+        return br;
+    }
+
+    /// <summary>把字幕句以逐字可點呈現（說話人前置粗體、非可點；單字＝Hyperlink→WordLookupRequested；分隔＝純文字），沿用 EnglishWordTokenizer。色比照筆記條目。</summary>
     private void RenderClickable(SubtitleCue cue)
     {
         SubtitleBand.Inlines.Clear();
@@ -626,8 +633,8 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         {
             SubtitleBand.Inlines.Add(new Run(cue.Speaker + ": ")
             {
-                FontWeight = System.Windows.FontWeights.Bold,
-                Foreground = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x8A, 0x4A, 0x66)),
+                FontWeight = System.Windows.FontWeights.Bold, // 說話人名稱標粗體（#字幕說話人標粗體）
+                Foreground = EntryTextBrush,                  // 與筆記條目同色
             });
         }
         foreach (var tok in EnglishWordTokenizer.Tokenize(cue.Text))
@@ -637,7 +644,7 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
                 var word = tok.Text;
                 var link = new Hyperlink(new Run(word))
                 {
-                    Foreground = System.Windows.Media.Brushes.MediumVioletRed,
+                    Foreground = EntryTextBrush, // 字幕顏色比照筆記條目 #3A2C33（可點仍以游標手勢示意）
                     Cursor = System.Windows.Input.Cursors.Hand,
                     TextDecorations = null,
                 };
@@ -817,57 +824,55 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         _pauseSpeaker = (sel is null || sel == EveryoneSpeaker) ? null : sel;
     }
 
-    /// <summary>說話人來源：依台詞 AI 推斷（增量6）或 OpenAI 網搜上網找逐字稿（增量6b）。用於狀態訊息措辭。</summary>
+    /// <summary>說話人來源：依台詞 AI 推斷（增量6）或 OpenAI 網搜上網找逐字稿（增量6b）。</summary>
     private enum SpeakerSource { Dialogue, Web }
 
     /// <summary>
     /// 說話人疊加（epic #145 增量6／6b，#156／#145 §D）：以指定 <paramref name="enricher"/> 取每句說話人、非破壞併回
-    /// （僅填補未標示、保留既有 ground truth），並存回字幕存檔（#174）。**會用到 API、故按鈕觸發**。期間停用兩顆來源鈕
-    /// 與 Edit YAML、播放持續（文字/時間/播放 index 不變，保留當前句與到句暫停進度）；期間若載入新片／套用 YAML 使字幕換手則丟棄（stale guard）。
+    /// （僅填補未標示、保留既有 ground truth），並存回字幕存檔（#174）。**會用到 API**——改以 <see cref="AiActionWindow"/>
+    /// 模態對話視窗執行：顯示動作訊息與**估算 AI 費用**、完成按 OK 結束、期間可 Cancel。期間停用兩顆來源鈕與 Edit YAML；
+    /// 模態阻擋主視窗故不會併發換片（仍留 stale guard 保險）。動作內 await 由對話視窗訊息迴圈續泵推進。
     /// </summary>
-    private async Task InferSpeakersAsync(ISpeakerEnricher enricher, SpeakerSource source)
+    private void InferSpeakers(ISpeakerEnricher enricher, SpeakerSource source)
     {
-        if (_cues.Count == 0 || _yamlEditing || _inferring || _loading) return;
-        _inferCts?.Cancel();
-        _inferCts = new CancellationTokenSource();
-        var ct = _inferCts.Token;
+        if (_cues.Count == 0 || _yamlEditing || _inferring || _loading) { return; }
         _inferring = true;
         InferSpeakersBtn.IsEnabled = false;
         WebSpeakersBtn.IsEnabled = false;
         EditYamlBtn.IsEnabled = false;
-        SetStatus(source == SpeakerSource.Web
-            ? "Searching the web for this show's transcript to label speakers…"
-            : "Inferring speakers from the dialogue with AI…");
-        var target = _cues; // stale guard 基準
-        try
-        {
-            var speakers = await enricher.InferSpeakersAsync(target, _currentTitle, ct);
-            if (ct.IsCancellationRequested || !ReferenceEquals(_cues, target)) return; // 被取代／已換片／套用 YAML → 丟棄過時結果
-            var merged = SpeakerInference.MergeSpeakers(target, speakers);
-            var filled = SpeakerInference.CountNewlyLabeled(target, merged);
-            var keepShown = _shownCue;       // index 不變（僅補說話人）→ 保留當前句
-            SetCues(merged);
-            if (_currentVideoId is not null) { _subs.Save(_currentVideoId, _isAuto, merged); } // 存 AI 說話人結果（#174）
-            if (keepShown >= 0 && keepShown < _rows.Count) ShowCue(keepShown); // 重繪字幕帶（含新說話人前綴）
-            SetStatus(filled > 0
-                ? (source == SpeakerSource.Web
-                    ? $"Looked up the web and labeled {filled} more line(s) with a speaker."
-                    : $"AI labeled {filled} more line(s) with a speaker (inference from dialogue, not ground truth).")
-                : (source == SpeakerSource.Web
-                    ? "Couldn't match any speaker info found online to this subtitle."
-                    : "AI couldn't confidently add any new speaker labels for this subtitle."));
-        }
-        catch (SpeakerEnrichException ex) { SetStatus(ex.Message); }
-        catch (OperationCanceledException) { /* 被新載入／新推斷取代 → 靜默，狀態由後續操作接手 */ }
-        catch (Exception ex) { SetStatus((source == SpeakerSource.Web ? "Online speaker lookup failed: " : "Speaker inference failed: ") + ex.Message); }
-        finally
-        {
-            _inferring = false;
-            var enable = _cues.Count > 0 && !_yamlEditing && !_loading; // 載入中不啟用（避免併發載入時短暫可按但無效）
-            InferSpeakersBtn.IsEnabled = enable;
-            WebSpeakersBtn.IsEnabled = enable;
-            EditYamlBtn.IsEnabled = enable;
-        }
+        var web = source == SpeakerSource.Web;
+        var target = _cues;              // stale guard 基準
+        var titleForAi = _currentTitle;
+        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this),
+            web ? "Web speaker lookup" : "AI speaker inference",
+            async (report, ct) =>
+            {
+                report(web
+                    ? "Searching the web for this show's transcript…"
+                    : "Analyzing the dialogue with AI…");
+                var result = await enricher.InferSpeakersAsync(target, titleForAi, ct);
+                if (!ReferenceEquals(_cues, target)) { report("Subtitle changed meanwhile — result discarded."); return null; }
+                var merged = SpeakerInference.MergeSpeakers(target, result.Speakers);
+                var filled = SpeakerInference.CountNewlyLabeled(target, merged);
+                var keepShown = _shownCue;   // index 不變（僅補說話人）→ 保留當前句
+                SetCues(merged);
+                if (_currentVideoId is not null) { _subs.Save(_currentVideoId, _isAuto, merged); } // 存說話人結果（#174）
+                if (keepShown >= 0 && keepShown < _rows.Count) { ShowCue(keepShown); } // 重繪字幕帶（含新說話人前綴）
+                report(filled > 0
+                    ? $"Done — labeled {filled} more line(s) with a speaker."
+                    : "Done — no new speaker labels could be added.");
+                SetStatus(filled > 0
+                    ? $"{(web ? "Web lookup" : "AI")} labeled {filled} more line(s) with a speaker."
+                    : $"{(web ? "Web lookup" : "AI")}: no new speaker labels for this subtitle.");
+                return result.Usage is null
+                    ? null
+                    : new AiActionWindow.AiUsage(result.Usage.InputTokens, result.Usage.OutputTokens, result.Model, web);
+            });
+        _inferring = false;
+        var enable = _cues.Count > 0 && !_yamlEditing && !_loading;
+        InferSpeakersBtn.IsEnabled = enable;
+        WebSpeakersBtn.IsEnabled = enable;
+        EditYamlBtn.IsEnabled = enable;
     }
 
     /// <summary>進入整檔 YAML 編修：序列化目前字幕入編輯框、停導引＋暫停播放、切換清單→編輯面板。</summary>
@@ -947,7 +952,10 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         public CueRow(int index, SubtitleCue cue) { Index = index; Cue = cue; }
         public int Index { get; }
         public SubtitleCue Cue { get; }
-        public string Display => string.IsNullOrEmpty(Cue.Speaker) ? Cue.Text : Cue.Speaker + ": " + Cue.Text;
+        /// <summary>說話人前綴（「名: 」；無說話人＝空）——清單以粗體 Run 呈現（#字幕說話人標粗體）。</summary>
+        public string SpeakerLabel => string.IsNullOrEmpty(Cue.Speaker) ? "" : Cue.Speaker + ": ";
+        /// <summary>台詞文字（清單以正常字重 Run 呈現）。</summary>
+        public string Text => Cue.Text;
     }
 
     private void SetStatus(string msg) => StatusText.Text = msg;

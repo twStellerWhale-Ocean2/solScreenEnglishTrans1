@@ -174,4 +174,40 @@ public class SpeakerInferenceTests
     {
         Assert.ThrowsAny<System.Exception>(() => SpeakerInference.ParseWebSpeakers("not json at all"));
     }
+
+    // ── ParseUsage（費用估算之 token 用量；chat 與 Responses 皆掛 root.usage） ──
+
+    [Fact]
+    public void ParseUsage_ChatShape()
+    {
+        var u = SpeakerInference.ParseUsage("{\"usage\":{\"prompt_tokens\":120,\"completion_tokens\":30,\"total_tokens\":150}}");
+        Assert.NotNull(u);
+        Assert.Equal(120, u!.InputTokens);
+        Assert.Equal(30, u.OutputTokens);
+        Assert.Equal(150, u.TotalTokens);
+    }
+
+    [Fact]
+    public void ParseUsage_ResponsesShape()
+    {
+        var u = SpeakerInference.ParseUsage("{\"usage\":{\"input_tokens\":200,\"output_tokens\":40,\"total_tokens\":240}}");
+        Assert.NotNull(u);
+        Assert.Equal(200, u!.InputTokens);
+        Assert.Equal(40, u.OutputTokens);
+        Assert.Equal(240, u.TotalTokens);
+    }
+
+    [Fact]
+    public void ParseUsage_MissingUsageOrMalformed_ReturnsNull()
+    {
+        Assert.Null(SpeakerInference.ParseUsage("{\"choices\":[]}"));
+        Assert.Null(SpeakerInference.ParseUsage("not json"));
+    }
+
+    [Fact]
+    public void ParseUsage_MissingTotal_ComputesFromParts()
+    {
+        var u = SpeakerInference.ParseUsage("{\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5}}");
+        Assert.Equal(15, u!.TotalTokens);
+    }
 }
