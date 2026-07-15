@@ -44,6 +44,7 @@ public partial class ScreenCapturePage : UserControl
     private bool _populatingFilter;           // 重填篩選下拉期間抑制 SelectionChanged→重整
     private bool _populatingShotPicker;       // 重填「所屬主題」下拉期間抑制 SelectionChanged→重指派（#173）
     private string? _selectedShotId;
+    private int _lastShotCount = -1;           // 偵測新擷取（數目增加）→自動切到【內容】檢視（#182）
 
     /// <summary>手動觸發螢幕擷取（#5：「Capture Screen」鈕）；呼叫端收合主視窗後走既有喚起主動線。</summary>
     public event Action? CaptureRequested;
@@ -63,6 +64,9 @@ public partial class ScreenCapturePage : UserControl
         ChangeHotkeyBtn.Click += (_, _) => StartListening();
         CaptureScreenBtn.Click += (_, _) => CaptureRequested?.Invoke();
         Unloaded += (_, _) => StopListening();
+        // 子頁籤（#182 版面統一）：獲得（擷取控制）／內容（清單＋預覽），以可見性切換
+        ShotTabAcquire.Checked += (_, _) => ShowShotTab(acquire: true);
+        ShotTabContent.Checked += (_, _) => ShowShotTab(acquire: false);
 
         // 截圖管理＋依 theme 篩選（B）；刪除改右鍵選單/Delete 鍵（#167，取代 Delete 按鈕）
         ShotList.SelectionChanged += OnShotSelect;
@@ -115,6 +119,15 @@ public partial class ScreenCapturePage : UserControl
             _selectedShotId = null;
         }
         UpdateShotThemePicker(); // 選取於重整後被清空 → 停用/重填「所屬主題」下拉，與清單同步（#173）
+        if (_lastShotCount >= 0 && d.Items.Count > _lastShotCount) { ShotTabContent.IsChecked = true; } // 新擷取→切到【內容】檢視（#182）
+        _lastShotCount = d.Items.Count;
+    }
+
+    /// <summary>切換子頁籤（#182）：獲得（擷取控制）／內容（清單＋預覽），以可見性切換。</summary>
+    private void ShowShotTab(bool acquire)
+    {
+        ShotAcquirePane.Visibility = acquire ? Visibility.Visible : Visibility.Collapsed;
+        ShotContentPane.Visibility = acquire ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private StackPanel ShotItemView(ScreenshotItem it)

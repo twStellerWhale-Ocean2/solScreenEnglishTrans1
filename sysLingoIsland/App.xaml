@@ -81,6 +81,32 @@
       </Setter>
     </Style>
 
+    <!-- 頁內子頁籤鈕（#177／#182 版面統一：獲得／內容）：水平藥丸樣式；選取＝PinkAccent 底、PinkText 字。跨頁共用 -->
+    <Style x:Key="SubTab" TargetType="RadioButton">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Margin" Value="0,0,6,0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="bg" CornerRadius="8" Background="Transparent"
+                    BorderBrush="{StaticResource PinkAccent}" BorderThickness="1" Padding="16,7">
+              <ContentPresenter x:Name="cp" VerticalAlignment="Center"
+                                TextElement.FontSize="12.5" TextElement.FontWeight="SemiBold" TextElement.Foreground="#8A5A6D"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="{StaticResource PinkAccent}"/>
+                <Setter TargetName="cp" Property="TextElement.Foreground" Value="{StaticResource PinkText}"/>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="{StaticResource PinkTint}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+
     <!-- 次要按鈕（半透明白底粉框；Issue #71 改半透明，讓浮水印透出） -->
     <Style x:Key="GhostButton" TargetType="Button">
       <Setter Property="Cursor" Value="Hand"/>
