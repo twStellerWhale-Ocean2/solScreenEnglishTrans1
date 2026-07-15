@@ -453,7 +453,7 @@
                   <Button x:Name="TranscribeBtn" Grid.Column="1" Grid.ColumnSpan="2" Content="&#x1F399; Voice" Height="26" Margin="0,0,0,0"
                           IsEnabled="False" ToolTip="Transcribe the actual audio (OpenAI Whisper) to refine the timing to the real speech. Downloads audio; confirms cost first."/>
                 </Grid>
-                <Button x:Name="EditYamlBtn" Grid.Row="3" Content="Edit YAML" Height="26" Margin="0,6,0,0"
+                <Button x:Name="EditYamlBtn" Grid.Row="3" Content="&#x1F4DD; Edit YAML" Height="26" Margin="0,6,0,0"
                         IsEnabled="False" ToolTip="Edit the whole subtitle as one YAML file (manual override: fix line breaks / speakers)"/>
               </Grid>
 
