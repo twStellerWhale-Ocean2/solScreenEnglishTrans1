@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -73,4 +74,21 @@ public static class TranscriptVideoFind
 
     private static string? Str(JsonElement obj, string name)
         => obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+    /// <summary>合輯／長片彙編之標題關鍵字（多集混剪、無單一乾淨逐字稿，Script 對不上）。</summary>
+    private static readonly string[] CompilationMarkers =
+    {
+        "& more", "and more", "compilation", "full episodes", "all episodes", "mega ", "marathon",
+        "best of", "mashup", "non-stop", "nonstop", "hours of", "1 hour", "2 hour", "3 hour", "1hr", "2hr",
+    };
+
+    /// <summary>
+    /// 標題是否像「合輯／長片彙編」（#189 實測修）：命中任一關鍵字即視為合輯。這類影片沒有單一乾淨逐字稿→
+    /// 載入後 🌐 Script 找不到完整可對齊之逐字稿（正是實測「找到卻不能用」的主因），由 UI 於「由逐字稿找影片」定位時濾除。純函式、可單元測試。
+    /// </summary>
+    public static bool LooksLikeCompilation(string? title)
+    {
+        var t = (title ?? "").ToLowerInvariant();
+        return CompilationMarkers.Any(m => t.Contains(m));
+    }
 }

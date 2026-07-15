@@ -130,8 +130,10 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
               </Grid.ColumnDefinitions>
-              <TextBox x:Name="TranscriptBox" Grid.Column="0" Height="30" VerticalContentAlignment="Center" Padding="6,0"
-                       Background="#66FFFFFF" ToolTip="Enter a topic; finds YouTube videos that have a usable transcript online"/>
+              <!-- 逐字稿主題框：可編輯 ComboBox，下拉顯示主題歷史（比照關鍵字框 #186）；↑↓ 選、Delete 刪該筆 -->
+              <ComboBox x:Name="TranscriptBox" Grid.Column="0" Height="30" IsEditable="True" StaysOpenOnEdit="True"
+                        IsTextSearchEnabled="False" VerticalContentAlignment="Center" Padding="6,0"
+                        ToolTip="Enter a topic (or pick from history); ↑↓ then Delete removes a history entry"/>
               <Button x:Name="TranscriptSearchBtn" Grid.Column="1" Content="&#x1F4C4; Find" Width="100" Height="30" Margin="8,0,0,0"/>
             </Grid>
           </StackPanel>

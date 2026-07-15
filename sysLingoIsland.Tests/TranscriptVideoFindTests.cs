@@ -119,6 +119,21 @@ public class TranscriptVideoFindTests
         Assert.Empty(TranscriptVideoFind.ParseCandidates(json));
     }
 
+    // ── LooksLikeCompilation（#189 實測修：濾掉無單一乾淨逐字稿之合輯） ──
+
+    [Theory]
+    [InlineData("PAW Patrol Are All Paws on Deck to Rescue Adventure Bay! w/ Marshall, Mighty Twins & MORE | Nick Jr.", true)]
+    [InlineData("PAW Patrol Full Episodes Compilation", true)]
+    [InlineData("Peppa Pig - 1 Hour Compilation", true)]
+    [InlineData("Best of Bluey Marathon", true)]
+    [InlineData("2 Hours of Cocomelon Nursery Rhymes", true)]
+    [InlineData("Pups Save a School Day", false)]
+    [InlineData("Where did English come from? - Claire Bowern", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void LooksLikeCompilation_FlagsMultiEpisodeMixes(string? title, bool expected)
+        => Assert.Equal(expected, TranscriptVideoFind.LooksLikeCompilation(title));
+
     [Fact]
     public void ParseCandidates_OutputTextConvenienceField()
     {
