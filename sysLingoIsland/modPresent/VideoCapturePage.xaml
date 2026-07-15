@@ -329,9 +329,11 @@
                 <ComboBox x:Name="VideoThemePicker" MinWidth="180" Height="26" VerticalContentAlignment="Center"
                           IsEnabled="False" ToolTip="Show / change the theme this video belongs to"/>
               </StackPanel>
-              <!-- 影片標題（#187）：置於網址之上；載入即顯（先用清單標題，起播後以播放器實名更新） -->
-              <TextBlock x:Name="VideoTitleText" Margin="0,6,0,0" FontWeight="SemiBold" FontSize="13.5"
-                         Foreground="{StaticResource PinkText}" TextWrapping="Wrap" Visibility="Collapsed"/>
+              <!-- 影片標題（#187；#189 改唯讀 TextBox 使可選取／複製）：置於網址之上；載入即顯（先用清單標題，起播後以播放器實名更新） -->
+              <TextBox x:Name="VideoTitleText" Margin="0,6,0,0" FontWeight="SemiBold" FontSize="13.5"
+                       Foreground="{StaticResource PinkText}" TextWrapping="Wrap" Visibility="Collapsed"
+                       IsReadOnly="True" IsReadOnlyCaretVisible="False" BorderThickness="0" Background="Transparent"
+                       Padding="0" Cursor="IBeam" ToolTip="影片標題（可選取／複製）"/>
               <!-- 播放中影片之超連結網址（#177）：可點開 YouTube 原頁；無載入時隱藏 -->
               <TextBlock x:Name="WatchUrlRow" Margin="0,3,0,0" FontSize="11.5" Foreground="#9A6A82"
                          Visibility="Collapsed" TextTrimming="CharacterEllipsis">
@@ -368,8 +370,14 @@
 
               <Border Grid.Row="1" Background="#88FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1" CornerRadius="6"
                       Margin="0,8,0,0" Padding="10" MinHeight="52">
-                <!-- 字級/粗體由 SubtitleDisplaySettings 於 ApplySubtitleDisplay() 套用（設定可調，比照筆記）；文字色比照筆記條目 #3A2C33 -->
-                <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" Foreground="#3A2C33"/>
+                <!-- 字級/粗體由 SubtitleDisplaySettings 於 ApplySubtitleDisplay() 套用（設定可調，比照筆記）；文字色比照筆記條目 #3A2C33。點字查詞；右鍵複製整句（#189，字可點故以右鍵複製取代拖選） -->
+                <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" Foreground="#3A2C33">
+                  <TextBlock.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="Copy line" Click="OnCopySubtitleLine"/>
+                    </ContextMenu>
+                  </TextBlock.ContextMenu>
+                </TextBlock>
               </Border>
 
               <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
@@ -409,11 +417,12 @@
                 <!-- ① 初始資料（#189）：Auto／Manual 互斥切換基底來源。Manual 有就自動選（時間+斷句皆準）、否則 Auto（時間準、斷句可能錯）；皆無講話人。不存在的軌灰掉 -->
                 <Grid Grid.Row="0">
                   <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="26"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                   </Grid.ColumnDefinitions>
-                  <TextBlock Grid.Column="0" Text="Source" FontSize="11" Foreground="#9A6A82" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <TextBlock Grid.Column="0" Text="&#x1F4AC;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
+                             ToolTip="自影片來源獲得字幕。"/>
                   <ToggleButton x:Name="BaseAutoBtn" Grid.Column="1" Content="Auto" Height="26" Margin="0,0,3,0"
                                 IsEnabled="False" Click="OnBaseAutoClick"
                                 ToolTip="Auto-generated captions: correct timing, but sentence breaks may be off, no speaker"/>
@@ -424,11 +433,12 @@
                 <!-- ② 講話人／斷句（#189）：不動時間。🌐 Script＝用網路逐字稿；🧠 AI＝用 AI 推理。Manual 基底只補講話人；Auto 基底另補斷句 -->
                 <Grid Grid.Row="1" Margin="0,4,0,0">
                   <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="26"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                   </Grid.ColumnDefinitions>
-                  <TextBlock Grid.Column="0" Text="Speakers" FontSize="11" Foreground="#9A6A82" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <TextBlock Grid.Column="0" Text="&#x1F5E3;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
+                             ToolTip="標示講話人，若為 Auto 還增加修訂斷句。"/>
                   <Button x:Name="WebSpeakersBtn" Grid.Column="1" Content="&#x1F310; Script" Height="26" Margin="0,0,3,0"
                           IsEnabled="False" ToolTip="Use a web transcript to fix speakers (and sentence breaks when the base is Auto), keeping the timing. Uses your OpenAI key; confirms cost first."/>
                   <Button x:Name="InferSpeakersBtn" Grid.Column="2" Content="&#x1F9E0; AI" Height="26" Margin="3,0,0,0"
@@ -437,11 +447,12 @@
                 <!-- ③ 精修時間（#189）：🎙 Voice＝抓音檔把時間對到真實發音（Auto 基底另補斷句）。取代原「Re-transcribe」 -->
                 <Grid Grid.Row="2" Margin="0,4,0,0">
                   <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="26"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                   </Grid.ColumnDefinitions>
-                  <TextBlock Grid.Column="0" Text="Timing" FontSize="11" Foreground="#9A6A82" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <TextBlock Grid.Column="0" Text="&#x23F1;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
+                             ToolTip="標示時間，若為 Auto 還增加修訂斷句。"/>
                   <Button x:Name="TranscribeBtn" Grid.Column="2" Content="&#x1F399; Voice" Height="26" Margin="3,0,0,0"
                           IsEnabled="False" ToolTip="Transcribe the actual audio (OpenAI Whisper) to refine the timing to the real speech. Downloads audio; confirms cost first."/>
                 </Grid>
@@ -453,8 +464,13 @@
                        ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a line to jump there">
                 <ListBox.ItemTemplate>
                   <DataTemplate>
-                    <!-- 說話人名稱粗體、台詞正常（#字幕說話人標粗體）。Run.Text 綁定預設 TwoWay，對唯讀屬性會擲例外 → 明指 OneWay -->
-                    <TextBlock TextWrapping="Wrap" Margin="2" FontSize="12"><Run Text="{Binding SpeakerLabel, Mode=OneWay}" FontWeight="Bold"/><Run Text="{Binding Text, Mode=OneWay}"/></TextBlock>
+                    <!-- 說話人名稱粗體、台詞正常（#字幕說話人標粗體）。Run.Text 綁定預設 TwoWay，對唯讀屬性會擲例外 → 明指 OneWay。右鍵複製整句台詞（#189） -->
+                    <TextBlock TextWrapping="Wrap" Margin="2" FontSize="12">
+                      <TextBlock.ContextMenu>
+                        <ContextMenu>
+                          <MenuItem Header="Copy line" Click="OnCopyCueLine"/>
+                        </ContextMenu>
+                      </TextBlock.ContextMenu><Run Text="{Binding SpeakerLabel, Mode=OneWay}" FontWeight="Bold"/><Run Text="{Binding Text, Mode=OneWay}"/></TextBlock>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </ListBox>

@@ -971,6 +971,26 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
     private static string SpeakerLabelOf(string? speaker) =>
         (string.IsNullOrWhiteSpace(speaker) ? "unknown" : speaker) + ": ";
 
+    /// <summary>右鍵「Copy line」複製目前字幕帶那一句台詞（#189；字幕帶字可點查詞，故以右鍵複製取代拖選）。</summary>
+    private void OnCopySubtitleLine(object sender, System.Windows.RoutedEventArgs e)
+    {
+        if (_shownCue >= 0 && _shownCue < _cues.Count) { TrySetClipboard(_cues[_shownCue].Text); }
+    }
+
+    /// <summary>右鍵「Copy line」複製清單中該句台詞（#189）：自 ContextMenu 之 PlacementTarget 取該列 <see cref="CueRow"/>。</summary>
+    private void OnCopyCueLine(object sender, System.Windows.RoutedEventArgs e)
+    {
+        var cm = (sender as System.Windows.Controls.MenuItem)?.Parent as System.Windows.Controls.ContextMenu;
+        if ((cm?.PlacementTarget as System.Windows.FrameworkElement)?.DataContext is CueRow row) { TrySetClipboard(row.Cue.Text); }
+    }
+
+    /// <summary>寫入剪貼簿（剪貼簿被占用等失敗時靜默忽略，不擲例外）。</summary>
+    private static void TrySetClipboard(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) { return; }
+        try { System.Windows.Clipboard.SetText(text); } catch { /* 剪貼簿暫被占用等——忽略 */ }
+    }
+
     private void RenderClickable(SubtitleCue cue)
     {
         SubtitleBand.Inlines.Clear();
