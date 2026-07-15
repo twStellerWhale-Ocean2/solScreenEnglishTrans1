@@ -36,6 +36,22 @@ public class SpeakerInferenceTests
         Assert.DoesNotContain("影片標題", p);
     }
 
+    [Fact]
+    public void BuildPrompt_IncludesTheme_WhenProvided_OmitsWhenNot()
+    {
+        var withTheme = SpeakerInference.BuildPrompt(new[] { C("hi") }, "Some Title", "PAW Patrol");
+        Assert.Contains("PAW Patrol", withTheme);
+        Assert.Contains("所屬主題", withTheme);
+        Assert.DoesNotContain("所屬主題", SpeakerInference.BuildPrompt(new[] { C("hi") }, "Some Title")); // 無主題→不加行
+    }
+
+    [Fact]
+    public void BuildWebPrompt_And_FindPrompt_IncludeTheme()
+    {
+        Assert.Contains("PAW Patrol", SpeakerInference.BuildWebPrompt(new[] { C("hi") }, "T", "PAW Patrol"));
+        Assert.Contains("PAW Patrol", SpeakerInference.BuildFindTranscriptPrompt("T", retryHint: null, videoTheme: "PAW Patrol"));
+    }
+
     // ── ParseSpeakers ──
 
     [Fact]

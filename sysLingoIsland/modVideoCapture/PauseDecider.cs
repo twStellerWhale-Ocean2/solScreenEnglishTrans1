@@ -25,8 +25,20 @@ public static class PauseDecider
         while (next < cues.Count && !SpeakerMatches(pauseSpeaker, cues[next].Speaker)) next++;
         if (next >= cues.Count) return -1;
         var capped = cues[next].StartSec + maxRunSec;
-        var pausePoint = next + 1 < cues.Count ? Math.Min(cues[next + 1].StartSec, capped) : capped;
+        var naturalEnd = next + 1 < cues.Count ? Math.Min(cues[next + 1].StartSec, capped) : capped;
+        // 口說時長地板（#字幕雙擊早停修正）：至少播足本句台詞估計時長——重疊/過早的下一句起點不把整句在說完前切掉
+        // （雙擊跳段最有感）。仍以 maxRun 封頂、且絕不早於 naturalEnd（不縮短既有行為、不早停）。
+        var spokenFloor = Math.Min(capped, cues[next].StartSec + EstimateSpokenSec(cues[next].Text));
+        var pausePoint = Math.Max(naturalEnd, spokenFloor);
         return currentSec >= pausePoint ? next : -1;
+    }
+
+    /// <summary>估計一句台詞之口說秒數（#字幕雙擊早停修正）：詞數×每詞約 0.36 秒（≈165 wpm），上限 6 秒。供暫停地板，避免重疊字幕把整句在說完前切掉；空句回 0（不影響）。internal 供單元測試。</summary>
+    internal static double EstimateSpokenSec(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return 0;
+        var words = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+        return Math.Min(words * 0.36, 6.0);
     }
 
     /// <summary>指定說話人是否符合（<paramref name="target"/> null／空＝任何說話人皆符合）。internal 供單元測試。</summary>

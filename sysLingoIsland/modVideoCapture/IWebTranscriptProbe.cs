@@ -7,8 +7,8 @@ namespace LingoIsland.Video;
 /// </summary>
 public interface IWebTranscriptProbe
 {
-    /// <summary>探測是否有可用之網路逐字稿；無金鑰／HTTP 非 2xx／逾時／解析失敗擲 <see cref="SpeakerEnrichException"/>。</summary>
-    Task<WebTranscriptProbeResult> ProbeAsync(string? videoTitle, IProgress<string>? progress = null, CancellationToken ct = default);
+    /// <summary>探測是否有可用之網路逐字稿（可選 <paramref name="videoTheme"/> 所屬主題縮小搜尋）；無金鑰／HTTP 非 2xx／逾時／解析失敗擲 <see cref="SpeakerEnrichException"/>。</summary>
+    Task<WebTranscriptProbeResult> ProbeAsync(string? videoTitle, IProgress<string>? progress = null, CancellationToken ct = default, string? videoTheme = null);
 }
 
 /// <summary>網路逐字稿探測結果（#177）：<see cref="Found"/> 是否找到可用逐字稿、<see cref="Source"/> 來源描述（如「PAW Patrol Wiki (Fandom)」）、<see cref="Usages"/> 供費用顯示。</summary>

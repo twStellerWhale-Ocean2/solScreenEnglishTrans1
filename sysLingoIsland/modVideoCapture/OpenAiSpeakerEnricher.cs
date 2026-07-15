@@ -25,7 +25,7 @@ public sealed class OpenAiSpeakerEnricher : ISpeakerEnricher
     }
 
     public async Task<SpeakerEnrichResult> InferSpeakersAsync(
-        IReadOnlyList<SubtitleCue> cues, string? videoTitle, IProgress<string>? progress = null, CancellationToken ct = default)
+        IReadOnlyList<SubtitleCue> cues, string? videoTitle, IProgress<string>? progress = null, CancellationToken ct = default, string? videoTheme = null)
     {
         if (cues.Count == 0) return new SpeakerEnrichResult(Array.Empty<string?>(), Array.Empty<SpeakerUsage>());
 
@@ -39,7 +39,7 @@ public sealed class OpenAiSpeakerEnricher : ISpeakerEnricher
 
         using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
         req.Headers.Add("Authorization", "Bearer " + key);
-        req.Content = JsonContent.Create(BuildPayload(SpeakerInference.BuildPrompt(cues, videoTitle)));
+        req.Content = JsonContent.Create(BuildPayload(SpeakerInference.BuildPrompt(cues, videoTitle, videoTheme)));
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(_timeoutSec));

@@ -74,6 +74,44 @@ public class PauseDeciderTests
         Assert.Equal(1, PauseDecider.NextPause(5.0, Cues, 0, maxRunSec: 2.0));
     }
 
+    // ── 口說時長地板（#字幕雙擊早停修正）：重疊字幕不把整句在說完前切掉 ──
+
+    [Fact]
+    public void NextPause_LongLineInShortSlot_ExtendsToSpokenFloor()
+    {
+        // 一句 10 詞（估 3.6s）但下一句只隔 2s 就開始（重疊字幕）→ 不於 2s 早停、延到 ~3.6s 播足整句
+        var cues = new List<SubtitleCue>
+        {
+            new SubtitleCue("one two three four five six seven eight nine ten", 0.0),
+            new SubtitleCue("next", 2.0),
+        };
+        Assert.Equal(-1, PauseDecider.NextPause(2.0, cues, -1)); // 到下一句起點(2s)仍不停——地板 3.6s 未到
+        Assert.Equal(-1, PauseDecider.NextPause(3.5, cues, -1));
+        Assert.Equal(0, PauseDecider.NextPause(3.6, cues, -1));  // 播足估計口說時長才停
+    }
+
+    [Fact]
+    public void NextPause_SpokenFloor_BoundedByEstimateCapAndMaxRun()
+    {
+        var cues = new List<SubtitleCue>
+        {
+            new SubtitleCue(string.Join(' ', System.Linq.Enumerable.Repeat("w", 50)), 0.0), // 估 18s→估計上限 6s
+            new SubtitleCue("next", 1.0),
+        };
+        Assert.Equal(-1, PauseDecider.NextPause(5.9, cues, -1)); // 估計上限 6s 未到
+        Assert.Equal(0, PauseDecider.NextPause(6.0, cues, -1));  // 6s（估計上限）即停、不到 maxRun 8s
+        Assert.Equal(0, PauseDecider.NextPause(3.0, cues, -1, maxRunSec: 3.0)); // maxRun 更小則由 maxRun 封頂
+    }
+
+    [Fact]
+    public void EstimateSpokenSec_WordsTimesRate_CapAndEmpty()
+    {
+        Assert.Equal(0, PauseDecider.EstimateSpokenSec(""));
+        Assert.Equal(0, PauseDecider.EstimateSpokenSec("   "));
+        Assert.True(PauseDecider.EstimateSpokenSec("a b c d e") > 1.7);   // 5×0.36=1.8
+        Assert.Equal(6.0, PauseDecider.EstimateSpokenSec(string.Join(' ', System.Linq.Enumerable.Repeat("w", 100)))); // 封頂 6
+    }
+
     [Fact]
     public void CueAt_LastStartAtOrBeforeTime_NoBlankBetween()
     {

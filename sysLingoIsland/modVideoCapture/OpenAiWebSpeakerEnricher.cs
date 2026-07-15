@@ -30,7 +30,7 @@ public sealed class OpenAiWebSpeakerEnricher : ISpeakerEnricher, IWebTranscriptP
     }
 
     public async Task<SpeakerEnrichResult> InferSpeakersAsync(
-        IReadOnlyList<SubtitleCue> cues, string? videoTitle, IProgress<string>? progress = null, CancellationToken ct = default)
+        IReadOnlyList<SubtitleCue> cues, string? videoTitle, IProgress<string>? progress = null, CancellationToken ct = default, string? videoTheme = null)
     {
         if (cues.Count == 0) { return new SpeakerEnrichResult(Array.Empty<string?>(), Array.Empty<SpeakerUsage>()); }
 
@@ -49,7 +49,7 @@ public sealed class OpenAiWebSpeakerEnricher : ISpeakerEnricher, IWebTranscriptP
             progress?.Report(attempt == 1
                 ? "Searching the web for a reputable, complete transcript…"
                 : $"That transcript wasn't usable — searching a different source ({attempt}/{MaxFindTries})…");
-            var (json, usage) = await CallAsync(key!, BuildFindRequest(videoTitle, attempt > 1), ct);
+            var (json, usage) = await CallAsync(key!, BuildFindRequest(videoTitle, attempt > 1, videoTheme), ct);
             usages.Add(usage with { Model = _findModel, WebSearch = true });
             var find = SpeakerInference.ParseFindResult(json);
             if (find.Found && find.Complete && find.Transcript.Trim().Length >= 40)
@@ -92,7 +92,7 @@ public sealed class OpenAiWebSpeakerEnricher : ISpeakerEnricher, IWebTranscriptP
     /// <b>不做逐塊對齊</b>（故單次、便宜）。供搜尋結果表格「網路字幕」欄按需查。判定「有」＝模型回報 found 且逐字稿內文 ≥40 字。
     /// </summary>
     public async Task<WebTranscriptProbeResult> ProbeAsync(
-        string? videoTitle, IProgress<string>? progress = null, CancellationToken ct = default)
+        string? videoTitle, IProgress<string>? progress = null, CancellationToken ct = default, string? videoTheme = null)
     {
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(key))
@@ -101,7 +101,7 @@ public sealed class OpenAiWebSpeakerEnricher : ISpeakerEnricher, IWebTranscriptP
         }
 
         progress?.Report("Searching the web for a transcript…");
-        var (json, usage) = await CallAsync(key!, BuildFindRequest(videoTitle, retry: false), ct);
+        var (json, usage) = await CallAsync(key!, BuildFindRequest(videoTitle, retry: false, videoTheme), ct);
         var usages = new[] { usage with { Model = _findModel, WebSearch = true } };
         var find = SpeakerInference.ParseFindResult(json);
         var found = find.Found && find.Transcript.Trim().Length >= 40;
@@ -111,11 +111,11 @@ public sealed class OpenAiWebSpeakerEnricher : ISpeakerEnricher, IWebTranscriptP
         return new WebTranscriptProbeResult(found, find.Source ?? "", usages);
     }
 
-    private object BuildFindRequest(string? videoTitle, bool retry) => new
+    private object BuildFindRequest(string? videoTitle, bool retry, string? videoTheme = null) => new
     {
         model = _findModel,
         tools = new object[] { new { type = "web_search" } },
-        input = SpeakerInference.BuildFindTranscriptPrompt(videoTitle, retry ? "找不同的來源" : null),
+        input = SpeakerInference.BuildFindTranscriptPrompt(videoTitle, retry ? "找不同的來源" : null, videoTheme),
         max_output_tokens = 8000, // 逐字稿全文較長
         text = new
         {

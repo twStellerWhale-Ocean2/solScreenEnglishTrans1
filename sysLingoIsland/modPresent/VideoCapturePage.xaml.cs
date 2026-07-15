@@ -538,11 +538,12 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         if ((sender as System.Windows.Controls.Button)?.DataContext is not SearchRow row) { return; }
         row.SetWebChecking();
         var title = row.Title;
+        var themeForAi = ThemeStore.GetActive(_themes.Load())?.Name; // 尚未載入指派主題→用使用中主題縮小網搜範圍
         AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Check web subtitles",
             async (report, ct) =>
             {
                 var progress = new System.Progress<string>(s => report(s));
-                var result = await _webProbe.ProbeAsync(title, progress, ct);
+                var result = await _webProbe.ProbeAsync(title, progress, ct, themeForAi);
                 if (result.Found) { row.SetWebResult("✓", EmbBlue, "Web transcript: " + Truncate(result.Source, 60), found: true); }
                 else { row.SetWebResult("✗", EmbGray, "No web transcript found", found: false); }
                 return result.Usages
@@ -954,12 +955,13 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         var web = source == SpeakerSource.Web;
         var target = _cues;              // stale guard 基準
         var titleForAi = _currentTitle;
+        var themeForAi = CurrentThemeName(); // #所屬主題：一併給 AI 輔助判斷角色/領域、縮小網搜範圍
         AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this),
             web ? "Web speaker lookup" : "AI speaker inference",
             async (report, ct) =>
             {
                 var progress = new System.Progress<string>(s => report(s)); // enricher 逐步進度→對話視窗（減少等待焦慮）
-                var result = await enricher.InferSpeakersAsync(target, titleForAi, progress, ct);
+                var result = await enricher.InferSpeakersAsync(target, titleForAi, progress, ct, themeForAi);
                 if (!ReferenceEquals(_cues, target)) { report("Subtitle changed meanwhile — result discarded."); return null; }
                 var merged = SpeakerInference.MergeSpeakers(target, result.Speakers);
                 var filled = SpeakerInference.CountNewlyLabeled(target, merged);
@@ -1206,6 +1208,14 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
                 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
                 : $"{t.Minutes}:{t.Seconds:00}";
         }
+    }
+
+    /// <summary>取目前載入影片之所屬主題名（供 AI 字幕分析輔助）；無載入或未指派主題→null。</summary>
+    private string? CurrentThemeName()
+    {
+        if (_currentVideoItemId is null) { return null; }
+        var name = _videoStore.Load().Items.FirstOrDefault(i => i.Id == _currentVideoItemId)?.ThemeName;
+        return string.IsNullOrWhiteSpace(name) ? null : name;
     }
 
     /// <summary>切換右側子頁籤（#177）：搜尋下載／播放學習；以可見性切換——兩 pane 皆留於視覺樹，WebView2 不被卸載重建、播放不中斷。</summary>

@@ -7,9 +7,9 @@ namespace LingoIsland.Video;
 /// </summary>
 public interface ISpeakerEnricher
 {
-    /// <summary>依 <paramref name="cues"/>（與可選 <paramref name="videoTitle"/>）取每句說話人＋各次 API 用量；<paramref name="progress"/> 逐步回報進度（供對話視窗顯示、減少等待焦慮）；失敗擲 <see cref="SpeakerEnrichException"/>。</summary>
+    /// <summary>依 <paramref name="cues"/>（與可選 <paramref name="videoTitle"/>／<paramref name="videoTheme"/> 所屬主題）取每句說話人＋各次 API 用量；<paramref name="progress"/> 逐步回報進度（供對話視窗顯示、減少等待焦慮）；失敗擲 <see cref="SpeakerEnrichException"/>。</summary>
     Task<SpeakerEnrichResult> InferSpeakersAsync(
-        IReadOnlyList<SubtitleCue> cues, string? videoTitle, IProgress<string>? progress = null, CancellationToken ct = default);
+        IReadOnlyList<SubtitleCue> cues, string? videoTitle, IProgress<string>? progress = null, CancellationToken ct = default, string? videoTheme = null);
 }
 
 /// <summary>某次 AI 呼叫之 token 用量＋模型＋是否含 web_search（供費用估算，AI 動作對話視窗）。</summary>

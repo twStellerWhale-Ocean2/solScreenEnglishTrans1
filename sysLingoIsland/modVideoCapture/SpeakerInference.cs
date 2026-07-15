@@ -10,8 +10,8 @@ namespace LingoIsland.Video;
 /// </summary>
 public static class SpeakerInference
 {
-    /// <summary>組逐句編號之推斷提示（含可選影片標題輔助判斷角色）；要求回 <c>{"speakers":[...]}</c> 依序對應。</summary>
-    public static string BuildPrompt(IReadOnlyList<SubtitleCue> cues, string? videoTitle)
+    /// <summary>組逐句編號之推斷提示（含可選影片標題／所屬主題輔助判斷角色）；要求回 <c>{"speakers":[...]}</c> 依序對應。</summary>
+    public static string BuildPrompt(IReadOnlyList<SubtitleCue> cues, string? videoTitle, string? videoTheme = null)
     {
         var sb = new StringBuilder();
         sb.Append("下面是一支影片的英文字幕逐句（已編號，共 ").Append(cues.Count).Append(" 句）。請依對話內容與常識，推斷每一句最可能的說話者");
@@ -20,6 +20,10 @@ public static class SpeakerInference
         if (!string.IsNullOrWhiteSpace(videoTitle))
         {
             sb.Append("\n影片標題（輔助判斷角色）：").Append(videoTitle.Trim());
+        }
+        if (!string.IsNullOrWhiteSpace(videoTheme))
+        {
+            sb.Append("\n所屬主題／分類（輔助判斷角色與領域）：").Append(videoTheme.Trim());
         }
         sb.Append("\n只回傳 JSON：{\"speakers\":[...]}，speakers 為字串陣列、長度必須恰好 ").Append(cues.Count);
         sb.Append(" 個、依序一一對應（第 n 句對第 n 個）。不要輸出任何說明或思考文字。\n\n逐句：");
@@ -58,7 +62,7 @@ public static class SpeakerInference
     // ---- 網路搜尋來源（epic #145 增量6b，#145 §D 第二來源）：OpenAI Responses API＋web_search 工具 ----
 
     /// <summary>組【上網搜尋】提示：請模型搜該影集逐字稿/角色資料（優先熱門可信來源）判斷每句說話者，只回 <c>{"speakers":[...]}</c>。</summary>
-    public static string BuildWebPrompt(IReadOnlyList<SubtitleCue> cues, string? videoTitle)
+    public static string BuildWebPrompt(IReadOnlyList<SubtitleCue> cues, string? videoTitle, string? videoTheme = null)
     {
         var sb = new StringBuilder();
         sb.Append("下面是一支影片的英文字幕逐句（已編號，共 ").Append(cues.Count).Append(" 句）。請【上網搜尋】這支影片／影集的逐字稿或角色台詞資料");
@@ -67,6 +71,10 @@ public static class SpeakerInference
         if (!string.IsNullOrWhiteSpace(videoTitle))
         {
             sb.Append("\n影片標題（搜尋與判斷角色用）：").Append(videoTitle.Trim());
+        }
+        if (!string.IsNullOrWhiteSpace(videoTheme))
+        {
+            sb.Append("\n所屬主題／分類（縮小搜尋範圍、判斷角色）：").Append(videoTheme.Trim());
         }
         sb.Append("\n**只**回傳 JSON 物件、不要任何搜尋過程／思考／說明文字或 markdown 圍籬：{\"speakers\":[...]}，");
         sb.Append("speakers 長度必須恰好 ").Append(cues.Count).Append(" 個、依序一一對應（第 n 句對第 n 個）。\n\n逐句：");
@@ -199,11 +207,12 @@ public static class SpeakerInference
     public sealed record TranscriptFind(bool Found, string Source, bool Complete, string Transcript);
 
     /// <summary>組「上網找完整逐字稿」提示（web_search）：回 <c>{found, source, complete, transcript}</c>；找不到可信完整逐字稿則 found=false。</summary>
-    public static string BuildFindTranscriptPrompt(string? videoTitle, string? retryHint = null)
+    public static string BuildFindTranscriptPrompt(string? videoTitle, string? retryHint = null, string? videoTheme = null)
     {
         var sb = new StringBuilder();
         sb.Append("請【上網搜尋】並取得這支影片／影集的**完整逐字稿**（優先官方或熱門 fandom wiki 等公評良好來源）。逐字稿需含**每句台詞與其說話者（角色名）**。");
         if (!string.IsNullOrWhiteSpace(videoTitle)) { sb.Append("\n影片標題：").Append(videoTitle.Trim()); }
+        if (!string.IsNullOrWhiteSpace(videoTheme)) { sb.Append("\n所屬主題／分類（縮小搜尋範圍）：").Append(videoTheme.Trim()); }
         if (!string.IsNullOrWhiteSpace(retryHint)) { sb.Append("\n（前次結果不佳，請換**不同**來源再找：").Append(retryHint!.Trim()).Append("）"); }
         sb.Append("\n只回傳 JSON：{\"found\":true/false, \"source\":\"來源網址或名稱\", \"complete\":true/false（逐字稿是否完整涵蓋全片且看得出說話者）, \"transcript\":\"逐字稿全文，每行格式『角色：台詞』\"}。");
         sb.Append("找不到可信且完整之逐字稿時 found=false、transcript 留空。不要輸出任何搜尋過程／思考／說明文字。");
