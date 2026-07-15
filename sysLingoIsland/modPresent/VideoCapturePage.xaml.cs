@@ -120,6 +120,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         // 字幕清單：單擊＝播/暫停切換（依此循環，#173）、雙擊＝跳到該句起點播放（#169）。以系統雙擊時間延後判定單擊，雙擊到達即取消單擊。
         CueList.PreviewMouseLeftButtonUp += (_, _) => { _cueClickTimer.Stop(); _cueClickTimer.Start(); };
         CueList.MouseDoubleClick += (_, _) => { _cueClickTimer.Stop(); _ = JumpToSelectedAsync(); };
+        // 右鍵選單（#189）：Copy line＋快速指定/修正說話人（依游標下之列動態填入）
+        CueList.ContextMenu = new System.Windows.Controls.ContextMenu();
+        CueList.ContextMenuOpening += OnCueContextMenuOpening;
         // 說話人篩選＋來源疊加＋整檔 YAML 編修（epic #145 增量5／6）
         SpeakerFilter.SelectionChanged += (_, _) => ApplySpeakerFilter();
         // #189 Row2「🧠 AI」：Auto 基底→LLM 重分句＋標說話人（修斷句、不動時間）；Manual 基底→僅補說話人（斷句已好）
@@ -935,11 +938,104 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         if (_shownCue >= 0 && _shownCue < _cues.Count) { TrySetClipboard(_cues[_shownCue].Text); }
     }
 
-    /// <summary>右鍵「Copy line」複製清單中該句台詞（#189）：自 ContextMenu 之 PlacementTarget 取該列 <see cref="CueRow"/>。</summary>
-    private void OnCopyCueLine(object sender, System.Windows.RoutedEventArgs e)
+    /// <summary>
+    /// 字幕清單右鍵選單（#189）：依游標下之列動態填入——Copy line＋「Set speaker」快速指定/修正說話人
+    /// （既有說話人清單一鍵套用＋清除為 unknown＋自訂新名）。無列或 YAML 編修中則不顯。
+    /// </summary>
+    private void OnCueContextMenuOpening(object sender, System.Windows.Controls.ContextMenuEventArgs e)
     {
-        var cm = (sender as System.Windows.Controls.MenuItem)?.Parent as System.Windows.Controls.ContextMenu;
-        if ((cm?.PlacementTarget as System.Windows.FrameworkElement)?.DataContext is CueRow row) { TrySetClipboard(row.Cue.Text); }
+        var cm = CueList.ContextMenu!;
+        cm.Items.Clear();
+        var row = CueRowUnderMouse();
+        if (row is null || _yamlEditing) { e.Handled = true; return; } // 無列/編修中→不顯選單
+
+        var copy = new System.Windows.Controls.MenuItem { Header = "Copy line" };
+        copy.Click += (_, _) => TrySetClipboard(row.Cue.Text);
+        cm.Items.Add(copy);
+        cm.Items.Add(new System.Windows.Controls.Separator());
+        cm.Items.Add(new System.Windows.Controls.MenuItem { Header = "Set speaker", IsEnabled = false }); // 標題列（停用）
+        foreach (var name in _cues.Where(c => !string.IsNullOrEmpty(c.Speaker)).Select(c => c.Speaker!)
+                                  .Distinct(StringComparer.OrdinalIgnoreCase)
+                                  .OrderBy(s => s, StringComparer.OrdinalIgnoreCase))
+        {
+            var captured = name;
+            var mi = new System.Windows.Controls.MenuItem
+            {
+                Header = "  " + name,
+                IsChecked = string.Equals(name, row.Cue.Speaker, StringComparison.OrdinalIgnoreCase),
+            };
+            mi.Click += (_, _) => AssignSpeaker(row, captured);
+            cm.Items.Add(mi);
+        }
+        var clear = new System.Windows.Controls.MenuItem
+        {
+            Header = "  (unknown / clear)",
+            IsChecked = string.IsNullOrEmpty(row.Cue.Speaker),
+        };
+        clear.Click += (_, _) => AssignSpeaker(row, null);
+        cm.Items.Add(clear);
+        var neu = new System.Windows.Controls.MenuItem { Header = "  New speaker…" };
+        neu.Click += (_, _) => { var n = PromptSpeakerName(row.Cue.Speaker); if (n is not null) { AssignSpeaker(row, n); } };
+        cm.Items.Add(neu);
+    }
+
+    /// <summary>游標下的字幕列（右鍵選單用）：自 <see cref="System.Windows.Input.Mouse.DirectlyOver"/> 上溯至 ListBoxItem 取其 <see cref="CueRow"/>。</summary>
+    private CueRow? CueRowUnderMouse()
+    {
+        var dep = System.Windows.Input.Mouse.DirectlyOver as System.Windows.DependencyObject;
+        while (dep is not null and not System.Windows.Controls.ListBoxItem)
+        {
+            dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
+        }
+        return (dep as System.Windows.Controls.ListBoxItem)?.DataContext as CueRow;
+    }
+
+    /// <summary>快速指定/修正某句說話人（#189）：改該句 Speaker（null／空＝清除為 unknown）、**就地更新該列**（不重建清單→不跳捲軸）、存檔、同步篩選/暫停下拉，當前句則重繪字幕帶。</summary>
+    private void AssignSpeaker(CueRow row, string? speaker)
+    {
+        var i = row.Index;
+        if (i < 0 || i >= _cues.Count) { return; }
+        var clean = string.IsNullOrWhiteSpace(speaker) ? null : speaker.Trim();
+        if (string.Equals(_cues[i].Speaker, clean, StringComparison.Ordinal)) { return; } // 無變化
+        var list = _cues.ToList();
+        list[i] = list[i] with { Speaker = clean };
+        _cues = list;
+        row.UpdateSpeaker(clean);                                                   // 就地通知 UI（該列 SpeakerLabel 更新）
+        if (_currentVideoId is not null) { _subs.Save(_currentVideoId, _isAuto, list); } // 存回（#174）
+        if (_shownCue == i) { RenderClickable(_cues[i]); }                          // 當前句→重繪字幕帶（含新說話人前綴）
+        PopulateSpeakerFilter();                                                    // 新說話人可能出現/消失→同步下拉
+        PopulatePauseAtSpeaker();
+        SetStatus(clean is null ? $"Cleared speaker on line {i + 1}." : $"Set line {i + 1} speaker to “{clean}”.");
+    }
+
+    /// <summary>「New speaker…」文字輸入（#189）：小型模態輸入框；取消回 null（呼叫端不動作）、OK 回輸入字（空白＝清除）。</summary>
+    private string? PromptSpeakerName(string? initial)
+    {
+        var win = new System.Windows.Window
+        {
+            Title = "Speaker name",
+            Width = 300,
+            SizeToContent = System.Windows.SizeToContent.Height,
+            WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner,
+            Owner = System.Windows.Window.GetWindow(this),
+            ResizeMode = System.Windows.ResizeMode.NoResize,
+            ShowInTaskbar = false,
+        };
+        var panel = new System.Windows.Controls.StackPanel { Margin = new System.Windows.Thickness(12) };
+        panel.Children.Add(new System.Windows.Controls.TextBlock { Text = "Enter a speaker name:", Margin = new System.Windows.Thickness(0, 0, 0, 6) });
+        var tb = new System.Windows.Controls.TextBox { Text = initial ?? "" };
+        panel.Children.Add(tb);
+        var btns = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal, HorizontalAlignment = System.Windows.HorizontalAlignment.Right, Margin = new System.Windows.Thickness(0, 10, 0, 0) };
+        var ok = new System.Windows.Controls.Button { Content = "OK", Width = 68, IsDefault = true, Margin = new System.Windows.Thickness(0, 0, 6, 0) };
+        var cancel = new System.Windows.Controls.Button { Content = "Cancel", Width = 68, IsCancel = true };
+        string? result = null;
+        ok.Click += (_, _) => { result = tb.Text; win.DialogResult = true; };
+        btns.Children.Add(ok);
+        btns.Children.Add(cancel);
+        panel.Children.Add(btns);
+        win.Content = panel;
+        win.Loaded += (_, _) => { tb.Focus(); tb.SelectAll(); };
+        return win.ShowDialog() == true ? result : null;
     }
 
     /// <summary>寫入剪貼簿（剪貼簿被占用等失敗時靜默忽略，不擲例外）。</summary>
@@ -1482,17 +1578,24 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
     }
 
     /// <summary>右側字幕清單一列 view-model：保留原始 cue 於 <see cref="Index"/>（篩選/顯示不動播放 index）；<see cref="Display"/> 說話人前置。</summary>
-    private sealed class CueRow
+    private sealed class CueRow : System.ComponentModel.INotifyPropertyChanged
     {
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
         public CueRow(int index, SubtitleCue cue) { Index = index; Cue = cue; }
         public int Index { get; }
-        public SubtitleCue Cue { get; }
+        public SubtitleCue Cue { get; private set; }
         /// <summary>時間標（#189）：cue 起始位置「m:ss」（超過一小時「h:mm:ss」）＋兩空白，置於說話人之前、清單以淡色 Run 呈現。</summary>
         public string TimeLabel => FormatPos(Cue.StartSec) + "  ";
         /// <summary>說話人前綴（固定「名: 」;未知＝「unknown: 」,#189）——清單以粗體 Run 呈現。</summary>
         public string SpeakerLabel => SpeakerLabelOf(Cue.Speaker);
         /// <summary>台詞文字（清單以正常字重 Run 呈現）。</summary>
         public string Text => Cue.Text;
+        /// <summary>就地更新說話人（#189 右鍵指定）：換 Cue 並通知 SpeakerLabel 變更，使清單該列即時更新、免重建（不跳捲軸）。</summary>
+        public void UpdateSpeaker(string? speaker)
+        {
+            Cue = Cue with { Speaker = speaker };
+            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(SpeakerLabel)));
+        }
     }
 
     /// <summary>

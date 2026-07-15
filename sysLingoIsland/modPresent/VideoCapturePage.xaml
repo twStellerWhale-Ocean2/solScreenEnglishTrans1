@@ -456,17 +456,13 @@
                         IsEnabled="False" ToolTip="Edit the whole subtitle as one YAML file (manual override: fix line breaks / speakers)"/>
               </Grid>
 
+              <!-- 右鍵選單於程式端依游標下之列動態填入（Copy line＋快速指定/修正說話人，#189）；見 OnCueContextMenuOpening -->
               <ListBox x:Name="CueList" Grid.Row="2" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"
-                       ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a line to jump there">
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a line to jump there; right-click to copy or set the speaker">
                 <ListBox.ItemTemplate>
                   <DataTemplate>
-                    <!-- 說話人名稱粗體、台詞正常（#字幕說話人標粗體）。Run.Text 綁定預設 TwoWay，對唯讀屬性會擲例外 → 明指 OneWay。右鍵複製整句台詞（#189） -->
-                    <TextBlock TextWrapping="Wrap" Margin="2" FontSize="12">
-                      <TextBlock.ContextMenu>
-                        <ContextMenu>
-                          <MenuItem Header="Copy line" Click="OnCopyCueLine"/>
-                        </ContextMenu>
-                      </TextBlock.ContextMenu><Run Text="{Binding TimeLabel, Mode=OneWay}" Foreground="#9A6A82" FontSize="11"/><Run Text="{Binding SpeakerLabel, Mode=OneWay}" FontWeight="Bold"/><Run Text="{Binding Text, Mode=OneWay}"/></TextBlock>
+                    <!-- 時間標(淡)＋說話人(粗)＋台詞。Run.Text 綁定預設 TwoWay，對唯讀屬性會擲例外 → 明指 OneWay -->
+                    <TextBlock TextWrapping="Wrap" Margin="2" FontSize="12"><Run Text="{Binding TimeLabel, Mode=OneWay}" Foreground="#9A6A82" FontSize="11"/><Run Text="{Binding SpeakerLabel, Mode=OneWay}" FontWeight="Bold"/><Run Text="{Binding Text, Mode=OneWay}"/></TextBlock>
                   </DataTemplate>
                 </ListBox.ItemTemplate>
               </ListBox>
