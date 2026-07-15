@@ -91,15 +91,17 @@
                         HorizontalGridLinesBrush="#22B0578D" Background="Transparent" RowBackground="Transparent"
                         BorderThickness="0" MaxHeight="360" RowHeight="44" FontSize="12"
                         HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
-                        MouseDoubleClick="OnGridDoubleClickLoad"
                         ColumnHeaderStyle="{StaticResource GridColHeader}" RowStyle="{StaticResource GridRow}" CellStyle="{StaticResource GridCell}">
                 <DataGrid.Columns>
-                  <!-- 推薦優序（規則：字幕品質＋片長）；預設排序欄 -->
-                  <DataGridTemplateColumn Header="&#x2605; Rec" SortMemberPath="RecommendScore" CanUserResize="False" MinWidth="46">
+                  <!-- 推薦優序（#183）：彩色圓標數字 1–5（5＝最佳、綠；3＝琥珀；低＝灰）——比星等好懂；點表頭以推薦分排序（預設排序欄） -->
+                  <DataGridTemplateColumn Header="Pick" SortMemberPath="RecommendScore" CanUserResize="False" MinWidth="48">
                     <DataGridTemplateColumn.CellTemplate>
                       <DataTemplate>
-                        <TextBlock Text="{Binding RecommendStars}" ToolTip="{Binding RecommendTip}" Foreground="#E0A82E"
-                                   FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Border Background="{Binding RecommendBrush}" CornerRadius="10" Width="22" Height="22"
+                                HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="{Binding RecommendTip}">
+                          <TextBlock Text="{Binding RecommendLabel}" Foreground="White" FontWeight="Bold" FontSize="11.5"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
                       </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                   </DataGridTemplateColumn>
@@ -131,16 +133,6 @@
                       </Style>
                     </DataGridTextColumn.ElementStyle>
                   </DataGridTextColumn>
-                  <!-- 載入鈕（已在清單者停用、標「Added」灰） -->
-                  <DataGridTemplateColumn Header="Load" CanUserSort="False" CanUserResize="False" MinWidth="58">
-                    <DataGridTemplateColumn.CellTemplate>
-                      <DataTemplate>
-                        <Button Content="{Binding LoadText}" IsEnabled="{Binding CanLoad}" Click="OnSearchRowLoad"
-                                Padding="10,3" Margin="2" Cursor="Hand" VerticalAlignment="Center"
-                                ToolTip="Load into the player (disabled if already in your Videos list)"/>
-                      </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                  </DataGridTemplateColumn>
                   <!-- 連結（開 YouTube 原頁） -->
                   <DataGridTemplateColumn Header="Link" CanUserSort="False" CanUserResize="False" MinWidth="56">
                     <DataGridTemplateColumn.CellTemplate>
@@ -179,6 +171,16 @@
                           <TextBlock Text="{Binding WebResultText}" Foreground="{Binding WebResultBrush}" Visibility="{Binding WebResultVisibility}"
                                      FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip="{Binding WebResultTip}"/>
                         </Grid>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <!-- 載入鈕（#183：移到行尾）：唯一載入方式（已取消雙擊載入）；已在清單者停用、標「Added」灰 -->
+                  <DataGridTemplateColumn Header="Load" CanUserSort="False" CanUserResize="False" MinWidth="58">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <Button Content="{Binding LoadText}" IsEnabled="{Binding CanLoad}" Click="OnSearchRowLoad"
+                                Padding="10,3" Margin="2" Cursor="Hand" VerticalAlignment="Center"
+                                ToolTip="Load this video into the player (disabled if already in your Videos list)"/>
                       </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                   </DataGridTemplateColumn>

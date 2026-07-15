@@ -488,16 +488,6 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         foreach (var row in _searchRows) { row.SetLoaded(added.Contains(row.VideoId)); }
     }
 
-    /// <summary>雙擊表格列＝載入該列影片（若尚未加入）。</summary>
-    private void OnGridDoubleClickLoad(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        if (SearchResultsGrid.SelectedItem is SearchRow row && row.CanLoad)
-        {
-            UrlBox.Text = row.VideoId;
-            _ = LoadVideoAsync(row.VideoId, addToStore: true);
-        }
-    }
-
     /// <summary>過濾框變更→依標題（不分大小寫、含子字串）過濾表格列（#177）；空＝不過濾。</summary>
     private void OnResultFilterChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
     {
@@ -1172,21 +1162,24 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         /// <summary>還原按鈕（取消/失敗後供再試）。</summary>
         public void ResetWebButton() { WebButtonText = "\U0001F310 Check"; WebButtonEnabled = true; }
 
-        // ── 推薦優序（#177，第一欄）：規則＝字幕品質（Manual>Auto>無）＋片長適學度；星等 1–5 ──
+        // ── 推薦優序（#177／#183，第一欄）：規則＝字幕品質（Manual>Auto>無）＋片長適學度；分數 1–5，以彩色圓標呈現（5＝最佳、綠；3＝琥珀；低＝灰）——比星等更好懂、仍可排序 ──
         private double _recommendScore;
         public double RecommendScore { get => _recommendScore; private set { _recommendScore = value; On(); } } // 排序鍵（預設遞減）
-        private string _recommendStars = "";
-        public string RecommendStars { get => _recommendStars; private set { _recommendStars = value; On(); } }
+        private string _recommendLabel = "";
+        public string RecommendLabel { get => _recommendLabel; private set { _recommendLabel = value; On(); } } // 圓標數字 1–5
+        private System.Windows.Media.Brush _recommendBrush = EmbGray;
+        public System.Windows.Media.Brush RecommendBrush { get => _recommendBrush; private set { _recommendBrush = value; On(); } } // 圓標底色（綠/琥珀/灰）
         public string RecommendTip =>
-            "Recommended for learning — from subtitle quality (Manual best, then Auto) and length (a single short lesson/episode beats a long compilation). Sort or filter the table by any column.";
+            "Recommended for learning — 5 = best. From subtitle quality (Manual > Auto) and length (a short single lesson beats a long compilation). Click this header to sort by it.";
 
-        /// <summary>依字幕（<paramref name="hasManual"/>／<paramref name="hasAuto"/>，null＝未探測＝中性）與片長算推薦星等（1–5）。</summary>
+        /// <summary>依字幕（<paramref name="hasManual"/>／<paramref name="hasAuto"/>，null＝未探測＝中性）與片長算推薦分（1–5）＋圓標色。</summary>
         private void RecomputeRecommend(bool? hasManual, bool? hasAuto)
         {
             int subScore = hasManual == true ? 3 : hasAuto == true ? 1 : hasManual is null ? 1 : 0; // 人工3／自動1／未知1／無0
             int total = Math.Clamp(subScore + DurationScore(DurationSec), 1, 5);
             RecommendScore = total;
-            RecommendStars = new string('★', total) + new string('☆', 5 - total);
+            RecommendLabel = total.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            RecommendBrush = total >= 4 ? EmbGreen : total == 3 ? EmbAmber : EmbGray; // 綠(4–5)／琥珀(3)／灰(1–2)
         }
 
         /// <summary>片長適學度加分：1–25 分＝2（理想單則）；&lt;1 分或 25–60 分＝1；&gt;60 分（合輯）＝0；未知＝1（中性）。</summary>
