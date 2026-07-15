@@ -62,7 +62,8 @@
                      Background="#66FFFFFF" ToolTip="Type keywords (prefilled from the active theme), then Search"/>
             <Button x:Name="SearchBtn" Grid.Column="1" Content="&#x1F50E; Search" Width="100" Height="30" Margin="8,0,0,0"/>
           </Grid>
-          <!-- 搜尋結果表格（#177，取代下拉）：縮圖｜名稱(點=載入到播放器)｜連結(開 YouTube 原頁)｜內嵌字幕(yt-dlp 免費自動探)｜網路字幕(逐列按需查、花額度) -->
+          <!-- 搜尋結果表格（#177，取代下拉）：縮圖｜名稱(點=載入到播放器)｜連結(開 YouTube 原頁)｜三種字幕狀態 Manual/Auto/Web -->
+          <!-- 字幕三態：Manual(人工、yt-dlp 免費自動探)｜Auto(自動、yt-dlp 免費自動探)｜Web(網路逐字稿、逐列按需查、花額度) -->
           <Border x:Name="SearchResultsPanel" Visibility="Collapsed" Margin="0,6,0,0" Grid.IsSharedSizeScope="True"
                   BorderBrush="#33B0578D" BorderThickness="1" CornerRadius="6" Background="#40FFFFFF">
             <Grid>
@@ -76,13 +77,15 @@
                   <ColumnDefinition SharedSizeGroup="ThumbCol"/>
                   <ColumnDefinition Width="*"/>
                   <ColumnDefinition SharedSizeGroup="LinkCol"/>
-                  <ColumnDefinition SharedSizeGroup="EmbCol"/>
+                  <ColumnDefinition SharedSizeGroup="ManualCol"/>
+                  <ColumnDefinition SharedSizeGroup="AutoCol"/>
                   <ColumnDefinition SharedSizeGroup="WebCol"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="1" Text="Title &#x2022; click to load" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" VerticalAlignment="Center"/>
-                <TextBlock Grid.Column="2" Text="Link" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" HorizontalAlignment="Center" Margin="8,0"/>
-                <TextBlock Grid.Column="3" Text="Embedded" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" HorizontalAlignment="Center" Margin="8,0" ToolTip="Subtitles on the YouTube video (free to check)"/>
-                <TextBlock Grid.Column="4" Text="Web" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" HorizontalAlignment="Center" Margin="8,0" ToolTip="Transcript findable online (checked on demand; uses your OpenAI key)"/>
+                <TextBlock Grid.Column="2" Text="Link" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" HorizontalAlignment="Center" Margin="6,0"/>
+                <TextBlock Grid.Column="3" Text="Manual" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" HorizontalAlignment="Center" Margin="6,0" ToolTip="Human-made subtitles on the video — best for learning (free to check)"/>
+                <TextBlock Grid.Column="4" Text="Auto" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" HorizontalAlignment="Center" Margin="6,0" ToolTip="YouTube auto-generated (machine) captions (free to check)"/>
+                <TextBlock Grid.Column="5" Text="Web" FontWeight="SemiBold" FontSize="11" Foreground="#B0578D" HorizontalAlignment="Center" Margin="6,0" ToolTip="Transcript findable online (checked on demand; uses your OpenAI key)"/>
               </Grid>
               <ScrollViewer Grid.Row="1" MaxHeight="360" VerticalScrollBarVisibility="Auto">
                 <ItemsControl x:Name="SearchResultsTable">
@@ -94,7 +97,8 @@
                             <ColumnDefinition SharedSizeGroup="ThumbCol"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition SharedSizeGroup="LinkCol"/>
-                            <ColumnDefinition SharedSizeGroup="EmbCol"/>
+                            <ColumnDefinition SharedSizeGroup="ManualCol"/>
+                            <ColumnDefinition SharedSizeGroup="AutoCol"/>
                             <ColumnDefinition SharedSizeGroup="WebCol"/>
                           </Grid.ColumnDefinitions>
                           <Image Grid.Column="0" Source="{Binding ThumbSource}" Width="56" Height="36"
@@ -103,19 +107,24 @@
                                   HorizontalContentAlignment="Left" Background="Transparent" BorderThickness="0"
                                   Foreground="#3A2C33" Padding="2" VerticalAlignment="Center"
                                   ToolTip="Load this video into the player"/>
-                          <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="8,0">
+                          <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="6,0">
                             <Hyperlink NavigateUri="{Binding WatchUri}" RequestNavigate="OnOpenExternalLink"
                                        ToolTip="{Binding WatchUrl}">YouTube &#x2197;</Hyperlink>
                           </TextBlock>
-                          <TextBlock Grid.Column="3" Text="{Binding EmbeddedStatus}" Foreground="{Binding EmbeddedBrush}"
-                                     VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="11.5" Margin="8,0"/>
-                          <Grid Grid.Column="4" Margin="8,0" VerticalAlignment="Center" HorizontalAlignment="Center">
+                          <!-- 三種字幕狀態徽章：Manual(綠)｜Auto(琥珀) 免費自動填；Web(藍) 逐列按需查 -->
+                          <TextBlock Grid.Column="3" Text="{Binding ManualText}" Foreground="{Binding ManualBrush}"
+                                     VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="12.5" FontWeight="SemiBold" Margin="6,0"
+                                     ToolTip="Human-made subtitles"/>
+                          <TextBlock Grid.Column="4" Text="{Binding AutoText}" Foreground="{Binding AutoBrush}"
+                                     VerticalAlignment="Center" HorizontalAlignment="Center" FontSize="12.5" FontWeight="SemiBold" Margin="6,0"
+                                     ToolTip="Auto-generated captions"/>
+                          <Grid Grid.Column="5" Margin="6,0" VerticalAlignment="Center" HorizontalAlignment="Center">
                             <Button Content="{Binding WebButtonText}" IsEnabled="{Binding WebButtonEnabled}" Visibility="{Binding WebButtonVisibility}"
                                     Click="OnSearchRowWebProbe" Background="Transparent" BorderBrush="#66B0578D" BorderThickness="1"
                                     FontSize="11" Padding="6,2" Cursor="Hand"
                                     ToolTip="Check the web for a transcript to label speakers (uses your OpenAI key; costs a small fee)"/>
                             <TextBlock Text="{Binding WebResultText}" Foreground="{Binding WebResultBrush}" Visibility="{Binding WebResultVisibility}"
-                                       FontSize="11.5" VerticalAlignment="Center"/>
+                                       FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip="{Binding WebResultTip}"/>
                           </Grid>
                         </Grid>
                       </Border>

@@ -443,14 +443,12 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                 try
                 {
                     var info = await _fetcher.ProbeEmbeddedAsync(row.VideoId, ct);
-                    if (info.HasManual) { row.SetEmbedded("Manual", EmbGreen); }       // 人工字幕＝最佳學習素材
-                    else if (info.HasAuto) { row.SetEmbedded("Auto", EmbAmber); }       // 僅自動字幕（機器轉錄）
-                    else { row.SetEmbedded("None", EmbGray); }                          // 查無英文字幕
+                    row.SetEmbedded(info.HasManual, info.HasAuto);                       // Manual／Auto 各標 ✓／–（免費、免 AI）
                 }
                 finally { gate.Release(); }
             }
             catch (OperationCanceledException) { /* 新搜尋取代→靜默 */ }
-            catch (Exception) { row.SetEmbedded("—", EmbGray); }                        // 私人/移除/逾時→無法確認
+            catch (Exception) { row.SetEmbeddedUnknown(); }                              // 私人/移除/逾時→標「?」
         }).ToList();
         try { await Task.WhenAll(tasks); } catch { /* 個別已處理 */ }
     }
@@ -482,8 +480,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             {
                 var progress = new System.Progress<string>(s => report(s));
                 var result = await _webProbe.ProbeAsync(title, progress, ct);
-                if (result.Found) { row.SetWebResult("✓ " + Truncate(result.Source, 22), EmbGreen); }
-                else { row.SetWebResult("✗ none", EmbGray); }
+                if (result.Found) { row.SetWebResult("✓", EmbBlue, "Web transcript: " + Truncate(result.Source, 60)); }
+                else { row.SetWebResult("✗", EmbGray, "No web transcript found"); }
                 return result.Usages
                     .Select(u => new AiActionWindow.AiUsage(u.InputTokens, u.OutputTokens, u.Model, u.WebSearch))
                     .ToList();
@@ -1032,12 +1030,23 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
             ThumbSource = MakeThumbSource(videoId);
         }
 
-        // 內嵌字幕（yt-dlp 免費探測、背景非同步填入）
-        private string _embeddedStatus = "checking…";
-        public string EmbeddedStatus { get => _embeddedStatus; private set { _embeddedStatus = value; On(); } }
-        private System.Windows.Media.Brush _embeddedBrush = EmbGray;
-        public System.Windows.Media.Brush EmbeddedBrush { get => _embeddedBrush; private set { _embeddedBrush = value; On(); } }
-        public void SetEmbedded(string status, System.Windows.Media.Brush brush) { EmbeddedStatus = status; EmbeddedBrush = brush; }
+        // 內嵌字幕兩態（yt-dlp 免費探測、背景非同步填入）：Manual(人工)、Auto(自動) 各一徽章；符號 …(查中)／✓(有)／–(無)／?(不明)
+        private string _manualText = "…";
+        public string ManualText { get => _manualText; private set { _manualText = value; On(); } }
+        private System.Windows.Media.Brush _manualBrush = EmbGray;
+        public System.Windows.Media.Brush ManualBrush { get => _manualBrush; private set { _manualBrush = value; On(); } }
+        private string _autoText = "…";
+        public string AutoText { get => _autoText; private set { _autoText = value; On(); } }
+        private System.Windows.Media.Brush _autoBrush = EmbGray;
+        public System.Windows.Media.Brush AutoBrush { get => _autoBrush; private set { _autoBrush = value; On(); } }
+        /// <summary>探測完成：Manual／Auto 各依有無標 ✓（有色）／–（灰）。</summary>
+        public void SetEmbedded(bool hasManual, bool hasAuto)
+        {
+            ManualText = hasManual ? "✓" : "–"; ManualBrush = hasManual ? EmbGreen : EmbGray;
+            AutoText = hasAuto ? "✓" : "–"; AutoBrush = hasAuto ? EmbAmber : EmbGray;
+        }
+        /// <summary>探測失敗（私人／移除／逾時）：Manual／Auto 皆標「?」。</summary>
+        public void SetEmbeddedUnknown() { ManualText = "?"; ManualBrush = EmbGray; AutoText = "?"; AutoBrush = EmbGray; }
 
         // 網路字幕（按需查、花額度）：三態
         private string _webButtonText = "\U0001F310 Check";
@@ -1052,14 +1061,16 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         public System.Windows.Media.Brush WebResultBrush { get => _webResultBrush; private set { _webResultBrush = value; On(); } }
         private System.Windows.Visibility _webResultVisibility = System.Windows.Visibility.Collapsed;
         public System.Windows.Visibility WebResultVisibility { get => _webResultVisibility; private set { _webResultVisibility = value; On(); } }
+        private string _webResultTip = "";
+        public string WebResultTip { get => _webResultTip; private set { _webResultTip = value; On(); } }
 
         /// <summary>切到「查中」：按鈕變「…」且停用。</summary>
         public void SetWebChecking() { WebButtonText = "…"; WebButtonEnabled = false; }
-        /// <summary>切到「完成」：隱藏按鈕、顯示結果文字（✓有／✗無）。</summary>
-        public void SetWebResult(string text, System.Windows.Media.Brush brush)
+        /// <summary>切到「完成」：隱藏按鈕、顯示結果符號（✓有／✗無），來源置 tooltip。</summary>
+        public void SetWebResult(string text, System.Windows.Media.Brush brush, string tip)
         {
             WebButtonVisibility = System.Windows.Visibility.Collapsed;
-            WebResultText = text; WebResultBrush = brush;
+            WebResultText = text; WebResultBrush = brush; WebResultTip = tip;
             WebResultVisibility = System.Windows.Visibility.Visible;
         }
         /// <summary>還原按鈕（取消/失敗後供再試）。</summary>
@@ -1077,9 +1088,10 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
 
     private static string Truncate(string s, int n) => string.IsNullOrEmpty(s) || s.Length <= n ? s : s.Substring(0, n) + "…";
 
-    // 搜尋結果表格徽章色（#177）：人工=綠、自動=琥珀、無/不明=灰；凍結供背景探測續程更新安全。
+    // 搜尋結果表格三種字幕徽章色（#177）：Manual=綠、Auto=琥珀、Web=藍、無/不明=灰；凍結供背景探測續程更新安全。
     private static readonly System.Windows.Media.Brush EmbGreen = FrozenBrush(0x2E, 0x7D, 0x32);
     private static readonly System.Windows.Media.Brush EmbAmber = FrozenBrush(0xB0, 0x6A, 0x00);
+    private static readonly System.Windows.Media.Brush EmbBlue = FrozenBrush(0x15, 0x65, 0xC0);
     private static readonly System.Windows.Media.Brush EmbGray = FrozenBrush(0x8A, 0x8A, 0x8A);
 
     private static System.Windows.Media.Brush FrozenBrush(byte r, byte g, byte b)
