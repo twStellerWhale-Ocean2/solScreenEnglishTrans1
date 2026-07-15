@@ -58,8 +58,16 @@
         <StackPanel>
           <TextBlock Text="Load a video" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}" Margin="0,0,0,8"/>
 
-          <!-- ① 關鍵字 → 搜尋 → 選擇 → 載入（#173：明確分路一） -->
-          <TextBlock Text="&#x2460; Search YouTube by keywords" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
+          <!-- 搜尋區塊子頁籤（#189 獲得頁重構）：由關鍵字／由逐字稿／由網址；三路成果統一列於下方成果區塊 -->
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+            <RadioButton x:Name="AcqTabKeyword" Style="{StaticResource SubTab}" GroupName="AcqTab" IsChecked="True" Content="&#x1F50E; 由關鍵字"/>
+            <RadioButton x:Name="AcqTabTranscript" Style="{StaticResource SubTab}" GroupName="AcqTab" Content="&#x1F4C4; 由逐字稿"/>
+            <RadioButton x:Name="AcqTabUrl" Style="{StaticResource SubTab}" GroupName="AcqTab" Content="&#x1F517; 由網址"/>
+          </StackPanel>
+
+          <!-- ① 由關鍵字：關鍵字 → 搜尋 → 成果區塊選擇 → 載入（#173 分路一） -->
+          <StackPanel x:Name="AcqPaneKeyword">
+          <TextBlock Text="Search YouTube by keywords" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*"/>
@@ -110,7 +118,39 @@
               </ComboBox>
             </StackPanel>
           </WrapPanel>
-          <!-- 搜尋結果：標準表格控制項 DataGrid（#177，取代自製 ItemsControl）——欄可調寬/重排、點表頭排序皆內建；上方過濾框 + 逐列 Load 鈕 -->
+          </StackPanel>
+
+          <!-- ② 由逐字稿（#189 新）：先上網找「有公開逐字稿可用」之影片、再定位到 YouTube，成果列於下方成果區塊。用 OpenAI（gpt-4.1 web_search），跑前確認費用 -->
+          <StackPanel x:Name="AcqPaneTranscript" Visibility="Collapsed">
+            <TextBlock Text="Find videos that have a transcript" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
+            <TextBlock Text="Enter a topic — LingoIsland searches the web for videos whose full transcript (with speakers) is published online, so the 🌐 Script speaker-fix works. Uses your OpenAI key; confirms cost first."
+                       Foreground="#9A6A82" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,6"/>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <TextBox x:Name="TranscriptBox" Grid.Column="0" Height="30" VerticalContentAlignment="Center" Padding="6,0"
+                       Background="#66FFFFFF" ToolTip="Enter a topic; finds YouTube videos that have a usable transcript online"/>
+              <Button x:Name="TranscriptSearchBtn" Grid.Column="1" Content="&#x1F4C4; Find" Width="100" Height="30" Margin="8,0,0,0"/>
+            </Grid>
+          </StackPanel>
+
+          <!-- ③ 由網址（#173 分路二）：貼連結直接載入、跳到內容頁播放（不經成果區塊） -->
+          <StackPanel x:Name="AcqPaneUrl" Visibility="Collapsed">
+            <TextBlock Text="Paste a YouTube link" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <TextBox x:Name="UrlBox" Grid.Column="0" Height="30" VerticalContentAlignment="Center" Padding="6,0"
+                       Background="#66FFFFFF" ToolTip="Paste a YouTube link or 11-character video ID, then Load"/>
+              <Button x:Name="LoadBtn" Grid.Column="1" Content="Load" Width="90" Height="30" Margin="8,0,0,0"/>
+            </Grid>
+          </StackPanel>
+
+          <!-- 成果區塊（#189）：由關鍵字／由逐字稿之搜尋結果統一列於此；標準表格 DataGrid（#177，欄可調寬/重排、點表頭排序皆內建；上方過濾框 + 逐列 Load 鈕） -->
           <Border x:Name="SearchResultsPanel" Visibility="Collapsed" Margin="0,6,0,0"
                   BorderBrush="#33B0578D" BorderThickness="1" CornerRadius="6" Background="#40FFFFFF">
             <Grid>
@@ -259,21 +299,6 @@
               </DataGrid>
             </Grid>
           </Border>
-
-          <!-- 分隔：兩條來源路徑各自獨立 -->
-          <Border Height="1" Background="#33B0578D" Margin="0,12,0,10"/>
-
-          <!-- ② 網址 → 載入（#173：明確分路二） -->
-          <TextBlock Text="&#x2461; Or paste a YouTube link" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
-          <Grid>
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*"/>
-              <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBox x:Name="UrlBox" Grid.Column="0" Height="30" VerticalContentAlignment="Center" Padding="6,0"
-                     Background="#66FFFFFF" ToolTip="Paste a YouTube link or 11-character video ID, then Load"/>
-            <Button x:Name="LoadBtn" Grid.Column="1" Content="Load" Width="90" Height="30" Margin="8,0,0,0"/>
-          </Grid>
         </StackPanel>
       </Border>
 

@@ -98,7 +98,8 @@ public static class SpeakerInference
     }
 
     /// <summary>自 Responses 回應取模型輸出文字：優先便捷欄 <c>output_text</c>，否則彙整 <c>output[] message → content[] output_text.text</c>。無則 null。</summary>
-    private static string? ExtractOutputText(JsonElement root)
+    /// <summary>自 Responses API 回應取模型輸出文字（<c>output_text</c> 便利欄，或 <c>output[].message.content[].output_text</c> 串接）；無則 null。internal 供同模組其他 Responses 解析（如 <see cref="TranscriptVideoFind"/>）重用。</summary>
+    internal static string? ExtractOutputText(JsonElement root)
     {
         if (root.TryGetProperty("output_text", out var ot) && ot.ValueKind == JsonValueKind.String)
         {

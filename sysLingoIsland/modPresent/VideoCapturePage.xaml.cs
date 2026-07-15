@@ -29,6 +29,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private readonly IVideoSearcher _searcher;                     // 依關鍵字搜尋 YouTube（#171）
     private readonly IAudioTranscriber _transcriber;               // Whisper 音訊轉錄（#187）：抓真實聲音重轉字幕、修時間漂移；會用 API＋下載音訊、按鈕觸發、跑前確認費用
     private readonly ISubtitleRefiner _refiner;                     // #189 Row2「🧠 AI 分析」：LLM 重分句＋標說話人、時間不變（Auto 基底用）；會用 API、按鈕觸發、跑前確認費用
+    private readonly ITranscriptVideoFinder _finder;                // #189 獲得頁「由逐字稿找影片」：web_search 找有逐字稿之影片、再定位；會用 API、按鈕觸發、跑前確認費用
     private readonly SubtitleStore _subs;                          // 字幕存檔：免重抓、保留說話人/YAML 編修（#174）
     private List<SearchRow> _searchRows = new();                   // 搜尋結果表格資料（#177）：縮圖/名稱/連結/片長/三種字幕狀態
     private System.Windows.Data.ListCollectionView? _searchView;   // 可過濾/預設排序之檢視（#177）；點表頭排序由 DataGrid 內建接手
@@ -86,7 +87,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     public VideoCapturePage(ISubtitleFetcher fetcher, VideoStore videoStore, ThemeStore themes,
                             ISpeakerEnricher enricher, ISpeakerEnricher webEnricher, IWebTranscriptProbe webProbe,
                             IVideoSearcher searcher, SubtitleStore subtitles, IAudioTranscriber transcriber,
-                            ISubtitleRefiner refiner)
+                            ISubtitleRefiner refiner, ITranscriptVideoFinder finder)
     {
         InitializeComponent();
         _fetcher = fetcher;
@@ -98,6 +99,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _searcher = searcher;
         _transcriber = transcriber;
         _refiner = refiner;
+        _finder = finder;
         _subs = subtitles;
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _poll.Tick += OnPoll;
@@ -110,6 +112,13 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         SearchBtn.Click += (_, _) => DoSearch();
         SearchBox.DropDownOpened += (_, _) => SearchBox.ItemsSource = _searchHistory.Load(); // #186：開下拉時填入關鍵字歷史
         SearchBox.PreviewKeyDown += OnSearchBoxKey;                                            // Enter 搜尋、Delete 刪選中歷史
+        // 獲得頁搜尋區塊子頁籤（#189 重構）：由關鍵字／由逐字稿／由網址——切換上方輸入區塊，成果統一列於下方成果區塊
+        AcqTabKeyword.Checked += (_, _) => ShowAcquireTab(AcqPaneKeyword);
+        AcqTabTranscript.Checked += (_, _) => ShowAcquireTab(AcqPaneTranscript);
+        AcqTabUrl.Checked += (_, _) => ShowAcquireTab(AcqPaneUrl);
+        // 由逐字稿找影片（#189）：Find／Enter → 上網找有逐字稿之影片、定位後列於成果區塊（花 OpenAI 額度、跑前確認費用）
+        TranscriptSearchBtn.Click += (_, _) => DoTranscriptSearch();
+        TranscriptBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { DoTranscriptSearch(); } };
         // 右側子頁籤（#177 版面重整）：搜尋下載 / 播放學習，以可見性切換（WebView2 不被卸載重建）
         SubTabSearch.Checked += (_, _) => ShowSubTab(showSearch: true);
         SubTabPlay.Checked += (_, _) => ShowSubTab(showSearch: false);
@@ -488,6 +497,84 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         var s = (MaxResults.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content as string;
         return int.TryParse(s, out var n) ? Math.Clamp(n, 1, 50) : 25;
     }
+
+    /// <summary>切換獲得頁搜尋區塊子頁籤（#189）：顯示選定輸入區塊、其餘收合；下方成果區塊共用、不受影響。</summary>
+    private void ShowAcquireTab(System.Windows.FrameworkElement pane)
+    {
+        AcqPaneKeyword.Visibility = pane == AcqPaneKeyword ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        AcqPaneTranscript.Visibility = pane == AcqPaneTranscript ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        AcqPaneUrl.Visibility = pane == AcqPaneUrl ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+    }
+
+    private const int TranscriptFindCount = 8; // 「由逐字稿找影片」一次 web_search 找最多 N 支（花額度、控管筆數）
+
+    /// <summary>
+    /// 「由逐字稿找影片」（#189 獲得頁重構「由逐字稿」子頁）：以 OpenAI <c>web_search</c> 找「該主題有公開逐字稿可用」之影片候選，
+    /// 模型未給明確 ID 者以 yt-dlp 依標題定位，去重後列於成果區塊；並把這些影片之網路字幕狀態**預存為 found**（#188 快取）——
+    /// 成果區塊 Web 欄即顯 ✓、載入後 🌐 Script 補說話人可用、自動網搜略過（免重花）。花 OpenAI 額度、模態顯進度與費用；空主題／取消／失敗以狀態列回報。
+    /// </summary>
+    private void DoTranscriptSearch()
+    {
+        var topic = TranscriptBox.Text?.Trim() ?? "";
+        if (topic.Length == 0) { SetStatus("Enter a topic to find videos that have a transcript."); return; }
+        _searchCts?.Cancel();
+        _searchCts = new CancellationTokenSource();                 // 背景探測/自動網搜用（新搜尋取消）
+        var themeForAi = ThemeStore.GetActive(_themes.Load())?.Name; // 縮小網搜範圍
+        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Find videos with a transcript",
+            async (report, ct) =>
+            {
+                var progress = new System.Progress<string>(s => report(s));
+                var find = await _finder.FindAsync(topic, TranscriptFindCount, progress, ct, themeForAi);
+                _spendLedger.Record(find.Usages.Sum(u => AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0), DateTimeOffset.Now); // #189 記帳
+                if (find.Candidates.Count == 0)
+                {
+                    SetStatus("No videos with a usable transcript found — try a broader topic, or use the keyword tab.");
+                    return TranscriptCost(find.Usages);
+                }
+                // 定位每支影片：優先模型給的 11 碼 ID，否則以標題 yt-dlp 搜尋取第一筆；去重（同 ID 只留一筆）
+                report($"Locating {find.Candidates.Count} video(s) on YouTube…");
+                var resolved = new List<VideoSearchResult>();
+                var sources = new Dictionary<string, string>(StringComparer.Ordinal); // videoId → 逐字稿來源（供預存 Web=found 之 tooltip）
+                var seen = new HashSet<string>(StringComparer.Ordinal);
+                foreach (var c in find.Candidates)
+                {
+                    if (ct.IsCancellationRequested) { break; }
+                    var id = c.VideoId;
+                    var title = c.Title;
+                    int? dur = null;
+                    if (id is null)
+                    {
+                        try
+                        {
+                            var hits = await _searcher.SearchAsync(c.Title, 1, ct);
+                            if (hits.Count > 0) { id = hits[0].VideoId; title = hits[0].Title; dur = hits[0].DurationSec; }
+                        }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception) { /* 該支定位失敗→略過 */ }
+                    }
+                    if (id is null || !seen.Add(id)) { continue; }
+                    resolved.Add(new VideoSearchResult(id, title, dur));
+                    sources[id] = c.Source;
+                }
+                if (resolved.Count == 0)
+                {
+                    SetStatus("Found transcripts online, but couldn't locate the videos on YouTube — try the keyword tab.");
+                    return TranscriptCost(find.Usages);
+                }
+                // 預存這些影片之網路字幕狀態＝found（#188 快取）：須在 PopulateResults 前存，讓 RestoreCachedStatus 還原成 ✓、自動網搜略過（WebRank≠0）
+                foreach (var r in resolved)
+                {
+                    _statusStore.SaveWeb(r.VideoId, true, sources.TryGetValue(r.VideoId, out var s) && s.Length > 0 ? s : null);
+                }
+                PopulateResults(resolved);
+                SetStatus($"{resolved.Count} video(s) with transcripts — click a row's Load button (🌐 Web = transcript found).");
+                return TranscriptCost(find.Usages);
+            });
+    }
+
+    /// <summary>把 <see cref="SpeakerUsage"/> 轉為對話視窗費用顯示用之 <see cref="AiActionWindow.AiUsage"/> 清單。</summary>
+    private static List<AiActionWindow.AiUsage> TranscriptCost(IReadOnlyList<SpeakerUsage> usages)
+        => usages.Select(u => new AiActionWindow.AiUsage(u.InputTokens, u.OutputTokens, u.Model, u.WebSearch)).ToList();
 
 
     /// <summary>把搜尋結果填入可排序/過濾表格（#177）：即時顯示縮圖/名稱/連結/片長/推薦星等；內嵌字幕背景逐列免費探測填入；預設依推薦分排序。</summary>

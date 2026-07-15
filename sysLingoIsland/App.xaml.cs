@@ -141,7 +141,8 @@ public partial class App : System.Windows.Application
             new YtDlpVideoSearcher(), // 依關鍵字搜尋 YouTube（#171）
             new SubtitleStore(), // 字幕存檔：重開/重選同片還原、免重抓、保留說話人與 YAML 編修（#174）
             new WhisperTranscriber("whisper-1", _config.TimeoutSec), // #187：抓聲音以 Whisper 重轉字幕、修時間漂移（按鈕觸發、跑前確認費用）
-            new OpenAiRefiner(_config.Model, _config.TimeoutSec)); // #189 Row2「🧠 AI」：Auto 基底 LLM 重分句＋標說話人、時間不變
+            new OpenAiRefiner(_config.Model, _config.TimeoutSec), // #189 Row2「🧠 AI」：Auto 基底 LLM 重分句＋標說話人、時間不變
+            new OpenAiTranscriptVideoFinder("gpt-4.1", _config.TimeoutSec)); // #189 獲得頁「由逐字稿找影片」：web_search（gpt-4.1）找有逐字稿之影片
         _videoPage.WordLookupRequested += LookupWordFromVideo;
         _videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
         _videoPage.ApplyThumbSize(_config.SearchThumbHeight); // 搜尋結果縮圖高度自 config 套用（選項頁可調，#複查）
