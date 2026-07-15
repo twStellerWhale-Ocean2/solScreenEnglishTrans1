@@ -92,6 +92,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         // 依關鍵字搜尋 YouTube（#171）：Search／Enter 搜尋；結果以表格呈現，點名稱載入、點連結開原頁、按需查網路字幕（#177）
         SearchBtn.Click += (_, _) => _ = DoSearchAsync();
         SearchBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { _ = DoSearchAsync(); } };
+        // 右側子頁籤（#177 版面重整）：搜尋下載 / 播放學習，以可見性切換（WebView2 不被卸載重建）
+        SubTabSearch.Checked += (_, _) => ShowSubTab(showSearch: true);
+        SubTabPlay.Checked += (_, _) => ShowSubTab(showSearch: false);
         ReplayBtn.Click += (_, _) => _ = ReplayCurrentAsync();
         ResumeBtn.Click += (_, _) => _ = ResumeAsync();
         NextBtn.Click += (_, _) => _ = SkipNextAsync();
@@ -215,6 +218,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _currentTitle = null; // 增量6：新片重置標題（起播後自播放器重新取得）
         _currentVideoId = id;  // 字幕存檔鍵（#174）
         SetWatchUrl(id);       // #177：內容區塊顯示可點超連結網址
+        SubTabPlay.IsChecked = true; // #177：載入即切到「播放學習」子頁（WebView2 於此顯示、字幕在此學習）
         ClearCues();
         SubtitleBand.Inlines.Clear();
         SetControls(false);
@@ -1075,6 +1079,13 @@ window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVi
         }
         /// <summary>還原按鈕（取消/失敗後供再試）。</summary>
         public void ResetWebButton() { WebButtonText = "\U0001F310 Check"; WebButtonEnabled = true; }
+    }
+
+    /// <summary>切換右側子頁籤（#177）：搜尋下載／播放學習；以可見性切換——兩 pane 皆留於視覺樹，WebView2 不被卸載重建、播放不中斷。</summary>
+    private void ShowSubTab(bool showSearch)
+    {
+        SearchPane.Visibility = showSearch ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        PlayPane.Visibility = showSearch ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
     }
 
     /// <summary>內容區塊顯示目前影片之可點超連結網址（#177）：設定 Hyperlink 目標與顯示文字並顯示該列。</summary>

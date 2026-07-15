@@ -3,7 +3,34 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              Background="Transparent">
-  <!-- 統一版面（#167）：左＝影片清單（Clear all＋theme 篩選；右鍵/Delete 刪）｜右上＝獲取區塊（網址載入）｜右下＝內容區塊（播放器＋字幕） -->
+  <UserControl.Resources>
+    <!-- 右側子頁籤鈕（#177 版面重整）：水平藥丸樣式；選取＝PinkAccent 底、PinkText 字（沿用 App 級色） -->
+    <Style x:Key="SubTab" TargetType="RadioButton">
+      <Setter Property="Cursor" Value="Hand"/>
+      <Setter Property="Margin" Value="0,0,6,0"/>
+      <Setter Property="Template">
+        <Setter.Value>
+          <ControlTemplate TargetType="RadioButton">
+            <Border x:Name="bg" CornerRadius="8" Background="Transparent"
+                    BorderBrush="{StaticResource PinkAccent}" BorderThickness="1" Padding="16,7">
+              <ContentPresenter x:Name="cp" VerticalAlignment="Center"
+                                TextElement.FontSize="12.5" TextElement.FontWeight="SemiBold" TextElement.Foreground="#8A5A6D"/>
+            </Border>
+            <ControlTemplate.Triggers>
+              <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="{StaticResource PinkAccent}"/>
+                <Setter TargetName="cp" Property="TextElement.Foreground" Value="{StaticResource PinkText}"/>
+              </Trigger>
+              <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="bg" Property="Background" Value="{StaticResource PinkTint}"/>
+              </Trigger>
+            </ControlTemplate.Triggers>
+          </ControlTemplate>
+        </Setter.Value>
+      </Setter>
+    </Style>
+  </UserControl.Resources>
+  <!-- 統一版面（#167／#177）：左＝影片清單（Clear all＋theme 篩選；右鍵/Delete 刪）｜右＝兩子頁籤（搜尋下載／播放學習）＋共用狀態列 -->
   <Grid Margin="10">
     <Grid.ColumnDefinitions>
       <ColumnDefinition Width="200" MinWidth="150"/>
@@ -40,14 +67,23 @@
 
     <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
 
-    <!-- 右：上＝獲取區塊（網址輸入＋Load＋狀態）｜下＝內容區塊（播放器｜逐句字幕） -->
+    <!-- 右：子頁籤（搜尋下載／播放學習，可見性切換）＋共用狀態列（#177） -->
     <Grid Grid.Column="2">
       <Grid.RowDefinitions>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
       </Grid.RowDefinitions>
 
-      <Border Grid.Row="0" Style="{StaticResource Card}" Padding="12">
+      <!-- 子頁籤：以可見性切換兩 pane（非 TabControl，避免切頁卸載重建 WebView2 播放器、中斷播放） -->
+      <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+        <RadioButton x:Name="SubTabSearch" Style="{StaticResource SubTab}" GroupName="VideoSubTab" IsChecked="True" Content="&#x1F50E; Search &amp; download"/>
+        <RadioButton x:Name="SubTabPlay" Style="{StaticResource SubTab}" GroupName="VideoSubTab" Content="&#x25B6; Play &amp; learn"/>
+      </StackPanel>
+
+      <!-- 兩 pane 疊放同格，靠可見性切換 -->
+      <Grid Grid.Row="1">
+      <Border x:Name="SearchPane" Style="{StaticResource Card}" Padding="12" VerticalAlignment="Top">
         <StackPanel>
           <TextBlock Text="Load a video" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}" Margin="0,0,0,8"/>
 
@@ -149,13 +185,11 @@
                      Background="#66FFFFFF" ToolTip="Paste a YouTube link or 11-character video ID, then Load"/>
             <Button x:Name="LoadBtn" Grid.Column="1" Content="Load" Width="90" Height="30" Margin="8,0,0,0"/>
           </Grid>
-
-          <TextBlock x:Name="StatusText" Margin="2,10,2,0" FontSize="12" Foreground="#B0578D" TextWrapping="Wrap"
-                     Text="Search by keywords and pick a result, or paste a link — then Load."/>
         </StackPanel>
       </Border>
 
-      <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,8,0,0" Padding="8">
+      <!-- 播放學習 pane：所屬主題＋網址＋播放器＋逐句字幕（預設隱藏，載入影片時自動切換至此） -->
+      <Border x:Name="PlayPane" Style="{StaticResource Card}" Padding="8" Visibility="Collapsed">
         <Grid>
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -276,6 +310,11 @@
           </Grid>
         </Grid>
       </Border>
+      </Grid>
+
+      <!-- 共用狀態列（#177）：兩子頁皆可見；載入/錯誤訊息不因切到播放頁而被遮 -->
+      <TextBlock x:Name="StatusText" Grid.Row="2" Margin="4,6,4,0" FontSize="12" Foreground="#B0578D" TextWrapping="Wrap"
+                 Text="Search by keywords and pick a result, or paste a link — then Load."/>
     </Grid>
   </Grid>
 </UserControl>
