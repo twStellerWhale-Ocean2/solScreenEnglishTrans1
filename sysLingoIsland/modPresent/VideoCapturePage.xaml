@@ -404,9 +404,25 @@
                   <RowDefinition Height="Auto"/>
                   <RowDefinition Height="Auto"/>
                   <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <!-- 兩顆說話人來源（同疊加架構）：AI 依台詞推斷（增量6）｜🌐 網搜上網找逐字稿（增量6b） -->
+                <!-- ① 初始資料（#189）：Auto／Manual 互斥切換基底來源。Manual 有就自動選（時間+斷句皆準）、否則 Auto（時間準、斷句可能錯）；皆無講話人。不存在的軌灰掉 -->
                 <Grid Grid.Row="0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Grid.Column="0" Text="Source" FontSize="11" Foreground="#9A6A82" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                  <ToggleButton x:Name="BaseAutoBtn" Grid.Column="1" Content="Auto" Height="26" Margin="0,0,3,0"
+                                IsEnabled="False" Click="OnBaseAutoClick"
+                                ToolTip="Auto-generated captions: correct timing, but sentence breaks may be off, no speaker"/>
+                  <ToggleButton x:Name="BaseManualBtn" Grid.Column="2" Content="Manual" Height="26" Margin="3,0,0,0"
+                                IsEnabled="False" Click="OnBaseManualClick"
+                                ToolTip="Human-made subtitles: correct timing and sentence breaks, no speaker (preferred)"/>
+                </Grid>
+                <!-- 兩顆說話人來源（同疊加架構）：AI 依台詞推斷（增量6）｜🌐 網搜上網找逐字稿（增量6b） -->
+                <Grid Grid.Row="1" Margin="0,4,0,0">
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
@@ -416,10 +432,10 @@
                   <Button x:Name="WebSpeakersBtn" Grid.Column="1" Content="&#x1F310; Web" Height="26" Margin="3,0,0,0"
                           IsEnabled="False" ToolTip="Search the web for this show's transcript to label speakers (OpenAI web search; uses your OpenAI key)"/>
                 </Grid>
-                <Button x:Name="EditYamlBtn" Grid.Row="1" Content="Edit YAML" Height="26" Margin="0,4,0,0"
+                <Button x:Name="EditYamlBtn" Grid.Row="2" Content="Edit YAML" Height="26" Margin="0,4,0,0"
                         IsEnabled="False" ToolTip="Edit the whole subtitle as one YAML file (fix line breaks / speakers)"/>
                 <!-- Whisper ASR（#187）：抓真實聲音重新轉錄，修正自動字幕時間漂移；會用金鑰＋下載音訊，跑前確認估算費用 -->
-                <Button x:Name="TranscribeBtn" Grid.Row="2" Content="&#x1F399; Re-transcribe audio" Height="26" Margin="0,4,0,0"
+                <Button x:Name="TranscribeBtn" Grid.Row="3" Content="&#x1F399; Re-transcribe audio" Height="26" Margin="0,4,0,0"
                         IsEnabled="False" ToolTip="Transcribe the actual audio with OpenAI Whisper to realign subtitle timing (uses your OpenAI key + downloads audio; shows estimated cost before running)"/>
               </Grid>
 
