@@ -414,21 +414,17 @@
                   <RowDefinition Height="Auto"/>
                   <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <!-- ① 初始資料（#189）：Auto／Manual 互斥切換基底來源。Manual 有就自動選（時間+斷句皆準）、否則 Auto（時間準、斷句可能錯）；皆無講話人。不存在的軌灰掉 -->
-                <Grid Grid.Row="0">
+                <!-- ① 初始資料（#189）：字幕**來源**——僅顯示（不可操作，避免誤會可切換）。Manual＝人工字幕（時間+斷句皆準）、Auto＝自動字幕（時間準、斷句可能錯）；皆無講話人 -->
+                <Grid Grid.Row="0" Height="26">
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="26"/>
                     <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Grid.Column="0" Text="&#x1F4AC;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
-                             ToolTip="自影片來源獲得字幕。"/>
-                  <ToggleButton x:Name="BaseAutoBtn" Grid.Column="1" Content="Auto" Height="26" Margin="0,0,3,0"
-                                IsEnabled="False" Click="OnBaseAutoClick"
-                                ToolTip="Auto-generated captions: correct timing, but sentence breaks may be off, no speaker"/>
-                  <ToggleButton x:Name="BaseManualBtn" Grid.Column="2" Content="Manual" Height="26" Margin="3,0,0,0"
-                                IsEnabled="False" Click="OnBaseManualClick"
-                                ToolTip="Human-made subtitles: correct timing and sentence breaks, no speaker (preferred)"/>
+                             ToolTip="自影片來源獲得字幕（僅顯示來源）。"/>
+                  <TextBlock x:Name="BaseSourceText" Grid.Column="1" VerticalAlignment="Center" Foreground="#6D3A4D"
+                             FontSize="12.5" Margin="2,0,0,0"
+                             ToolTip="字幕來源：Manual＝人工字幕（最佳）、Auto＝自動字幕。這是本片實際取得的來源，僅供顯示。"/>
                 </Grid>
                 <!-- ② 講話人／斷句（#189）：不動時間。🌐 Script＝用網路逐字稿；🧠 AI＝用 AI 推理。Manual 基底只補講話人；Auto 基底另補斷句 -->
                 <Grid Grid.Row="1" Margin="0,4,0,0">

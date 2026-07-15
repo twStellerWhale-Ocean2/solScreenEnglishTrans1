@@ -9,9 +9,6 @@ public interface ISubtitleFetcher
     /// <summary>取指定 YouTube 影片之英文字幕逐句 cue（優先人工字幕、退自動字幕）；無字幕／取得失敗擲 <see cref="SubtitleException"/>。</summary>
     Task<SubtitleFetchResult> FetchAsync(string videoUrlOrId, CancellationToken ct = default);
 
-    /// <summary>取**指定軌別**字幕（Row1 手動切換基底，#189）：<paramref name="wantAuto"/>＝false 只取人工、true 只取自動；該軌不存在擲 <see cref="SubtitleException"/>。</summary>
-    Task<SubtitleFetchResult> FetchTrackAsync(string videoUrlOrId, bool wantAuto, CancellationToken ct = default);
-
     /// <summary>
     /// 探測影片內嵌英文字幕可用性（#177 搜尋結果表格「內嵌字幕」欄）：只查 yt-dlp metadata
     /// （<c>subtitles</c>／<c>automatic_captions</c>），<b>不下載字幕內容、不下載影片</b>，故較 <see cref="FetchAsync"/> 輕快。
