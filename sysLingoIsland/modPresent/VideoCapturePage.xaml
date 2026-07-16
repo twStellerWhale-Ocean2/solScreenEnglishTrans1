@@ -495,7 +495,7 @@
 
               <!-- 右鍵選單於程式端依游標下之列動態填入（Copy line＋快速指定/修正說話人，#189）；見 OnCueContextMenuOpening -->
               <ListBox x:Name="CueList" Grid.Row="2" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"
-                       ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a line to jump there; right-click to copy or set the speaker">
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Double-click a line to jump there (paused); click a selected line to play/pause; right-click to copy or set the speaker">
                 <ListBox.ItemTemplate>
                   <DataTemplate>
                     <!-- 時間標(淡)＋說話人(粗)＋台詞。Run.Text 綁定預設 TwoWay，對唯讀屬性會擲例外 → 明指 OneWay -->

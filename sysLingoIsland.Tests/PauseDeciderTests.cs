@@ -134,12 +134,24 @@ public class PauseDeciderTests
     };
 
     [Fact]
-    public void NextPause_PauseSpeaker_OnlyPausesAtThatSpeaker_SkipsOthers()
+    public void NextPause_PauseSpeaker_PausesAtThatSpeakersLineStart_SkipsOthers()
     {
-        // Ryder：a(0) 到 b 之開始(3)→暫停 0；接著跳過 b(Zuma)、暫停於 c(2)（c 暫停點＝min(d 20, c 5+8=13)=13）
-        Assert.Equal(0, PauseDecider.NextPause(3.0, Spoken, -1, pauseSpeaker: "Ryder"));
-        Assert.Equal(-1, PauseDecider.NextPause(3.0, Spoken, 0, pauseSpeaker: "Ryder")); // b 不停、c 暫停點未到
-        Assert.Equal(2, PauseDecider.NextPause(13.0, Spoken, 0, pauseSpeaker: "Ryder")); // 跳過 b、暫停 c
+        // #pause-frame 修：指定說話人停在**該句起點**（畫面落在該說話人本身，不會到下一位）。
+        // Ryder：a 起點(1) 停 0；接著跳過 b(Zuma)、於 c 起點(5) 停 2。
+        Assert.Equal(-1, PauseDecider.NextPause(0.9, Spoken, -1, pauseSpeaker: "Ryder")); // a 起點未到
+        Assert.Equal(0, PauseDecider.NextPause(1.0, Spoken, -1, pauseSpeaker: "Ryder"));  // 停在 a 起點
+        Assert.Equal(-1, PauseDecider.NextPause(4.9, Spoken, 0, pauseSpeaker: "Ryder")); // b 不停、c 起點未到
+        Assert.Equal(2, PauseDecider.NextPause(5.0, Spoken, 0, pauseSpeaker: "Ryder"));  // 跳過 b(Zuma)、停在 c 起點
+    }
+
+    [Fact]
+    public void NextPause_PauseSpeaker_PauseFrameIsTargetLine_NotNextSpeaker()
+    {
+        // 修前 bug：指定說話人停在句末＝下一句起點→畫面落在下一位說話人。
+        // 修後停在起點→暫停秒之 CueAt 正是目標句本身（畫面＝該說話人）。
+        var pausePoint = Spoken[2].StartSec;                                        // c(Ryder) 起點=5
+        Assert.Equal(2, PauseDecider.NextPause(pausePoint, Spoken, 0, pauseSpeaker: "Ryder")); // 停在 c
+        Assert.Equal(2, PauseDecider.CueAt(pausePoint, Spoken));                     // 畫面正是 c(Ryder)、非 d(Zuma)
     }
 
     [Fact]
@@ -178,9 +190,11 @@ public class PauseDeciderTests
     [Fact]
     public void NextPause_PauseNoSpeaker_OnlyPausesAtUnlabeled_SkipsLabeled()
     {
-        Assert.Equal(-1, PauseDecider.NextPause(4.9, Mixed, -1, pauseNoSpeaker: true));
-        Assert.Equal(1, PauseDecider.NextPause(5.0, Mixed, -1, pauseNoSpeaker: true));   // 跳過 a(Ryder)、於 b 暫停（暫停點＝c 開始 5）
-        Assert.Equal(3, PauseDecider.NextPause(28.0, Mixed, 1, pauseNoSpeaker: true));   // 跳過 c(Zuma)、於末句 d 暫停（20+8）
+        // #pause-frame 修：未標示者亦停在**該句起點**（畫面落在該未標示句本身）。
+        Assert.Equal(-1, PauseDecider.NextPause(2.9, Mixed, -1, pauseNoSpeaker: true));
+        Assert.Equal(1, PauseDecider.NextPause(3.0, Mixed, -1, pauseNoSpeaker: true));   // 跳過 a(Ryder)、於 b 起點(3) 暫停
+        Assert.Equal(-1, PauseDecider.NextPause(19.9, Mixed, 1, pauseNoSpeaker: true));  // 跳過 c(Zuma)、d 起點未到
+        Assert.Equal(3, PauseDecider.NextPause(20.0, Mixed, 1, pauseNoSpeaker: true));   // 於末句 d 起點(20) 暫停
         Assert.Equal(-1, PauseDecider.NextPause(999.0, Mixed, 3, pauseNoSpeaker: true)); // d 後無未標示句
     }
 

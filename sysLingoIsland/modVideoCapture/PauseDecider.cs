@@ -21,15 +21,28 @@ public static class PauseDecider
         double maxRunSec = DefaultMaxRunSec, string? pauseSpeaker = null, bool pauseNoSpeaker = false)
     {
         var next = Math.Max(0, lastPausedIndex + 1);
-        // 指定說話人（或未標示者）：跳過不符之句（不暫停、續播），找下一個符合者
+        var targeted = !string.IsNullOrEmpty(pauseSpeaker) || pauseNoSpeaker; // 指定說話人／未標示者＝針對特定對象暫停
+        // 指定對象：跳過不符之句（不暫停、續播），找下一個符合者
         while (next < cues.Count && !PauseMatches(pauseSpeaker, pauseNoSpeaker, cues[next].Speaker)) next++;
         if (next >= cues.Count) return -1;
-        var capped = cues[next].StartSec + maxRunSec;
-        var naturalEnd = next + 1 < cues.Count ? Math.Min(cues[next + 1].StartSec, capped) : capped;
-        // 口說時長地板（#字幕雙擊早停修正）：至少播足本句台詞估計時長——重疊/過早的下一句起點不把整句在說完前切掉
-        // （雙擊跳段最有感）。仍以 maxRun 封頂、且絕不早於 naturalEnd（不縮短既有行為、不早停）。
-        var spokenFloor = Math.Min(capped, cues[next].StartSec + EstimateSpokenSec(cues[next].Text));
-        var pausePoint = Math.Max(naturalEnd, spokenFloor);
+        double pausePoint;
+        if (targeted)
+        {
+            // 指定對象（#pause-frame 修）：停在**該句起點**——畫面正落在目標句本身（選 Ryder 就停在 Ryder 說話的畫面）。
+            // 停在句末＝下一句起點，畫面會落到下一位說話人（Rocky…）→ 使用者誤以為「停在 Rocky／沒停在 Ryder」。
+            // 停在起點另對輪詢延遲穩健：緩衝＝整句時長，不像句末是刀口、稍慢就越過到下一句。
+            pausePoint = cues[next].StartSec;
+        }
+        else
+        {
+            // 全部句（預設逐句學習）：到句末暫停（一句最多走 maxRunSec）。
+            var capped = cues[next].StartSec + maxRunSec;
+            var naturalEnd = next + 1 < cues.Count ? Math.Min(cues[next + 1].StartSec, capped) : capped;
+            // 口說時長地板（#字幕雙擊早停修正）：至少播足本句台詞估計時長——重疊/過早的下一句起點不把整句在說完前切掉
+            // （雙擊跳段最有感）。仍以 maxRun 封頂、且絕不早於 naturalEnd（不縮短既有行為、不早停）。
+            var spokenFloor = Math.Min(capped, cues[next].StartSec + EstimateSpokenSec(cues[next].Text));
+            pausePoint = Math.Max(naturalEnd, spokenFloor);
+        }
         return currentSec >= pausePoint ? next : -1;
     }
 
