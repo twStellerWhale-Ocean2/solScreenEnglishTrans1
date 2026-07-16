@@ -321,12 +321,7 @@
           </Grid.RowDefinitions>
           <Grid Grid.Row="0">
             <TextBlock Text="Videos" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PinkText}" VerticalAlignment="Center"/>
-            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-              <!-- 開啟字幕資料夾（#189）：檔案總管開 %APPDATA%\LingoIsland\subtitles，供檢視歷次下載之字幕/逐字稿原文 -->
-              <Button x:Name="OpenFolderBtn" Content="&#x1F4C1;" Style="{StaticResource GhostButton}" Margin="0,0,6,0"
-                      ToolTip="Open the subtitle files folder (each video's subtitles &amp; web transcript are saved there)"/>
-              <Button x:Name="ClearVideosBtn" Content="Clear all" Style="{StaticResource GhostButton}"/>
-            </StackPanel>
+            <Button x:Name="ClearVideosBtn" Content="Clear all" Style="{StaticResource GhostButton}" HorizontalAlignment="Right"/>
           </Grid>
           <!-- 依 theme 篩選（圖文下拉，多媒體主題管理·B） -->
           <ComboBox x:Name="VideoThemeFilter" Grid.Row="1" Height="26" Margin="0,6,0,4"
@@ -485,8 +480,17 @@
                   <Button x:Name="TranscribeBtn" Grid.Column="1" Grid.ColumnSpan="2" Content="&#x1F399; Voice" Height="26" Margin="0,0,0,0"
                           IsEnabled="False" ToolTip="Transcribe the actual audio (OpenAI Whisper) to refine the timing to the real speech. Downloads audio; confirms cost first."/>
                 </Grid>
-                <Button x:Name="EditYamlBtn" Grid.Row="3" Content="&#x1F4DD; Edit YAML" Height="26" Margin="0,6,0,0"
-                        IsEnabled="False" ToolTip="Edit the whole subtitle as one YAML file (manual override: fix line breaks / speakers)"/>
+                <!-- ④ 開啟本片資料夾（#189，📁）＋整檔 YAML 編修（📝）：資料夾鈕在 Edit YAML 左側，開該片 video\{日期 標題}\ -->
+                <Grid Grid.Row="3" Margin="0,6,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+                  <Button x:Name="OpenFolderBtn" Grid.Column="0" Content="&#x1F4C1;" Width="32" Height="26" Margin="0,0,4,0"
+                          ToolTip="Open this video's folder (its subtitle.yaml and any web transcript files)"/>
+                  <Button x:Name="EditYamlBtn" Grid.Column="1" Content="&#x1F4DD; Edit YAML" Height="26"
+                          IsEnabled="False" ToolTip="Edit the whole subtitle as one YAML file (manual override: fix line breaks / speakers)"/>
+                </Grid>
               </Grid>
 
               <!-- 右鍵選單於程式端依游標下之列動態填入（Copy line＋快速指定/修正說話人，#189）；見 OnCueContextMenuOpening -->
