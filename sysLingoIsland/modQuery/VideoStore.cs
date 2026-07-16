@@ -82,6 +82,13 @@ public sealed class VideoStore
         if (it is not null) { it.Title = title.Trim(); Save(d); }
     }
 
+    /// <summary>回寫某項所屬主題（內容區塊主題下拉重指派，#173）；<paramref name="themeId"/>＝null＝改為未歸屬。</summary>
+    public void UpdateTheme(string id, string? themeId, string? themeName)
+    {
+        var d = Load();
+        if (SetTheme(d, id, themeId, themeName)) { Save(d); }
+    }
+
     // ---- 純函式（可單元測試，不觸檔案） ----
 
     /// <summary>依 VideoId 去重加入：既有則移至最前並更新標題（非空才更新）/主題/時間；新則以標題（空退 VideoId）插入最前。回該項。</summary>
@@ -115,5 +122,15 @@ public sealed class VideoStore
         var it = d.Items.FirstOrDefault(i => i.Id == id);
         if (it is not null) { d.Items.Remove(it); }
         return it;
+    }
+
+    /// <summary>設定某項所屬主題（純函式，#173）：找到即改 ThemeId／ThemeName（名稱去空白、空白視為 null）、回 true；無此 id 回 false。</summary>
+    public static bool SetTheme(VideosData d, string id, string? themeId, string? themeName)
+    {
+        var it = d.Items.FirstOrDefault(i => i.Id == id);
+        if (it is null) { return false; }
+        it.ThemeId = themeId;
+        it.ThemeName = string.IsNullOrWhiteSpace(themeName) ? null : themeName.Trim();
+        return true;
     }
 }

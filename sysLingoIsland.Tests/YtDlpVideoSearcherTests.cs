@@ -45,4 +45,24 @@ public class YtDlpVideoSearcherTests
         Assert.Empty(YtDlpVideoSearcher.ParseResults(""));
         Assert.Empty(YtDlpVideoSearcher.ParseResults("   \n  \n"));
     }
+
+    [Fact]
+    public void ParseResults_ParsesDuration_NullWhenAbsentOrZero()
+    {
+        var nd = "{\"id\":\"abc12345678\",\"title\":\"A\",\"duration\":309}\n"
+               + "{\"id\":\"xyz98765432\",\"title\":\"B\",\"duration\":0}\n"     // 0（直播/未知）→ null
+               + "{\"id\":\"def11111111\",\"title\":\"C\"}";                      // 缺 → null
+        var r = YtDlpVideoSearcher.ParseResults(nd);
+        Assert.Equal(3, r.Count);
+        Assert.Equal(309, r[0].DurationSec);
+        Assert.Null(r[1].DurationSec);
+        Assert.Null(r[2].DurationSec);
+    }
+
+    [Fact]
+    public void ParseResults_DurationFloat_Rounds()
+    {
+        var r = YtDlpVideoSearcher.ParseResults("{\"id\":\"id123456789\",\"title\":\"T\",\"duration\":128.7}");
+        Assert.Equal(129, r[0].DurationSec);
+    }
 }

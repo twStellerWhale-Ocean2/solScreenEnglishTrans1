@@ -499,4 +499,67 @@ public class AppConfigTests
         }
         finally { File.Delete(path); }
     }
+
+    // ---- 影片頁字幕帶顯示偏好（比照筆記，設定可調）----
+
+    [Fact]
+    public void Load_MissingSubtitleKeys_AppliesDefaults()
+    {
+        // 舊 appsettings 無字幕鍵 → 字級 16、非粗體（向後相容）
+        var path = TempPath();
+        File.WriteAllText(path, "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\"}");
+        try
+        {
+            var cfg = AppConfig.Load(path);
+            Assert.Equal(AppConfig.DefaultSubtitleFontSize, cfg.SubtitleFontSize);
+            Assert.False(cfg.SubtitleBold);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void SaveLoad_Roundtrips_SubtitleFields()
+    {
+        var path = TempPath();
+        try
+        {
+            new AppConfig("gpt-4o-mini", 15, "", SubtitleFontSize: 30, SubtitleBold: true).Save(path);
+            var json = File.ReadAllText(path);
+            Assert.Contains("paramSubtitleFontSize", json);
+            Assert.Contains("paramSubtitleBold", json);
+            var cfg = AppConfig.Load(path);
+            Assert.Equal(30, cfg.SubtitleFontSize);
+            Assert.True(cfg.SubtitleBold); // 明確 true 須被讀回（缺欄才預設 false）
+        }
+        finally { File.Delete(path); }
+    }
+
+    // ---- 影片搜尋結果縮圖高度（#187：選項頁可調，須持久化）----
+
+    [Fact]
+    public void Load_MissingSearchThumbHeight_AppliesDefault()
+    {
+        // 舊 appsettings 無縮圖鍵 → 預設 36（向後相容）
+        var path = TempPath();
+        File.WriteAllText(path, "{\"paramModel\":\"gpt-4o\",\"paramQueryTimeoutSec\":20,\"paramTtsVoice\":\"\"}");
+        try
+        {
+            Assert.Equal(AppConfig.DefaultSearchThumbHeight, AppConfig.Load(path).SearchThumbHeight);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void SaveLoad_Roundtrips_SearchThumbHeight()
+    {
+        // 縮圖高度須寫回設定檔並讀回（回歸防護：Save 一度漏寫此鍵、改動重啟即失）
+        var path = TempPath();
+        try
+        {
+            new AppConfig("gpt-4o-mini", 15, "", SearchThumbHeight: 72).Save(path);
+            Assert.Contains("paramSearchThumbHeight", File.ReadAllText(path));
+            Assert.Equal(72, AppConfig.Load(path).SearchThumbHeight);
+        }
+        finally { File.Delete(path); }
+    }
 }

@@ -1,0 +1,31 @@
+<Window x:Class="LingoIsland.Present.AiActionWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="AI action" Width="460" Height="360"
+        MinWidth="340" MinHeight="240"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        ResizeMode="CanResizeWithGrip"
+        Background="{StaticResource PinkBg}">
+  <!-- AI 分析／Web 搜尋等動作之進度對話視窗（含估算 AI 費用）：完成後鈕變 OK 結束、期間可 Cancel -->
+  <Border Style="{StaticResource Card}" Margin="12" Padding="12">
+    <Grid>
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="*"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+      </Grid.RowDefinitions>
+      <TextBlock Grid.Row="0" x:Name="HeaderText" FontWeight="SemiBold"
+                 Foreground="{StaticResource PinkText}" FontSize="15" Margin="0,0,0,8"/>
+      <ScrollViewer Grid.Row="1" x:Name="MsgScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <TextBlock x:Name="MsgText" TextWrapping="Wrap" FontSize="12.5" Foreground="#3A2C33"/>
+      </ScrollViewer>
+      <StackPanel Grid.Row="2">
+        <Border Background="#33B0578D" Height="1" Margin="0,10,0,8"/>
+        <TextBlock x:Name="CostText" TextWrapping="Wrap" FontSize="12" Foreground="#B0578D"/>
+      </StackPanel>
+      <Button Grid.Row="3" x:Name="ActionBtn" Content="Cancel" Style="{StaticResource GhostButton}"
+              HorizontalAlignment="Right" Margin="0,10,0,0" MinWidth="88"/>
+    </Grid>
+  </Border>
+</Window>

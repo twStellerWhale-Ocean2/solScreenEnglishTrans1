@@ -8,7 +8,20 @@ public interface ISubtitleFetcher
 {
     /// <summary>取指定 YouTube 影片之英文字幕逐句 cue（優先人工字幕、退自動字幕）；無字幕／取得失敗擲 <see cref="SubtitleException"/>。</summary>
     Task<SubtitleFetchResult> FetchAsync(string videoUrlOrId, CancellationToken ct = default);
+
+    /// <summary>
+    /// 探測影片內嵌英文字幕可用性（#177 搜尋結果表格「內嵌字幕」欄）：只查 yt-dlp metadata
+    /// （<c>subtitles</c>／<c>automatic_captions</c>），<b>不下載字幕內容、不下載影片</b>，故較 <see cref="FetchAsync"/> 輕快。
+    /// 私人／移除／逾時等取得失敗擲 <see cref="SubtitleException"/>，由 UI 逐列容錯（該列顯示「無法確認」、不影響他列）。
+    /// </summary>
+    Task<EmbeddedSubtitleInfo> ProbeEmbeddedAsync(string videoUrlOrId, CancellationToken ct = default);
 }
+
+/// <summary>
+/// 影片內嵌英文字幕可用性（[techItem字幕擷取] 延伸，#177）：<see cref="HasManual"/> 人工（真人上傳、句級乾淨、最佳學習素材）、
+/// <see cref="HasAuto"/> 自動（YouTube 機器轉錄／自動翻譯）。皆 false＝查無英文字幕。僅為挑片提示、非保證（實際以載入時抓取為準）。
+/// </summary>
+public sealed record EmbeddedSubtitleInfo(bool HasManual, bool HasAuto);
 
 /// <summary>
 /// 字幕取得結果（[techItem字幕擷取]，spec#2）：逐句 <see cref="SubtitleCue"/> ＋來源是否為

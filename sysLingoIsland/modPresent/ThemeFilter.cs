@@ -25,6 +25,9 @@ internal static class ThemeFilter
     /// <summary>「All themes」項之 Tag 哨兵（不會與真 ThemeId〔GUID N〕相撞）。</summary>
     public const string AllTag = "\0ALL";
 
+    /// <summary>內容區塊「所屬主題」下拉之「(No theme)」項 Tag 哨兵（#173；不會與真 ThemeId 相撞）。</summary>
+    public const string NoneTag = "\0NONE";
+
     /// <summary>清單項是否應顯示：<paramref name="filterThemeId"/> 為 null（All）恆真，否則需與 <paramref name="itemThemeId"/> 相符。純函式。</summary>
     public static bool Match(string? filterThemeId, string? itemThemeId) =>
         filterThemeId is null || string.Equals(filterThemeId, itemThemeId, StringComparison.Ordinal);
@@ -48,6 +51,29 @@ internal static class ThemeFilter
     {
         var tag = (combo.SelectedItem as ComboBoxItem)?.Tag as string;
         return tag is null || tag == AllTag ? null : tag;
+    }
+
+    /// <summary>
+    /// 以「(No theme)」＋各主題（縮圖＋名稱）重填下拉，選中 <paramref name="selectedThemeId"/>
+    /// （null／查無該主題→(No theme)）。供內容區塊「顯示/改指派所屬主題」（#173）。
+    /// </summary>
+    public static void PopulatePicker(ComboBox combo, ThemeStore store, string? selectedThemeId)
+    {
+        combo.Items.Clear();
+        combo.Items.Add(MakeItem(NoneTag, "(No theme)", null));
+        foreach (var t in store.Load().Items)
+        {
+            var img = string.IsNullOrEmpty(t.Image) ? null : store.ImagePathFor(t.Image!);
+            combo.Items.Add(MakeItem(t.Id, string.IsNullOrWhiteSpace(t.Name) ? "(unnamed)" : t.Name, img));
+        }
+        SelectByTag(combo, selectedThemeId ?? NoneTag); // 查無（主題已刪）→ 回退 (No theme)
+    }
+
+    /// <summary>下拉目前選取之 ThemeId（「(No theme)」／無選取＝null）。供內容區塊「所屬主題」指派（#173）。</summary>
+    public static string? PickedThemeId(ComboBox combo)
+    {
+        var tag = (combo.SelectedItem as ComboBoxItem)?.Tag as string;
+        return tag is null || tag == NoneTag ? null : tag;
     }
 
     private static void SelectByTag(ComboBox combo, string tag)

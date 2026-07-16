@@ -15,16 +15,19 @@ public sealed class OpenAiSpeakerEnricher : ISpeakerEnricher
     private readonly int _timeoutSec;
     private static readonly HttpClient Http = new();
 
+    /// <summary>逐句補全一整份字幕（長片可達數百句）較久，逾時至少放寬到此秒數——沿用 word 查詢的短逾時（如 15s）會誤切長片。</summary>
+    private const int MinTimeoutSec = 120;
+
     public OpenAiSpeakerEnricher(string model, int timeoutSec)
     {
         _model = model;
-        _timeoutSec = timeoutSec;
+        _timeoutSec = Math.Max(timeoutSec, MinTimeoutSec);
     }
 
-    public async Task<IReadOnlyList<string?>> InferSpeakersAsync(
-        IReadOnlyList<SubtitleCue> cues, string? videoTitle, CancellationToken ct = default)
+    public async Task<SpeakerEnrichResult> InferSpeakersAsync(
+        IReadOnlyList<SubtitleCue> cues, string? videoTitle, IProgress<string>? progress = null, CancellationToken ct = default, string? videoTheme = null)
     {
-        if (cues.Count == 0) return Array.Empty<string?>();
+        if (cues.Count == 0) return new SpeakerEnrichResult(Array.Empty<string?>(), Array.Empty<SpeakerUsage>());
 
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
         if (string.IsNullOrWhiteSpace(key))
@@ -32,10 +35,11 @@ public sealed class OpenAiSpeakerEnricher : ISpeakerEnricher
             throw new SpeakerEnrichException(
                 "OPENAI_API_KEY environment variable is not set — cannot infer speakers. Set it and restart.");
         }
+        progress?.Report("Analyzing the dialogue with AI…");
 
         using var req = new HttpRequestMessage(HttpMethod.Post, "https://api.openai.com/v1/chat/completions");
         req.Headers.Add("Authorization", "Bearer " + key);
-        req.Content = JsonContent.Create(BuildPayload(SpeakerInference.BuildPrompt(cues, videoTitle)));
+        req.Content = JsonContent.Create(BuildPayload(SpeakerInference.BuildPrompt(cues, videoTitle, videoTheme)));
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(_timeoutSec));
@@ -67,7 +71,8 @@ public sealed class OpenAiSpeakerEnricher : ISpeakerEnricher
             }
             try
             {
-                return SpeakerInference.ParseSpeakers(json);
+                var usage = (SpeakerInference.ParseUsage(json) ?? new SpeakerUsage(0, 0, 0)) with { Model = _model, WebSearch = false };
+                return new SpeakerEnrichResult(SpeakerInference.ParseSpeakers(json), new[] { usage });
             }
             catch (Exception ex)
             {

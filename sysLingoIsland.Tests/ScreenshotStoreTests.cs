@@ -59,4 +59,37 @@ public class ScreenshotStoreTests
         Assert.Null(ScreenshotStore.RemoveFromList(d, "zzz"));
         Assert.Single(d.Items);
     }
+
+    // ---- SetTheme（內容區塊主題下拉重指派，#173） ----
+
+    [Fact]
+    public void SetTheme_AssignsAndClears()
+    {
+        var d = new ScreenshotsData();
+        ScreenshotStore.AddToList(d, Item("a"), 100);
+        Assert.True(ScreenshotStore.SetTheme(d, "a", "th", "Theme"));
+        Assert.Equal("th", d.Items[0].ThemeId);
+        Assert.Equal("Theme", d.Items[0].ThemeName);
+        Assert.True(ScreenshotStore.SetTheme(d, "a", null, null)); // 改回未歸屬
+        Assert.Null(d.Items[0].ThemeId);
+        Assert.Null(d.Items[0].ThemeName);
+    }
+
+    [Fact]
+    public void SetTheme_BlankName_StoredAsNull()
+    {
+        var d = new ScreenshotsData();
+        ScreenshotStore.AddToList(d, Item("a"), 100);
+        Assert.True(ScreenshotStore.SetTheme(d, "a", "th", "  "));
+        Assert.Null(d.Items[0].ThemeName);
+    }
+
+    [Fact]
+    public void SetTheme_UnknownId_FalseNoChange()
+    {
+        var d = new ScreenshotsData();
+        ScreenshotStore.AddToList(d, Item("a"), 100);
+        Assert.False(ScreenshotStore.SetTheme(d, "zzz", "x", "X"));
+        Assert.Single(d.Items);
+    }
 }

@@ -20,15 +20,25 @@ public sealed class YtDlpVideoSearcher : IVideoSearcher
         _timeoutSec = timeoutSec;
     }
 
-    public async Task<IReadOnlyList<VideoSearchResult>> SearchAsync(string query, int max = 8, CancellationToken ct = default)
+    public async Task<IReadOnlyList<VideoSearchResult>> SearchAsync(string query, int max = 8, CancellationToken ct = default, string? uploadDateToken = null)
     {
         query = (query ?? "").Trim();
         if (query.Length == 0) return Array.Empty<VideoSearchResult>();
-        max = Math.Clamp(max, 1, 25);
+        max = Math.Clamp(max, 1, 50);
 
         // 清掉會破壞引號的字元；--flat-playlist：只列清單不解析每片、快
         var safe = query.Replace("\"", " ").Replace("\r", " ").Replace("\n", " ");
-        var args = $"\"ytsearch{max}:{safe}\" --flat-playlist --dump-json --no-warnings";
+        string args;
+        if (string.IsNullOrWhiteSpace(uploadDateToken))
+        {
+            args = $"\"ytsearch{max}:{safe}\" --flat-playlist --dump-json --no-warnings";
+        }
+        else
+        {
+            // 上傳日期篩選：ytsearch 不支援日期參數→改用 YouTube 搜尋結果 URL 之 sp 篩選 token（伺服器端篩），--playlist-end 限筆數
+            var url = "https://www.youtube.com/results?search_query=" + Uri.EscapeDataString(safe) + "&sp=" + uploadDateToken;
+            args = $"\"{url}\" --flat-playlist --dump-json --no-warnings --playlist-end {max}";
+        }
 
         var (exit, stdout, stderr) = await RunAsync(args, ct);
         if (exit != 0 && stdout.Trim().Length == 0)
@@ -55,7 +65,13 @@ public sealed class YtDlpVideoSearcher : IVideoSearcher
                 var id = r.TryGetProperty("id", out var i) && i.ValueKind == JsonValueKind.String ? i.GetString() : null;
                 if (string.IsNullOrWhiteSpace(id)) continue;
                 var title = r.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
-                list.Add(new VideoSearchResult(id!, string.IsNullOrWhiteSpace(title) ? id!.Trim() : title!.Trim()));
+                int? dur = null; // yt-dlp 之 duration（秒，數字；直播/未知則缺或 0）→ null
+                if (r.TryGetProperty("duration", out var d) && d.ValueKind == JsonValueKind.Number
+                    && d.TryGetDouble(out var ds) && ds > 0)
+                {
+                    dur = (int)Math.Round(ds);
+                }
+                list.Add(new VideoSearchResult(id!, string.IsNullOrWhiteSpace(title) ? id!.Trim() : title!.Trim(), dur));
             }
             catch (JsonException)
             {

@@ -74,6 +74,44 @@ public class PauseDeciderTests
         Assert.Equal(1, PauseDecider.NextPause(5.0, Cues, 0, maxRunSec: 2.0));
     }
 
+    // ── 口說時長地板（#字幕雙擊早停修正）：重疊字幕不把整句在說完前切掉 ──
+
+    [Fact]
+    public void NextPause_LongLineInShortSlot_ExtendsToSpokenFloor()
+    {
+        // 一句 10 詞（估 3.6s）但下一句只隔 2s 就開始（重疊字幕）→ 不於 2s 早停、延到 ~3.6s 播足整句
+        var cues = new List<SubtitleCue>
+        {
+            new SubtitleCue("one two three four five six seven eight nine ten", 0.0),
+            new SubtitleCue("next", 2.0),
+        };
+        Assert.Equal(-1, PauseDecider.NextPause(2.0, cues, -1)); // 到下一句起點(2s)仍不停——地板 3.6s 未到
+        Assert.Equal(-1, PauseDecider.NextPause(3.5, cues, -1));
+        Assert.Equal(0, PauseDecider.NextPause(3.6, cues, -1));  // 播足估計口說時長才停
+    }
+
+    [Fact]
+    public void NextPause_SpokenFloor_BoundedByEstimateCapAndMaxRun()
+    {
+        var cues = new List<SubtitleCue>
+        {
+            new SubtitleCue(string.Join(' ', System.Linq.Enumerable.Repeat("w", 50)), 0.0), // 估 18s→估計上限 6s
+            new SubtitleCue("next", 1.0),
+        };
+        Assert.Equal(-1, PauseDecider.NextPause(5.9, cues, -1)); // 估計上限 6s 未到
+        Assert.Equal(0, PauseDecider.NextPause(6.0, cues, -1));  // 6s（估計上限）即停、不到 maxRun 8s
+        Assert.Equal(0, PauseDecider.NextPause(3.0, cues, -1, maxRunSec: 3.0)); // maxRun 更小則由 maxRun 封頂
+    }
+
+    [Fact]
+    public void EstimateSpokenSec_WordsTimesRate_CapAndEmpty()
+    {
+        Assert.Equal(0, PauseDecider.EstimateSpokenSec(""));
+        Assert.Equal(0, PauseDecider.EstimateSpokenSec("   "));
+        Assert.True(PauseDecider.EstimateSpokenSec("a b c d e") > 1.7);   // 5×0.36=1.8
+        Assert.Equal(6.0, PauseDecider.EstimateSpokenSec(string.Join(' ', System.Linq.Enumerable.Repeat("w", 100)))); // 封頂 6
+    }
+
     [Fact]
     public void CueAt_LastStartAtOrBeforeTime_NoBlankBetween()
     {
@@ -126,5 +164,34 @@ public class PauseDeciderTests
         Assert.True(PauseDecider.SpeakerMatches("Ryder", "Ryder"));
         Assert.False(PauseDecider.SpeakerMatches("Ryder", "Zuma"));
         Assert.False(PauseDecider.SpeakerMatches("Ryder", null));
+    }
+
+    // ── 只在未標示（unknown）之句暫停（#189）──
+    private static readonly List<SubtitleCue> Mixed = new()
+    {
+        new SubtitleCue("a", 1.0, "Ryder"), // 具名
+        new SubtitleCue("b", 3.0),           // 未標示
+        new SubtitleCue("c", 5.0, "Zuma"),  // 具名
+        new SubtitleCue("d", 20.0),          // 未標示
+    };
+
+    [Fact]
+    public void NextPause_PauseNoSpeaker_OnlyPausesAtUnlabeled_SkipsLabeled()
+    {
+        Assert.Equal(-1, PauseDecider.NextPause(4.9, Mixed, -1, pauseNoSpeaker: true));
+        Assert.Equal(1, PauseDecider.NextPause(5.0, Mixed, -1, pauseNoSpeaker: true));   // 跳過 a(Ryder)、於 b 暫停（暫停點＝c 開始 5）
+        Assert.Equal(3, PauseDecider.NextPause(28.0, Mixed, 1, pauseNoSpeaker: true));   // 跳過 c(Zuma)、於末句 d 暫停（20+8）
+        Assert.Equal(-1, PauseDecider.NextPause(999.0, Mixed, 3, pauseNoSpeaker: true)); // d 後無未標示句
+    }
+
+    [Fact]
+    public void PauseMatches_NoSpeaker_MatchesOnlyEmpty()
+    {
+        Assert.True(PauseDecider.PauseMatches(null, noSpeaker: true, null));    // 未標示→符合
+        Assert.True(PauseDecider.PauseMatches(null, noSpeaker: true, ""));
+        Assert.False(PauseDecider.PauseMatches(null, noSpeaker: true, "Ryder")); // 有名→不符合
+        Assert.True(PauseDecider.PauseMatches("Ryder", noSpeaker: false, "Ryder")); // noSpeaker=false 沿用 SpeakerMatches
+        Assert.False(PauseDecider.PauseMatches("Ryder", noSpeaker: false, "Zuma"));
+        Assert.True(PauseDecider.PauseMatches(null, noSpeaker: false, "anyone"));
     }
 }

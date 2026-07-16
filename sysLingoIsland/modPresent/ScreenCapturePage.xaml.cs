@@ -40,9 +40,11 @@ public partial class ScreenCapturePage : UserControl
 
     // 截圖管理（epic #145 增量3）
     private readonly ScreenshotStore _shots;
-    private readonly ThemeStore _themes;      // 依 theme 篩選（多媒體主題管理·B）
+    private readonly ThemeStore _themes;      // 依 theme 篩選（多媒體主題管理·B）＋內容區塊所屬主題指派（#173）
     private bool _populatingFilter;           // 重填篩選下拉期間抑制 SelectionChanged→重整
+    private bool _populatingShotPicker;       // 重填「所屬主題」下拉期間抑制 SelectionChanged→重指派（#173）
     private string? _selectedShotId;
+    private int _lastShotCount = -1;           // 偵測新擷取（數目增加）→自動切到【內容】檢視（#182）
 
     /// <summary>手動觸發螢幕擷取（#5：「Capture Screen」鈕）；呼叫端收合主視窗後走既有喚起主動線。</summary>
     public event Action? CaptureRequested;
@@ -62,11 +64,15 @@ public partial class ScreenCapturePage : UserControl
         ChangeHotkeyBtn.Click += (_, _) => StartListening();
         CaptureScreenBtn.Click += (_, _) => CaptureRequested?.Invoke();
         Unloaded += (_, _) => StopListening();
+        // 子頁籤（#182 版面統一）：獲得（擷取控制）／內容（清單＋預覽），以可見性切換
+        ShotTabAcquire.Checked += (_, _) => ShowShotTab(acquire: true);
+        ShotTabContent.Checked += (_, _) => ShowShotTab(acquire: false);
 
         // 截圖管理＋依 theme 篩選（B）；刪除改右鍵選單/Delete 鍵（#167，取代 Delete 按鈕）
         ShotList.SelectionChanged += OnShotSelect;
         ClearShotsBtn.Click += OnClearShots;
         ShotThemeFilter.SelectionChanged += (_, _) => { if (!_populatingFilter) { RefreshScreenshots(); } };
+        ShotThemePicker.SelectionChanged += (_, _) => { if (!_populatingShotPicker) { OnShotThemePicked(); } }; // 內容區塊改指派所屬主題（#173）
         IsVisibleChanged += (_, e) => { if (e.NewValue is true) { PopulateThemeFilter(); RefreshScreenshots(); } }; // 切回本頁重填（反映主題增刪改）
         ShotList.ContextMenu = ListDeleteSupport.DeleteMenu(DeleteSelectedShot);
         ShotList.PreviewMouseRightButtonDown += ListDeleteSupport.SelectItemUnderMouse;
@@ -112,6 +118,16 @@ public partial class ScreenCapturePage : UserControl
             ShotPreview.Source = null;
             _selectedShotId = null;
         }
+        UpdateShotThemePicker(); // 選取於重整後被清空 → 停用/重填「所屬主題」下拉，與清單同步（#173）
+        if (_lastShotCount >= 0 && d.Items.Count > _lastShotCount) { ShotTabContent.IsChecked = true; } // 新擷取→切到【內容】檢視（#182）
+        _lastShotCount = d.Items.Count;
+    }
+
+    /// <summary>切換子頁籤（#182）：獲得（擷取控制）／內容（清單＋預覽），以可見性切換。</summary>
+    private void ShowShotTab(bool acquire)
+    {
+        ShotAcquirePane.Visibility = acquire ? Visibility.Visible : Visibility.Collapsed;
+        ShotContentPane.Visibility = acquire ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private StackPanel ShotItemView(ScreenshotItem it)
@@ -140,6 +156,56 @@ public partial class ScreenCapturePage : UserControl
         var it = (ShotList.SelectedItem as ListBoxItem)?.Tag as ScreenshotItem;
         _selectedShotId = it?.Id;
         ShotPreview.Source = it is not null ? LoadImage(_shots.ImagePathFor(it.File)) : null;
+        UpdateShotThemePicker(); // 反映選取截圖之所屬主題（#173）
+    }
+
+    // ---- 內容區塊「所屬主題」下拉（#173）：顯示選取截圖之主題、改選即重指派 ----
+
+    /// <summary>以選取截圖之所屬主題重填「所屬主題」下拉並啟用；無選取則清空並停用。期間抑制 SelectionChanged→重指派。</summary>
+    private void UpdateShotThemePicker()
+    {
+        var it = (ShotList.SelectedItem as ListBoxItem)?.Tag as ScreenshotItem;
+        _populatingShotPicker = true;
+        if (it is null)
+        {
+            ShotThemePicker.Items.Clear();
+            ShotThemePicker.IsEnabled = false;
+        }
+        else
+        {
+            ThemeFilter.PopulatePicker(ShotThemePicker, _themes, it.ThemeId);
+            ShotThemePicker.IsEnabled = true;
+        }
+        _populatingShotPicker = false;
+    }
+
+    /// <summary>「所屬主題」改選→回寫選取截圖之主題（名稱取自現行主題清單）；重整清單並保持選取（落選被篩選則清預覽）。</summary>
+    private void OnShotThemePicked()
+    {
+        var it = (ShotList.SelectedItem as ListBoxItem)?.Tag as ScreenshotItem;
+        if (it is null) { return; }
+        var id = ThemeFilter.PickedThemeId(ShotThemePicker);
+        var name = id is null ? null : ThemeStore.Find(_themes.Load(), id)?.Name;
+        _shots.UpdateTheme(it.Id, id, name);
+        var keepId = it.Id;
+        RefreshScreenshots();  // 反映清單主題名／依 theme 篩選
+        ReselectShot(keepId);  // 保持選取，避免預覽消失（被篩選濾掉則清空）
+    }
+
+    /// <summary>依 id 重新選中截圖（觸發 OnShotSelect 更新預覽＋主題下拉）；被篩選濾掉則清預覽與下拉。</summary>
+    private void ReselectShot(string id)
+    {
+        for (int i = 0; i < ShotList.Items.Count; i++)
+        {
+            if ((ShotList.Items[i] as ListBoxItem)?.Tag is ScreenshotItem s && s.Id == id)
+            {
+                ShotList.SelectedIndex = i;
+                return;
+            }
+        }
+        _selectedShotId = null;
+        ShotPreview.Source = null;
+        UpdateShotThemePicker();
     }
 
     /// <summary>刪除選取截圖（#167：右鍵選單「Delete」或按 Delete 鍵觸發）。</summary>

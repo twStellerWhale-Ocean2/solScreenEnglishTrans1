@@ -106,6 +106,13 @@ public sealed class ScreenshotStore
         Save(d);
     }
 
+    /// <summary>回寫某項所屬主題（內容區塊主題下拉重指派，#173）；<paramref name="themeId"/>＝null＝改為未歸屬。</summary>
+    public void UpdateTheme(string id, string? themeId, string? themeName)
+    {
+        var d = Load();
+        if (SetTheme(d, id, themeId, themeName)) { Save(d); }
+    }
+
     private void DeleteImage(string? fileName)
     {
         if (string.IsNullOrEmpty(fileName)) { return; }
@@ -134,5 +141,15 @@ public sealed class ScreenshotStore
         var it = d.Items.FirstOrDefault(i => i.Id == id);
         if (it is not null) { d.Items.Remove(it); }
         return it;
+    }
+
+    /// <summary>設定某項所屬主題（純函式，#173）：找到即改 ThemeId／ThemeName（名稱去空白、空白視為 null）、回 true；無此 id 回 false。</summary>
+    public static bool SetTheme(ScreenshotsData d, string id, string? themeId, string? themeName)
+    {
+        var it = d.Items.FirstOrDefault(i => i.Id == id);
+        if (it is null) { return false; }
+        it.ThemeId = themeId;
+        it.ThemeName = string.IsNullOrWhiteSpace(themeName) ? null : themeName.Trim();
+        return true;
     }
 }

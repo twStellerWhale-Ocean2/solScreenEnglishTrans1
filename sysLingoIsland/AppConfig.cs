@@ -8,8 +8,11 @@ namespace LingoIsland;
 /// <param name="Hotkey">喚起快捷鍵綁定（序列化字串，如 <c>Alt+L</c>／<c>Ctrl+Shift+F</c>／<c>Mouse:Middle</c>）。</param>
 /// <param name="HistoryMax">查詢歷史保留筆數上限（非正值套用預設 200）。</param>
 /// <param name="Context">應用情境提示（自然語言，選填；非空時查詢注入為參考情境，spec#8）。</param>
-public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200, string Context = "", int PronPassThreshold = 80, string PronModel = "gpt-audio-1.5", double EntryFontSize = 18, bool EntryBold = true, bool EntryWrap = false, double ResultFontSize = 28, bool ResultHideOnBlur = false, int EntryCardOpacity = 40)
+public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int MaxRetries = 2, string Hotkey = "Alt+L", int HistoryMax = 200, string Context = "", int PronPassThreshold = 80, string PronModel = "gpt-audio-1.5", double EntryFontSize = 18, bool EntryBold = true, bool EntryWrap = false, double ResultFontSize = 28, bool ResultHideOnBlur = false, int EntryCardOpacity = 40, double SubtitleFontSize = 16, bool SubtitleBold = false, double SearchThumbHeight = 36)
 {
+    /// <summary>影片搜尋結果縮圖高度預設（px；選項頁可調 28–120；寬＝高×16/9）。</summary>
+    public const double DefaultSearchThumbHeight = 36;
+
     /// <summary>筆記/歷史條目原文字級預設（#複查：選項頁「條目顯示」可調；缺欄或超界回此值）。</summary>
     public const double DefaultEntryFontSize = 18;
 
@@ -18,6 +21,9 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
 
     /// <summary>查詢結果視窗英文原文基準字級預設（#複查：音標/中譯按此等比縮放；缺欄或超界回此值）。</summary>
     public const double DefaultResultFontSize = 28;
+
+    /// <summary>影片頁字幕帶（當前句大字）字級預設（選項頁「Video subtitle」可調，比照筆記；缺欄或超界回此值）。</summary>
+    public const double DefaultSubtitleFontSize = 16;
 
     /// <summary>查詢逾時秒數安全下限／預設（缺欄、解析失敗或非正值皆退回此值）。</summary>
     private const int DefaultTimeoutSec = 15;
@@ -92,7 +98,10 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
                 r.TryGetProperty("paramEntryWrap", out var ew) && ew.ValueKind == JsonValueKind.True, // 條目自動換行（缺欄預設 false）
                 resultFont, // 查詢結果視窗基準字級（#複查）
                 r.TryGetProperty("paramResultHideOnBlur", out var hb) && hb.ValueKind == JsonValueKind.True, // 查詢視窗失焦自動隱藏（缺欄預設 false，維持 #105）
-                r.TryGetProperty("paramEntryCardOpacity", out var co) && co.TryGetInt32(out var cov) && cov is >= 0 and <= 100 ? cov : DefaultEntryCardOpacity); // v1.0.1：條目卡底色透明度（0–100；缺欄/界外回預設 40）
+                r.TryGetProperty("paramEntryCardOpacity", out var co) && co.TryGetInt32(out var cov) && cov is >= 0 and <= 100 ? cov : DefaultEntryCardOpacity, // v1.0.1：條目卡底色透明度（0–100；缺欄/界外回預設 40）
+                r.TryGetProperty("paramSubtitleFontSize", out var sf) && sf.TryGetDouble(out var sfv) ? sfv : DefaultSubtitleFontSize, // 影片頁字幕帶字級（holder 端另鉗界）
+                r.TryGetProperty("paramSubtitleBold", out var sbold) && sbold.ValueKind == JsonValueKind.True, // 影片頁字幕帶粗體（缺欄預設 false）
+                r.TryGetProperty("paramSearchThumbHeight", out var sth) && sth.TryGetDouble(out var sthv) ? sthv : DefaultSearchThumbHeight); // 影片搜尋縮圖高度（頁端另鉗界）
         }
         catch
         {
@@ -125,6 +134,9 @@ public sealed record AppConfig(string Model, int TimeoutSec, string Voice, int M
             paramResultFontSize = ResultFontSize, // #複查：查詢結果視窗基準字級
             paramResultHideOnBlur = ResultHideOnBlur, // #複查：查詢視窗失焦自動隱藏
             paramEntryCardOpacity = EntryCardOpacity, // v1.0.1：條目卡底色透明度（0–100）
+            paramSubtitleFontSize = SubtitleFontSize, // 影片頁字幕帶顯示偏好（比照筆記）
+            paramSubtitleBold = SubtitleBold,
+            paramSearchThumbHeight = SearchThumbHeight, // 影片搜尋結果縮圖高度（#複查：選項頁可調、需持久化）
         };
         File.WriteAllText(path, JsonSerializer.Serialize(obj, new JsonSerializerOptions { WriteIndented = true }));
     }

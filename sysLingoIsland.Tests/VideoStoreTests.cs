@@ -58,4 +58,44 @@ public class VideoStoreTests
         Assert.Single(d.Items);
         Assert.Equal("bbbbbbbbbbb", d.Items[0].VideoId);
     }
+
+    // ---- SetTheme（內容區塊主題下拉重指派，#173） ----
+
+    [Fact]
+    public void SetTheme_AssignsThemeIdAndName()
+    {
+        var d = new VideosData();
+        var a = VideoStore.Upsert(d, "aaaaaaaaaaa", "A", null, null, "t1");
+        Assert.True(VideoStore.SetTheme(d, a.Id, "th", "Theme"));
+        Assert.Equal("th", d.Items[0].ThemeId);
+        Assert.Equal("Theme", d.Items[0].ThemeName);
+    }
+
+    [Fact]
+    public void SetTheme_NullThemeId_ClearsToNoTheme()
+    {
+        var d = new VideosData();
+        var a = VideoStore.Upsert(d, "aaaaaaaaaaa", "A", "th", "Theme", "t1");
+        Assert.True(VideoStore.SetTheme(d, a.Id, null, null));
+        Assert.Null(d.Items[0].ThemeId);
+        Assert.Null(d.Items[0].ThemeName);
+    }
+
+    [Fact]
+    public void SetTheme_BlankName_StoredAsNull()
+    {
+        var d = new VideosData();
+        var a = VideoStore.Upsert(d, "aaaaaaaaaaa", "A", null, null, "t1");
+        Assert.True(VideoStore.SetTheme(d, a.Id, "th", "   "));
+        Assert.Null(d.Items[0].ThemeName);
+    }
+
+    [Fact]
+    public void SetTheme_UnknownId_FalseNoChange()
+    {
+        var d = new VideosData();
+        VideoStore.Upsert(d, "aaaaaaaaaaa", "A", "th", "Theme", "t1");
+        Assert.False(VideoStore.SetTheme(d, "nope", "x", "X"));
+        Assert.Equal("th", d.Items[0].ThemeId); // 未變
+    }
 }

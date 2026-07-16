@@ -46,6 +46,12 @@ public partial class OptionsPage : UserControl
         // 查詢視窗字級：滑桿↔數值框雙向同步（#複查）
         ResultFontSlider.ValueChanged += (_, e) => ResultFontBox.Text = ((int)e.NewValue).ToString();
         ResultFontBox.LostFocus += (_, _) => SyncResultFontFromBox();
+        // 影片頁字幕帶字級：滑桿↔數值框雙向同步（比照筆記）
+        SubtitleFontSlider.ValueChanged += (_, e) => SubtitleFontBox.Text = ((int)e.NewValue).ToString();
+        SubtitleFontBox.LostFocus += (_, _) => SyncSubtitleFontFromBox();
+        // 影片搜尋縮圖高度：滑桿↔數值框雙向同步（#複查）
+        ThumbSizeSlider.ValueChanged += (_, e) => ThumbSizeBox.Text = ((int)e.NewValue).ToString();
+        ThumbSizeBox.LostFocus += (_, _) => SyncThumbSizeFromBox();
 
         SetConfig(current);
     }
@@ -69,6 +75,11 @@ public partial class OptionsPage : UserControl
         EntryOpacityBox.Text = c.EntryCardOpacity.ToString();
         ResultFontSlider.Value = c.ResultFontSize; // ValueChanged 同步數值框（#複查）
         ResultFontBox.Text = ((int)c.ResultFontSize).ToString();
+        SubtitleFontSlider.Value = c.SubtitleFontSize; // 影片頁字幕帶字級（比照筆記；ValueChanged 同步數值框）
+        SubtitleFontBox.Text = ((int)c.SubtitleFontSize).ToString();
+        SubtitleBoldChk.IsChecked = c.SubtitleBold;
+        ThumbSizeSlider.Value = c.SearchThumbHeight; // 影片搜尋縮圖高度（ValueChanged 同步數值框）
+        ThumbSizeBox.Text = ((int)c.SearchThumbHeight).ToString();
     }
 
     /// <summary>
@@ -105,6 +116,20 @@ public partial class OptionsPage : UserControl
         ResultFontSlider.Value = v;
     }
 
+    /// <summary>字幕帶字級數值框 → 滑桿同步（鉗制 12–48；空/非數字回預設）。</summary>
+    private void SyncSubtitleFontFromBox()
+    {
+        var v = int.TryParse(SubtitleFontBox.Text?.Trim(), out var n) ? Math.Clamp(n, 12, 48) : (int)AppConfig.DefaultSubtitleFontSize;
+        SubtitleFontSlider.Value = v;
+    }
+
+    /// <summary>搜尋縮圖高度數值框 → 滑桿同步（鉗制 28–120；空/非數字回預設）。</summary>
+    private void SyncThumbSizeFromBox()
+    {
+        var v = int.TryParse(ThumbSizeBox.Text?.Trim(), out var n) ? Math.Clamp(n, 28, 120) : (int)AppConfig.DefaultSearchThumbHeight;
+        ThumbSizeSlider.Value = v;
+    }
+
     private static void SelectByTag(ComboBox box, string tag)
     {
         foreach (ComboBoxItem item in box.Items)
@@ -138,7 +163,10 @@ public partial class OptionsPage : UserControl
         EntryWrapChk.IsChecked == true, // 條目自動換行
         ResultFontSlider.Value,          // Dictionary 分頁結果基準字級（#複查）
         Config.ResultHideOnBlur, // #135：失焦自動隱藏已移除（浮窗移除）——保留 AppConfig 欄位、UI 不再呈現
-        (int)EntryOpacitySlider.Value); // 條目卡底色透明度（v1.0.1，0–100）
+        (int)EntryOpacitySlider.Value, // 條目卡底色透明度（v1.0.1，0–100）
+        SubtitleFontSlider.Value,       // 影片頁字幕帶字級（比照筆記）
+        SubtitleBoldChk.IsChecked == true, // 影片頁字幕帶粗體
+        ThumbSizeSlider.Value); // 影片搜尋縮圖高度
 
     /// <summary>數值框 → 滑桿同步（鉗制 0–100；空/非數字回門檻預設）。</summary>
     private void SyncThresholdFromBox()

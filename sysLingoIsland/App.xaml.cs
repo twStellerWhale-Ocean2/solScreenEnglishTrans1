@@ -21,6 +21,7 @@ public partial class App : System.Windows.Application
     private WinForms.NotifyIcon? _tray;
     private WinForms.ToolStripMenuItem? _keyStatusItem;
     private MainWindow? _main;
+    private VideoCapturePage? _videoPage; // 影片頁（設定變更後即時套用字幕帶字級/粗體）
     private NotesPage? _notesPage;
     private HistoryPage? _historyPage;
     private ThemeManagementPage? _themePage;
@@ -63,6 +64,7 @@ public partial class App : System.Windows.Application
         NoteDefaults.Load(); // 筆記加入預設（資料夾/底色/智能配色規則，Issue #55）
         EntryDisplaySettings.SyncFrom(_config); // #複查：條目顯示偏好（字級/粗體/換行）自 config 同步
         ResultDisplaySettings.SyncFrom(_config); // #複查：查詢結果視窗基準字級自 config 同步
+        SubtitleDisplaySettings.SyncFrom(_config); // 影片頁字幕帶字級/粗體自 config 同步（比照筆記）
         var keyReady = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY"));
         _speech = new SpeechService(_config.Voice);
 
@@ -128,14 +130,24 @@ public partial class App : System.Windows.Application
 
         // 影片擷取分頁（#139，spec#2）：yt-dlp 取字幕 → WebView2 導引播放到句暫停 → 暫停句點字沿用既有查詢、加入既有筆記
         // 增量6：AI 說話人推斷疊加（按鈕觸發、沿用既有查詢模型/逾時；讀 OPENAI_API_KEY）
-        var videoPage = new VideoCapturePage(new YtDlpSubtitleFetcher(), _videoStore,
+        // 增量6b 重做：find（gpt-4.1＋web_search 找逐字稿）→逐塊 align（gpt-4o-mini 對照、不上網）→組合（#145 §D）。
+        // 同一顆亦實作 IWebTranscriptProbe：搜尋結果表格「網路字幕」欄按需查（#177，只跑 find 一步）。
+        var webEnricher = new OpenAiWebSpeakerEnricher("gpt-4.1", "gpt-4o-mini", _config.TimeoutSec);
+        _videoPage = new VideoCapturePage(new YtDlpSubtitleFetcher(), _videoStore,
             _themeStore, // 影片清單＋加入時記錄使用中主題（增量4）＋依 theme 篩選（B）＋搜尋關鍵字預填（#171）
-            new OpenAiSpeakerEnricher(_config.Model, _config.TimeoutSec),
-            new YtDlpVideoSearcher()); // 依關鍵字搜尋 YouTube（#171）
-        videoPage.WordLookupRequested += LookupWordFromVideo;
-        videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
+            new OpenAiSpeakerEnricher(_config.Model, _config.TimeoutSec),          // 增量6：依台詞 AI 推斷說話人
+            webEnricher,      // 增量6b：網搜補說話人（ISpeakerEnricher）
+            webEnricher,      // #177：網路字幕可用性探測（IWebTranscriptProbe，同一顆）
+            new YtDlpVideoSearcher(), // 依關鍵字搜尋 YouTube（#171）
+            new SubtitleStore(), // 字幕存檔：重開/重選同片還原、免重抓、保留說話人與 YAML 編修（#174）
+            new WhisperTranscriber("whisper-1", _config.TimeoutSec), // #187：抓聲音以 Whisper 重轉字幕、修時間漂移（按鈕觸發、跑前確認費用）
+            new OpenAiRefiner(_config.Model, _config.TimeoutSec), // #189 Row2「🧠 AI」：Auto 基底 LLM 重分句＋標說話人、時間不變
+            new OpenAiTranscriptVideoFinder("gpt-4.1", _config.TimeoutSec)); // #189 獲得頁「由逐字稿找影片」：web_search（gpt-4.1）找有逐字稿之影片
+        _videoPage.WordLookupRequested += LookupWordFromVideo;
+        _videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
+        _videoPage.ApplyThumbSize(_config.SearchThumbHeight); // 搜尋結果縮圖高度自 config 套用（選項頁可調，#複查）
 
-        _main = new MainWindow(_themePage, _capturePage, videoPage, _notesPage, _historyPage, _optionsPage, new AboutPage(_updates));
+        _main = new MainWindow(_themePage, _capturePage, _videoPage, _notesPage, _historyPage, _optionsPage, new AboutPage(_updates));
         _main.RefreshStatus(keyReady, HotkeyDisplay());
         _main.ResultRequested += SummonResult; // 功能列「Dictionary」鈕→喚出獨立字典視窗（v1.0.1 恢復）
         _main.ExitRequested += ExitApp;        // 主視窗關閉(✕)→結束整個程式（v1.0.1：移除原「關閉＝收合」防關閉行為，USR 回饋）
@@ -522,6 +534,9 @@ public partial class App : System.Windows.Application
         _assessor = new PronunciationService(_config.PronModel, _config.TimeoutSec, _config.MaxRetries); // 隨模型/逾時重建（spec#10）
         EntryDisplaySettings.SyncFrom(_config); // #複查：條目字級/粗體/換行偏好同步後重建兩頁
         ResultDisplaySettings.SyncFrom(_config); // #複查/#135：Dictionary 分頁結果基準字級同步（下次渲染套用）
+        SubtitleDisplaySettings.SyncFrom(_config); // 影片頁字幕帶字級/粗體同步
+        _videoPage?.ApplySubtitleDisplay();        // 立即套用到字幕帶（即使當前句已顯示）
+        _videoPage?.ApplyThumbSize(_config.SearchThumbHeight); // 搜尋結果縮圖高度即時套用（選項頁調整後，#複查）
         _notesPage?.Reload(); // 門檻/條目顯示改動 → 重建卡片（intTest#36）
         _historyPage?.Reload(); // #複查：條目顯示改動同步套用歷史頁
         RegisterHotkeyOrWarn();

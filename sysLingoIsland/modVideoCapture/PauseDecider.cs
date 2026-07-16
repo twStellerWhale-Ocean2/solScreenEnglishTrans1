@@ -18,20 +18,39 @@ public static class PauseDecider
     /// <paramref name="lastPausedIndex"/>＝上次已暫停之 cue index（-1＝尚未）；cues 須依 StartSec 遞增。
     /// </summary>
     public static int NextPause(double currentSec, IReadOnlyList<SubtitleCue> cues, int lastPausedIndex,
-        double maxRunSec = DefaultMaxRunSec, string? pauseSpeaker = null)
+        double maxRunSec = DefaultMaxRunSec, string? pauseSpeaker = null, bool pauseNoSpeaker = false)
     {
         var next = Math.Max(0, lastPausedIndex + 1);
-        // 指定說話人：跳過非該說話人之句（不暫停、續播），找下一個符合者
-        while (next < cues.Count && !SpeakerMatches(pauseSpeaker, cues[next].Speaker)) next++;
+        // 指定說話人（或未標示者）：跳過不符之句（不暫停、續播），找下一個符合者
+        while (next < cues.Count && !PauseMatches(pauseSpeaker, pauseNoSpeaker, cues[next].Speaker)) next++;
         if (next >= cues.Count) return -1;
         var capped = cues[next].StartSec + maxRunSec;
-        var pausePoint = next + 1 < cues.Count ? Math.Min(cues[next + 1].StartSec, capped) : capped;
+        var naturalEnd = next + 1 < cues.Count ? Math.Min(cues[next + 1].StartSec, capped) : capped;
+        // 口說時長地板（#字幕雙擊早停修正）：至少播足本句台詞估計時長——重疊/過早的下一句起點不把整句在說完前切掉
+        // （雙擊跳段最有感）。仍以 maxRun 封頂、且絕不早於 naturalEnd（不縮短既有行為、不早停）。
+        var spokenFloor = Math.Min(capped, cues[next].StartSec + EstimateSpokenSec(cues[next].Text));
+        var pausePoint = Math.Max(naturalEnd, spokenFloor);
         return currentSec >= pausePoint ? next : -1;
+    }
+
+    /// <summary>估計一句台詞之口說秒數（#字幕雙擊早停修正）：詞數×每詞約 0.36 秒（≈165 wpm），上限 6 秒。供暫停地板，避免重疊字幕把整句在說完前切掉；空句回 0（不影響）。internal 供單元測試。</summary>
+    internal static double EstimateSpokenSec(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return 0;
+        var words = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).Length;
+        return Math.Min(words * 0.36, 6.0);
     }
 
     /// <summary>指定說話人是否符合（<paramref name="target"/> null／空＝任何說話人皆符合）。internal 供單元測試。</summary>
     internal static bool SpeakerMatches(string? target, string? speaker) =>
         string.IsNullOrEmpty(target) || string.Equals(target, speaker, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 暫停對象是否符合（#189）：<paramref name="noSpeaker"/>＝true 時只在**未標示說話人**（空/null）之句暫停；
+    /// 否則沿用 <see cref="SpeakerMatches"/>（指定說話人／全部）。internal 供單元測試。
+    /// </summary>
+    internal static bool PauseMatches(string? target, bool noSpeaker, string? speaker) =>
+        noSpeaker ? string.IsNullOrEmpty(speaker) : SpeakerMatches(target, speaker);
 
     /// <summary>
     /// 回含 <paramref name="currentSec"/> 之 cue index（顯示當前句用）：start-only 一句顯示至下一句開始（無空窗），

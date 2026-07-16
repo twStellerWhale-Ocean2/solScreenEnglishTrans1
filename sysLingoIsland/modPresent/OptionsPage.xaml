@@ -92,6 +92,41 @@
 
       <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,10">
         <StackPanel>
+          <TextBlock Text="Video subtitle" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="Font of the current-line subtitle shown under the video player (the big tap-a-word line)."
+                     FontSize="12" Foreground="{StaticResource PinkSub}" Margin="0,6,0,0" TextWrapping="Wrap"/>
+          <StackPanel Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
+            <TextBlock Text="Font size" FontSize="12.5" Foreground="{StaticResource PinkSub}"
+                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <Slider x:Name="SubtitleFontSlider" Minimum="12" Maximum="48" Width="200"
+                    IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"/>
+            <TextBox x:Name="SubtitleFontBox" Width="46" Margin="10,0,4,0" Padding="4,2"
+                     TextAlignment="Center" VerticalAlignment="Center"/>
+            <TextBlock Text="pt" FontSize="12" Foreground="{StaticResource PinkSub}" VerticalAlignment="Center"/>
+          </StackPanel>
+          <CheckBox x:Name="SubtitleBoldChk" Content="Bold" Margin="0,10,0,0" Foreground="{StaticResource PinkText}"/>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,10">
+        <StackPanel>
+          <TextBlock Text="Video search results" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+          <TextBlock Text="Thumbnail size in the video search results table. Larger is easier to preview; the row height and width scale together (16:9)."
+                     FontSize="12" Foreground="{StaticResource PinkSub}" Margin="0,6,0,0" TextWrapping="Wrap"/>
+          <StackPanel Orientation="Horizontal" Margin="0,8,0,0" VerticalAlignment="Center">
+            <TextBlock Text="Thumbnail height" FontSize="12.5" Foreground="{StaticResource PinkSub}"
+                       VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <Slider x:Name="ThumbSizeSlider" Minimum="28" Maximum="120" Width="200"
+                    IsSnapToTickEnabled="True" TickFrequency="2" VerticalAlignment="Center"/>
+            <TextBox x:Name="ThumbSizeBox" Width="46" Margin="10,0,4,0" Padding="4,2"
+                     TextAlignment="Center" VerticalAlignment="Center"/>
+            <TextBlock Text="px" FontSize="12" Foreground="{StaticResource PinkSub}" VerticalAlignment="Center"/>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}" Padding="12" Margin="0,0,0,10">
+        <StackPanel>
           <TextBlock Text="Dictionary result" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
           <TextBlock Text="Base font size of the Dictionary result. The phonetic and Chinese lines scale with it."
                      FontSize="12" Foreground="{StaticResource PinkSub}" Margin="0,10,0,0" TextWrapping="Wrap"/>

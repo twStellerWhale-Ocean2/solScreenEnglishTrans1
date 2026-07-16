@@ -1,0 +1,27 @@
+<UserControl x:Class="LingoIsland.Present.Spinner"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Foreground="#B0578D">
+  <!-- 運作中旋轉動畫（#186）：270° 弧繞中心無限旋轉；以 Viewbox 依 Width/Height 縮放；顏色取 Foreground -->
+  <Viewbox>
+    <Grid Width="16" Height="16">
+      <Path StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+            Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"
+            Data="M 8,2 A 6,6 0 1 1 2,8" RenderTransformOrigin="0.5,0.5">
+        <Path.RenderTransform>
+          <RotateTransform x:Name="Rot"/>
+        </Path.RenderTransform>
+      </Path>
+    </Grid>
+  </Viewbox>
+  <UserControl.Triggers>
+    <EventTrigger RoutedEvent="Loaded">
+      <BeginStoryboard>
+        <Storyboard>
+          <DoubleAnimation Storyboard.TargetName="Rot" Storyboard.TargetProperty="Angle"
+                           From="0" To="360" Duration="0:0:0.85" RepeatBehavior="Forever"/>
+        </Storyboard>
+      </BeginStoryboard>
+    </EventTrigger>
+  </UserControl.Triggers>
+</UserControl>

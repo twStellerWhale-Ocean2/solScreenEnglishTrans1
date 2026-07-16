@@ -2,169 +2,530 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+             xmlns:local="clr-namespace:LingoIsland.Present"
              Background="Transparent">
-  <!-- 統一版面（#167）：左＝影片清單（Clear all＋theme 篩選；右鍵/Delete 刪）｜右上＝獲取區塊（網址載入）｜右下＝內容區塊（播放器＋字幕） -->
+  <UserControl.Resources>
+    <!-- 標準表格控制項 DataGrid 主題（#177）：透明底、粉表頭、細列分隔、粉選取；欄可拖曳調寬/排序/重排（內建） -->
+    <Style x:Key="GridColHeader" TargetType="DataGridColumnHeader">
+      <Setter Property="Foreground" Value="#B0578D"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Background" Value="#22F4C2D0"/>
+      <Setter Property="BorderBrush" Value="#33B0578D"/>
+      <Setter Property="BorderThickness" Value="0,0,1,1"/>
+      <Setter Property="Padding" Value="6,5"/>
+      <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    </Style>
+    <Style x:Key="GridRow" TargetType="DataGridRow">
+      <Setter Property="Background" Value="Transparent"/>
+      <Style.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#22B0578D"/></Trigger>
+        <Trigger Property="IsSelected" Value="True"><Setter Property="Background" Value="{StaticResource PinkTint}"/></Trigger>
+      </Style.Triggers>
+    </Style>
+    <Style x:Key="GridCell" TargetType="DataGridCell">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="Foreground" Value="#3A2C33"/>
+      <Setter Property="Padding" Value="2,0"/>
+      <Style.Triggers>
+        <Trigger Property="IsSelected" Value="True">
+          <Setter Property="Background" Value="Transparent"/>
+          <Setter Property="Foreground" Value="#3A2C33"/>
+        </Trigger>
+      </Style.Triggers>
+    </Style>
+  </UserControl.Resources>
+  <!-- 版面統一（#182）：兩子頁籤【獲得】（關鍵字搜尋＋結果表格＋網址載入）／【內容】（左影片清單｜右播放器＋逐句字幕）＋共用狀態列 -->
   <Grid Margin="10">
-    <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="200" MinWidth="150"/>
-      <ColumnDefinition Width="6"/>
-      <ColumnDefinition Width="*" MinWidth="300"/>
-    </Grid.ColumnDefinitions>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/>
+      <RowDefinition Height="*"/>
+      <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
 
-    <!-- 左：Videos＋Clear all（置頂）＋依 theme 篩選＋清單 -->
-    <Grid Grid.Column="0">
-      <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="*"/>
-      </Grid.RowDefinitions>
-      <Grid Grid.Row="0">
-        <TextBlock Text="Videos" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PinkText}" VerticalAlignment="Center"/>
-        <Button x:Name="ClearVideosBtn" Content="Clear all" Style="{StaticResource GhostButton}" HorizontalAlignment="Right"/>
-      </Grid>
-      <!-- 依 theme 篩選（圖文下拉，多媒體主題管理·B） -->
-      <ComboBox x:Name="VideoThemeFilter" Grid.Row="1" Height="26" Margin="0,6,0,4"
-                VerticalContentAlignment="Center" ToolTip="Filter videos by theme"/>
-      <Border Grid.Row="2" Style="{StaticResource Card}">
-        <Grid>
-          <ListBox x:Name="VideoList" BorderThickness="0" Background="Transparent" Margin="4"
-                   HorizontalContentAlignment="Stretch"
-                   ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                   ToolTip="Click to load; right-click or press Delete to remove"/>
-          <TextBlock x:Name="VideoEmptyHint" Text="No videos yet. Paste a YouTube link and Load."
-                     Foreground="#9A6A82" FontSize="12" TextWrapping="Wrap" MaxWidth="160"
-                     TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-        </Grid>
-      </Border>
-    </Grid>
+    <!-- 子頁籤：獲得 / 內容（可見性切換，非 TabControl，避免切頁卸載重建 WebView2 播放器、中斷播放） -->
+    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+      <RadioButton x:Name="SubTabSearch" Style="{StaticResource SubTab}" GroupName="VideoSubTab" IsChecked="True" Content="獲得"/>
+      <RadioButton x:Name="SubTabPlay" Style="{StaticResource SubTab}" GroupName="VideoSubTab" Content="內容"/>
+    </StackPanel>
 
-    <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+    <!-- body：兩 pane 疊放同格，靠可見性切換 -->
+    <Grid Grid.Row="1">
 
-    <!-- 右：上＝獲取區塊（網址輸入＋Load＋狀態）｜下＝內容區塊（播放器｜逐句字幕） -->
-    <Grid Grid.Column="2">
-      <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="*"/>
-      </Grid.RowDefinitions>
-
-      <Border Grid.Row="0" Style="{StaticResource Card}" Padding="12">
+      <!-- 【獲得】關鍵字搜尋＋結果表格＋網址載入 -->
+      <Border x:Name="SearchPane" Style="{StaticResource Card}" Padding="12" VerticalAlignment="Top">
         <StackPanel>
-          <!-- 依主題搜尋關鍵字查 YouTube（#171）：結果以下拉選單顯示、點選直接載入 -->
+          <TextBlock Text="Load a video" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}" Margin="0,0,0,8"/>
+
+          <!-- 搜尋區塊子頁籤（#189 獲得頁重構）：由關鍵字／由逐字稿／由網址；三路成果統一列於下方成果區塊 -->
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+            <RadioButton x:Name="AcqTabKeyword" Style="{StaticResource SubTab}" GroupName="AcqTab" IsChecked="True" Content="&#x1F50E; 由關鍵字"/>
+            <RadioButton x:Name="AcqTabTranscript" Style="{StaticResource SubTab}" GroupName="AcqTab" Content="&#x1F4C4; 由逐字稿"/>
+            <RadioButton x:Name="AcqTabUrl" Style="{StaticResource SubTab}" GroupName="AcqTab" Content="&#x1F517; 由網址"/>
+          </StackPanel>
+
+          <!-- ① 由關鍵字：關鍵字 → 搜尋 → 成果區塊選擇 → 載入（#173 分路一） -->
+          <StackPanel x:Name="AcqPaneKeyword">
+          <TextBlock Text="Search YouTube by keywords" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
           <Grid>
             <Grid.ColumnDefinitions>
               <ColumnDefinition Width="*"/>
               <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBox x:Name="SearchBox" Grid.Column="0" Height="30" VerticalContentAlignment="Center" Padding="6,0"
-                     Background="#66FFFFFF" ToolTip="Search YouTube by keywords (prefilled from the active theme)"/>
+            <!-- 搜尋框：可編輯 ComboBox，下拉顯示關鍵字歷史（#186）；↑↓ 選、Delete 刪該筆 -->
+            <ComboBox x:Name="SearchBox" Grid.Column="0" Height="30" IsEditable="True" StaysOpenOnEdit="True"
+                      IsTextSearchEnabled="False" VerticalContentAlignment="Center" Padding="6,0"
+                      ToolTip="Type keywords (or pick from history); ↑↓ then Delete removes a history entry"/>
             <Button x:Name="SearchBtn" Grid.Column="1" Content="&#x1F50E; Search" Width="100" Height="30" Margin="8,0,0,0"/>
           </Grid>
-          <ComboBox x:Name="SearchResults" Height="34" Margin="0,6,0,0" Visibility="Collapsed"
-                    ToolTip="Pick a YouTube result to load it"/>
+          <!-- 搜尋選項（#184）：上傳日期（伺服器端 sp 篩）｜長度（client 依片長篩）｜最多筆數｜自動網搜前 N 筆（預設開、花額度） -->
+          <WrapPanel Orientation="Horizontal" Margin="0,6,0,0">
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,4" VerticalAlignment="Center">
+              <TextBlock Text="Date:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
+              <ComboBox x:Name="DateFilter" Width="108" Height="26" VerticalContentAlignment="Center" ToolTip="Filter by upload date (YouTube)">
+                <ComboBoxItem Content="Any time" Tag="" IsSelected="True"/>
+                <ComboBoxItem Content="Today" Tag="EgIIAg%3D%3D"/>
+                <ComboBoxItem Content="This week" Tag="EgIIAw%3D%3D"/>
+                <ComboBoxItem Content="This month" Tag="EgIIBA%3D%3D"/>
+                <ComboBoxItem Content="This year" Tag="EgIIBQ%3D%3D"/>
+              </ComboBox>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,4" VerticalAlignment="Center">
+              <TextBlock Text="Length:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
+              <ComboBox x:Name="LengthFilter" Width="128" Height="26" VerticalContentAlignment="Center" ToolTip="Filter by video length">
+                <ComboBoxItem Content="Any length" Tag="" IsSelected="True"/>
+                <ComboBoxItem Content="Short (&lt;4m)" Tag="short"/>
+                <ComboBoxItem Content="Medium (4–20m)" Tag="medium"/>
+                <ComboBoxItem Content="Long (&gt;20m)" Tag="long"/>
+              </ComboBox>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,12,4" VerticalAlignment="Center">
+              <TextBlock Text="Max:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
+              <ComboBox x:Name="MaxResults" Width="56" Height="26" VerticalContentAlignment="Center" ToolTip="Maximum number of results">
+                <ComboBoxItem Content="10"/>
+                <ComboBoxItem Content="25" IsSelected="True"/>
+                <ComboBoxItem Content="50"/>
+              </ComboBox>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4" VerticalAlignment="Center">
+              <CheckBox x:Name="AutoWebCheck" Content="Auto web-check top" IsChecked="True" VerticalAlignment="Center" Foreground="#B0578D"
+                        ToolTip="After each search, auto-check web transcripts for the top-N results by Pick score (uses your OpenAI key — costs a small fee each)"/>
+              <ComboBox x:Name="AutoWebCount" Width="50" Height="26" Margin="4,0,0,0" VerticalContentAlignment="Center" ToolTip="How many top results to auto-check">
+                <ComboBoxItem Content="3"/>
+                <ComboBoxItem Content="5" IsSelected="True"/>
+                <ComboBoxItem Content="10"/>
+              </ComboBox>
+            </StackPanel>
+          </WrapPanel>
+          </StackPanel>
 
-          <!-- 或直接貼網址 -->
-          <Grid Margin="0,8,0,0">
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*"/>
-              <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <TextBox x:Name="UrlBox" Grid.Column="0" Height="30" VerticalContentAlignment="Center" Padding="6,0"
-                     Background="#66FFFFFF" ToolTip="Or paste a YouTube link / 11-character video ID"/>
-            <Button x:Name="LoadBtn" Grid.Column="1" Content="Load" Width="90" Height="30" Margin="8,0,0,0"/>
-          </Grid>
-          <TextBlock x:Name="StatusText" Margin="2,6,2,0" FontSize="12" Foreground="#B0578D" TextWrapping="Wrap"
-                     Text="Search YouTube by keywords, or paste a link, then Load."/>
+          <!-- ② 由逐字稿（#189 新）：先上網找「有公開逐字稿可用」之影片、再定位到 YouTube，成果列於下方成果區塊。用 OpenAI（gpt-4.1 web_search），跑前確認費用 -->
+          <StackPanel x:Name="AcqPaneTranscript" Visibility="Collapsed">
+            <TextBlock Text="Find videos that have a transcript" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
+            <TextBlock Text="Enter a topic — LingoIsland searches the web for videos whose full transcript (with speakers) is published online, so the 🌐 Script speaker-fix works. Uses your OpenAI key; confirms cost first."
+                       Foreground="#9A6A82" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,6"/>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <!-- 逐字稿主題框：可編輯 ComboBox，下拉顯示主題歷史（比照關鍵字框 #186）；↑↓ 選、Delete 刪該筆 -->
+              <ComboBox x:Name="TranscriptBox" Grid.Column="0" Height="30" IsEditable="True" StaysOpenOnEdit="True"
+                        IsTextSearchEnabled="False" VerticalContentAlignment="Center" Padding="6,0"
+                        ToolTip="Enter a topic (or pick from history); ↑↓ then Delete removes a history entry"/>
+              <Button x:Name="TranscriptSearchBtn" Grid.Column="1" Content="&#x1F4C4; Find" Width="100" Height="30" Margin="8,0,0,0"/>
+            </Grid>
+          </StackPanel>
+
+          <!-- ③ 由網址（#173 分路二）：貼連結直接載入、跳到內容頁播放（不經成果區塊） -->
+          <StackPanel x:Name="AcqPaneUrl" Visibility="Collapsed">
+            <TextBlock Text="Paste a YouTube link" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <TextBox x:Name="UrlBox" Grid.Column="0" Height="30" VerticalContentAlignment="Center" Padding="6,0"
+                       Background="#66FFFFFF" ToolTip="Paste a YouTube link or 11-character video ID, then Load"/>
+              <Button x:Name="LoadBtn" Grid.Column="1" Content="Load" Width="90" Height="30" Margin="8,0,0,0"/>
+            </Grid>
+          </StackPanel>
+
+          <!-- 成果區塊（#189）：由關鍵字／由逐字稿之搜尋結果統一列於此；標準表格 DataGrid（#177，欄可調寬/重排、點表頭排序皆內建；上方過濾框 + 逐列 Load 鈕） -->
+          <Border x:Name="SearchResultsPanel" Visibility="Collapsed" Margin="0,6,0,0"
+                  BorderBrush="#33B0578D" BorderThickness="1" CornerRadius="6" Background="#40FFFFFF">
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+              <!-- 過濾（依標題即時篩選，#177） -->
+              <Grid Grid.Row="0" Margin="8,6,8,4">
+                <TextBox x:Name="ResultFilterBox" Height="26" VerticalContentAlignment="Center" Padding="6,0"
+                         Background="#66FFFFFF" TextChanged="OnResultFilterChanged" ToolTip="Filter results by title"/>
+                <TextBlock x:Name="FilterPlaceholder" Text="&#x1F50D; Filter by title…" Foreground="#9A6A82" FontSize="11.5"
+                           Margin="8,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+              </Grid>
+              <!-- 標準表格 DataGrid（#177）：欄可拖曳調寬/重排、點表頭排序皆內建；篩選沿用上方過濾框（ListCollectionView.Filter）；雙擊列亦載入 -->
+              <DataGrid x:Name="SearchResultsGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
+                        HeadersVisibility="Column" CanUserResizeColumns="True" CanUserReorderColumns="True"
+                        CanUserSortColumns="True" CanUserResizeRows="False" CanUserAddRows="False" CanUserDeleteRows="False"
+                        SelectionMode="Single" SelectionUnit="FullRow" GridLinesVisibility="Horizontal"
+                        HorizontalGridLinesBrush="#22B0578D" Background="Transparent" RowBackground="Transparent"
+                        BorderThickness="0" MaxHeight="500" RowHeight="44" FontSize="12"
+                        HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
+                        PreviewMouseRightButtonDown="OnResultRowRightClick"
+                        ColumnHeaderStyle="{StaticResource GridColHeader}" RowStyle="{StaticResource GridRow}" CellStyle="{StaticResource GridCell}">
+                <!-- 右鍵重新檢查（#188）：字幕狀態已快取、平常重搜直接還原不重探；需更新時於此手動重檢（內嵌免費、網路花額度） -->
+                <DataGrid.ContextMenu>
+                  <ContextMenu>
+                    <MenuItem Header="↻ Re-check embedded subtitles (free)" Click="OnRecheckEmbedded"/>
+                    <MenuItem Header="🌐 Re-check web subtitle (uses OpenAI)" Click="OnRecheckWeb"/>
+                  </ContextMenu>
+                </DataGrid.ContextMenu>
+                <DataGrid.Columns>
+                  <!-- 推薦優序（#183）：彩色圓標數字 1–5（5＝最佳、綠；3＝琥珀；低＝灰）——比星等好懂；點表頭以推薦分排序（預設排序欄） -->
+                  <DataGridTemplateColumn Header="Pick" SortMemberPath="RecommendScore" CanUserResize="False" MinWidth="48">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <Border Background="{Binding RecommendBrush}" CornerRadius="10" Width="22" Height="22"
+                                HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="{Binding RecommendTip}">
+                          <TextBlock Text="{Binding RecommendLabel}" Foreground="White" FontWeight="Bold" FontSize="11.5"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <!-- 縮圖 -->
+                  <DataGridTemplateColumn Header="" CanUserSort="False" CanUserResize="False" Width="64">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <Image Source="{Binding ThumbSource}"
+                               Width="{Binding ThumbWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                               Height="{Binding ThumbHeight, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                               Stretch="UniformToFill" VerticalAlignment="Center"/>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <!-- 名稱（排序 A–Z；可調寬；佔滿剩餘寬） -->
+                  <DataGridTextColumn Header="Title" Binding="{Binding Title}" SortMemberPath="Title" Width="*" MinWidth="140">
+                    <DataGridTextColumn.ElementStyle>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                        <Setter Property="ToolTip" Value="{Binding Title}"/>
+                      </Style>
+                    </DataGridTextColumn.ElementStyle>
+                  </DataGridTextColumn>
+                  <!-- 片長（排序鍵＝秒數 DurationSec） -->
+                  <DataGridTextColumn Header="Time" Binding="{Binding DurationText}" SortMemberPath="DurationSec" MinWidth="48">
+                    <DataGridTextColumn.ElementStyle>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="Foreground" Value="#6D3A4D"/>
+                      </Style>
+                    </DataGridTextColumn.ElementStyle>
+                  </DataGridTextColumn>
+                  <!-- 初次搜尋時間（#186）：yyyy-MM-dd HH:mm，字串即按時間排序 -->
+                  <DataGridTextColumn Header="First seen" Binding="{Binding FirstSeen}" SortMemberPath="FirstSeen" MinWidth="96">
+                    <DataGridTextColumn.ElementStyle>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="HorizontalAlignment" Value="Center"/>
+                        <Setter Property="VerticalAlignment" Value="Center"/>
+                        <Setter Property="Foreground" Value="#9A6A82"/>
+                        <Setter Property="FontSize" Value="11"/>
+                      </Style>
+                    </DataGridTextColumn.ElementStyle>
+                  </DataGridTextColumn>
+                  <!-- 連結（開 YouTube 原頁） -->
+                  <DataGridTemplateColumn Header="Link" CanUserSort="False" CanUserResize="False" MinWidth="56">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <TextBlock VerticalAlignment="Center" HorizontalAlignment="Center">
+                          <Hyperlink NavigateUri="{Binding WatchUri}" RequestNavigate="OnOpenExternalLink" ToolTip="{Binding WatchUrl}">YouTube &#x2197;</Hyperlink>
+                        </TextBlock>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <!-- 三種字幕狀態（排序鍵＝Rank；Manual綠／Auto琥珀免費自動填、Web藍逐列按需查） -->
+                  <DataGridTemplateColumn Header="Manual" SortMemberPath="ManualRank" CanUserResize="False" MinWidth="52">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                          <local:Spinner Width="14" Height="14" Foreground="#B0578D" Visibility="{Binding EmbeddedSpinnerVisibility}"/>
+                          <TextBlock Text="{Binding ManualText}" Foreground="{Binding ManualBrush}" FontWeight="SemiBold"
+                                     FontSize="12.5" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Human-made subtitles"/>
+                        </Grid>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <DataGridTemplateColumn Header="Auto" SortMemberPath="AutoRank" CanUserResize="False" MinWidth="46">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                          <local:Spinner Width="14" Height="14" Foreground="#B0578D" Visibility="{Binding EmbeddedSpinnerVisibility}"/>
+                          <TextBlock Text="{Binding AutoText}" Foreground="{Binding AutoBrush}" FontWeight="SemiBold"
+                                     FontSize="12.5" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Auto-generated captions"/>
+                        </Grid>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <DataGridTemplateColumn Header="Web" SortMemberPath="WebRank" CanUserResize="False" MinWidth="64">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+                          <Button Content="{Binding WebButtonText}" IsEnabled="{Binding WebButtonEnabled}" Visibility="{Binding WebButtonVisibility}"
+                                  Click="OnSearchRowWebProbe" Background="Transparent" BorderBrush="#66B0578D" BorderThickness="1"
+                                  FontSize="11" Padding="6,2" Cursor="Hand"
+                                  ToolTip="Check the web for a transcript (uses your OpenAI key; costs a small fee)"/>
+                          <local:Spinner Width="14" Height="14" Foreground="#1565C0" Visibility="{Binding WebCheckingVisibility}"/>
+                          <TextBlock Text="{Binding WebResultText}" Foreground="{Binding WebResultBrush}" Visibility="{Binding WebResultVisibility}"
+                                     FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip="{Binding WebResultTip}"/>
+                        </Grid>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <!-- 載入鈕（#183：移到行尾）：唯一載入方式（已取消雙擊載入）；已在清單者停用、標「Added」灰 -->
+                  <DataGridTemplateColumn Header="Load" CanUserSort="False" CanUserResize="False" MinWidth="58">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <Button Content="{Binding LoadText}" IsEnabled="{Binding CanLoad}" Click="OnSearchRowLoad"
+                                Padding="10,3" Margin="2" Cursor="Hand" VerticalAlignment="Center"
+                                ToolTip="Load this video into the player (disabled if already in your Videos list)"/>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                </DataGrid.Columns>
+              </DataGrid>
+            </Grid>
+          </Border>
         </StackPanel>
       </Border>
 
-      <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,8,0,0" Padding="8">
-        <Grid>
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="*" MinWidth="260"/>
-            <ColumnDefinition Width="6"/>
-            <ColumnDefinition Width="230" MinWidth="150"/>
-          </Grid.ColumnDefinitions>
+      <!-- 【內容】左＝影片清單（Clear all＋theme 篩選；右鍵/Delete 刪）｜右＝播放器＋逐句字幕（預設隱藏，載入影片時自動切換至此） -->
+      <Grid x:Name="PlayPane" Visibility="Collapsed">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="200" MinWidth="150"/>
+          <ColumnDefinition Width="6"/>
+          <ColumnDefinition Width="*" MinWidth="300"/>
+        </Grid.ColumnDefinitions>
 
-          <!-- 中：播放器＋當前句字幕帶＋控制 -->
-          <Grid Grid.Column="0">
-            <Grid.RowDefinitions>
-              <RowDefinition Height="*" MinHeight="120"/>
-              <RowDefinition Height="Auto"/>
-              <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-
-            <Border Grid.Row="0" Background="Black" CornerRadius="6" ClipToBounds="True">
-              <wv2:WebView2 x:Name="Web"/>
-            </Border>
-
-            <Border Grid.Row="1" Background="#88FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1" CornerRadius="6"
-                    Margin="0,8,0,0" Padding="10" MinHeight="52">
-              <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" FontSize="16" Foreground="#2A2A2A"/>
-            </Border>
-
-            <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
-              <Button x:Name="ReplayBtn" Content="&#x23EE; Replay" Width="92" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
-              <Button x:Name="ResumeBtn" Content="&#x25B6; Continue" Width="96" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
-              <Button x:Name="NextBtn" Content="&#x23ED; Next" Width="84" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
-              <Button x:Name="AddNoteBtn" Content="&#xFF0B; Add to Notes" Width="132" Height="28" Margin="10,0,0,4" IsEnabled="False"/>
-              <!-- 指定說話人才暫停（增量7） -->
-              <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,4">
-                <TextBlock Text="Pause at:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
-                <ComboBox x:Name="PauseAtSpeaker" MinWidth="110" Height="26" VerticalContentAlignment="Center"
-                          IsEnabled="False" ToolTip="Only pause at this speaker's lines (others play through)"/>
-              </StackPanel>
-            </WrapPanel>
+        <!-- 左：Videos＋Clear all（置頂）＋依 theme 篩選＋清單 -->
+        <Grid Grid.Column="0">
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+          </Grid.RowDefinitions>
+          <Grid Grid.Row="0">
+            <TextBlock Text="Videos" FontWeight="Bold" FontSize="13" Foreground="{StaticResource PinkText}" VerticalAlignment="Center"/>
+            <Button x:Name="ClearVideosBtn" Content="Clear all" Style="{StaticResource GhostButton}" HorizontalAlignment="Right"/>
           </Grid>
+          <!-- 依 theme 篩選（圖文下拉，多媒體主題管理·B） -->
+          <ComboBox x:Name="VideoThemeFilter" Grid.Row="1" Height="26" Margin="0,6,0,4"
+                    VerticalContentAlignment="Center" ToolTip="Filter videos by theme"/>
+          <Border Grid.Row="2" Style="{StaticResource Card}">
+            <Grid>
+              <ListBox x:Name="VideoList" BorderThickness="0" Background="Transparent" Margin="4"
+                       HorizontalContentAlignment="Stretch"
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                       ToolTip="Click to load; right-click or press Delete to remove"/>
+              <TextBlock x:Name="VideoEmptyHint" Text="No videos yet. Search or paste a YouTube link under Acquire."
+                         Foreground="#9A6A82" FontSize="12" TextWrapping="Wrap" MaxWidth="160"
+                         TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            </Grid>
+          </Border>
+        </Grid>
 
-          <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
 
-          <!-- 右：說話人篩選＋來源疊加＋逐句字幕清單（點跳）／整檔 YAML 編修 -->
-          <Grid Grid.Column="2">
+        <!-- 右：內容區塊（所屬主題＋播放中網址＋播放器｜逐句字幕） -->
+        <Border Grid.Column="2" Style="{StaticResource Card}" Padding="8">
+          <Grid>
             <Grid.RowDefinitions>
-              <RowDefinition Height="Auto"/>
               <RowDefinition Height="Auto"/>
               <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <ComboBox x:Name="SpeakerFilter" Grid.Row="0" Height="26" VerticalContentAlignment="Center"
-                      IsEnabled="False" ToolTip="Filter lines by speaker"/>
+            <!-- 所屬主題（內容區塊上方；顯示/改指派目前影片之主題，#173）＋播放中影片超連結網址（#177） -->
+            <StackPanel Grid.Row="0" Margin="2,0,2,8">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="Theme:" VerticalAlignment="Center" Foreground="{StaticResource PinkText}" Margin="0,0,6,0"/>
+                <ComboBox x:Name="VideoThemePicker" MinWidth="180" Height="26" VerticalContentAlignment="Center"
+                          IsEnabled="False" ToolTip="Show / change the theme this video belongs to"/>
+              </StackPanel>
+              <!-- 影片標題（#187；#189 改唯讀 TextBox 使可選取／複製）：置於網址之上；載入即顯（先用清單標題，起播後以播放器實名更新） -->
+              <TextBox x:Name="VideoTitleText" Margin="0,6,0,0" FontWeight="SemiBold" FontSize="13.5"
+                       Foreground="{StaticResource PinkText}" TextWrapping="Wrap" Visibility="Collapsed"
+                       IsReadOnly="True" IsReadOnlyCaretVisible="False" BorderThickness="0" Background="Transparent"
+                       Padding="0" Cursor="IBeam" ToolTip="影片標題（可選取／複製）"/>
+              <!-- 播放中影片之超連結網址（#177）：可點開 YouTube 原頁；無載入時隱藏 -->
+              <TextBlock x:Name="WatchUrlRow" Margin="0,3,0,0" FontSize="11.5" Foreground="#9A6A82"
+                         Visibility="Collapsed" TextTrimming="CharacterEllipsis">
+                <Run Text="URL: "/><Hyperlink x:Name="WatchUrlLink" RequestNavigate="OnOpenExternalLink"
+                         Foreground="{StaticResource PinkText}"><Run x:Name="WatchUrlText"/></Hyperlink>
+              </TextBlock>
+            </StackPanel>
 
-            <Grid Grid.Row="1" Margin="0,4,0,4">
+            <Grid Grid.Row="1">
               <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*" MinWidth="260"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="230" MinWidth="150"/>
               </Grid.ColumnDefinitions>
-              <Button x:Name="InferSpeakersBtn" Grid.Column="0" Content="AI speakers" Height="26" Margin="0,0,3,0"
-                      IsEnabled="False" ToolTip="Infer likely speakers from the dialogue using AI (uses your OpenAI key; inference, not ground truth)"/>
-              <Button x:Name="EditYamlBtn" Grid.Column="1" Content="Edit YAML" Height="26" Margin="3,0,0,0"
-                      IsEnabled="False" ToolTip="Edit the whole subtitle as one YAML file (fix line breaks / speakers)"/>
-            </Grid>
 
-            <ListBox x:Name="CueList" Grid.Row="2" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"
-                     ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a line to jump there">
-              <ListBox.ItemTemplate>
-                <DataTemplate>
-                  <TextBlock Text="{Binding Display}" TextWrapping="Wrap" Margin="2" FontSize="12"/>
-                </DataTemplate>
-              </ListBox.ItemTemplate>
-            </ListBox>
-
-            <Grid x:Name="YamlEditor" Grid.Row="2" Visibility="Collapsed">
+            <!-- 中：播放器＋當前句字幕帶＋控制 -->
+            <Grid Grid.Column="0">
               <Grid.RowDefinitions>
-                <RowDefinition Height="*"/>
+                <RowDefinition Height="*" MinHeight="120"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
               </Grid.RowDefinitions>
-              <TextBox x:Name="YamlBox" Grid.Row="0" AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap"
-                       FontFamily="Consolas" FontSize="12" Background="#EEFFFFFF" Padding="6"
-                       VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"/>
-              <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
-                <Button x:Name="ApplyYamlBtn" Content="Apply" Width="76" Height="26" Margin="0,0,6,0"/>
-                <Button x:Name="CancelYamlBtn" Content="Cancel" Width="76" Height="26"/>
-              </StackPanel>
+
+              <Border Grid.Row="0" Background="Black" CornerRadius="6" ClipToBounds="True">
+                <Grid>
+                  <wv2:WebView2 x:Name="Web"/>
+                  <!-- 載入等待動畫（#186）：載入中收起 WebView2（避 airspace 遮住）、於黑底顯旋轉沙漏 -->
+                  <StackPanel x:Name="LoadOverlay" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <local:Spinner Width="48" Height="48" Foreground="White"/>
+                    <TextBlock Text="Loading…" Foreground="White" HorizontalAlignment="Center" Margin="0,10,0,0" FontSize="13"/>
+                  </StackPanel>
+                </Grid>
+              </Border>
+
+              <Border Grid.Row="1" Background="#88FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1" CornerRadius="6"
+                      Margin="0,8,0,0" Padding="10" MinHeight="52">
+                <!-- 字級/粗體由 SubtitleDisplaySettings 於 ApplySubtitleDisplay() 套用（設定可調，比照筆記）；文字色比照筆記條目 #3A2C33。點字查詞；右鍵複製整句（#189，字可點故以右鍵複製取代拖選） -->
+                <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" Foreground="#3A2C33">
+                  <TextBlock.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="Copy line" Click="OnCopySubtitleLine"/>
+                    </ContextMenu>
+                  </TextBlock.ContextMenu>
+                </TextBlock>
+              </Border>
+
+              <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
+                <Button x:Name="ReplayBtn" Content="&#x23EE; Replay" Width="92" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
+                <Button x:Name="ResumeBtn" Content="&#x25B6; Continue" Width="96" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
+                <Button x:Name="NextBtn" Content="&#x23ED; Next" Width="84" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
+                <Button x:Name="AddNoteBtn" Content="&#xFF0B; Add to Notes" Width="132" Height="28" Margin="10,0,0,4" IsEnabled="False"/>
+                <!-- 指定說話人才暫停（增量7） -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,4">
+                  <TextBlock Text="Pause at:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
+                  <ComboBox x:Name="PauseAtSpeaker" MinWidth="110" Height="26" VerticalContentAlignment="Center"
+                            IsEnabled="False" ToolTip="Only pause at this speaker's lines (others play through)"/>
+                </StackPanel>
+              </WrapPanel>
+            </Grid>
+
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="Transparent"/>
+
+            <!-- 右：說話人篩選＋來源疊加＋逐句字幕清單（點跳）／整檔 YAML 編修 -->
+            <Grid Grid.Column="2">
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+              </Grid.RowDefinitions>
+
+              <!-- 說話人篩選（#189：移到字幕清單正上方） -->
+              <ComboBox x:Name="SpeakerFilter" Grid.Row="1" Height="26" VerticalContentAlignment="Center" Margin="0,2,0,4"
+                        IsEnabled="False" ToolTip="Filter the subtitle list by speaker"/>
+
+              <Grid Grid.Row="0" Margin="0,0,0,2">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <!-- ① 初始資料（#189）：字幕**來源**——僅顯示（不可操作，避免誤會可切換）。Manual＝人工字幕（時間+斷句皆準）、Auto＝自動字幕（時間準、斷句可能錯）；皆無講話人 -->
+                <Grid Grid.Row="0" Height="26">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="26"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Grid.Column="0" Text="&#x1F4AC;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
+                             ToolTip="自影片來源獲得字幕（僅顯示來源）。"/>
+                  <TextBlock x:Name="BaseSourceText" Grid.Column="1" VerticalAlignment="Center" Foreground="#6D3A4D"
+                             FontSize="12.5" Margin="2,0,0,0"
+                             ToolTip="字幕來源：Manual＝人工字幕（最佳）、Auto＝自動字幕。這是本片實際取得的來源，僅供顯示。"/>
+                </Grid>
+                <!-- ② 講話人／斷句（#189）：不動時間。🌐 Script＝用網路逐字稿；🧠 AI＝用 AI 推理。Manual 基底只補講話人；Auto 基底另補斷句 -->
+                <Grid Grid.Row="1" Margin="0,4,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="26"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Grid.Column="0" Text="&#x1F9D1;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
+                             ToolTip="標示講話人，若為 Auto 還增加修訂斷句。"/>
+                  <Button x:Name="WebSpeakersBtn" Grid.Column="1" Content="&#x1F310; Script" Height="26" Margin="0,0,3,0"
+                          IsEnabled="False" ToolTip="Use a web transcript to fix speakers (and sentence breaks when the base is Auto), keeping the timing. Uses your OpenAI key; confirms cost first."/>
+                  <Button x:Name="InferSpeakersBtn" Grid.Column="2" Content="&#x1F9E0; AI" Height="26" Margin="3,0,0,0"
+                          IsEnabled="False" ToolTip="Use AI reasoning to fix speakers (and sentence breaks when the base is Auto), keeping the timing. Uses your OpenAI key; confirms cost first."/>
+                </Grid>
+                <!-- ③ 精修時間（#189）：🎙 Voice＝抓音檔把時間對到真實發音（Auto 基底另補斷句）。取代原「Re-transcribe」 -->
+                <Grid Grid.Row="2" Margin="0,4,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="26"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Grid.Column="0" Text="&#x23F1;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
+                             ToolTip="標示時間，若為 Auto 還增加修訂斷句。"/>
+                  <Button x:Name="TranscribeBtn" Grid.Column="1" Grid.ColumnSpan="2" Content="&#x1F399; Voice" Height="26" Margin="0,0,0,0"
+                          IsEnabled="False" ToolTip="Transcribe the actual audio (OpenAI Whisper) to refine the timing to the real speech. Downloads audio; confirms cost first."/>
+                </Grid>
+                <!-- ④ 開啟本片資料夾（#189，📁）＋整檔 YAML 編修（📝）：資料夾鈕在 Edit YAML 左側，開該片 video\{日期 標題}\ -->
+                <Grid Grid.Row="3" Margin="0,6,0,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+                  <Button x:Name="OpenFolderBtn" Grid.Column="0" Content="&#x1F4C1;" Width="32" Height="26" Margin="0,0,4,0"
+                          ToolTip="Open this video's folder (its subtitle.yaml and any web transcript files)"/>
+                  <Button x:Name="EditYamlBtn" Grid.Column="1" Content="&#x1F4DD; Edit YAML" Height="26"
+                          IsEnabled="False" ToolTip="Edit the whole subtitle as one YAML file (manual override: fix line breaks / speakers)"/>
+                </Grid>
+              </Grid>
+
+              <!-- 右鍵選單於程式端依游標下之列動態填入（Copy line＋快速指定/修正說話人，#189）；見 OnCueContextMenuOpening -->
+              <ListBox x:Name="CueList" Grid.Row="2" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Click a line to jump there; right-click to copy or set the speaker">
+                <ListBox.ItemTemplate>
+                  <DataTemplate>
+                    <!-- 時間標(淡)＋說話人(粗)＋台詞。Run.Text 綁定預設 TwoWay，對唯讀屬性會擲例外 → 明指 OneWay -->
+                    <TextBlock TextWrapping="Wrap" Margin="2" FontSize="12"><Run Text="{Binding TimeLabel, Mode=OneWay}" Foreground="#9A6A82" FontSize="11"/><Run Text="{Binding SpeakerLabel, Mode=OneWay}" FontWeight="Bold"/><Run Text="{Binding Text, Mode=OneWay}"/></TextBlock>
+                  </DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+
+              <Grid x:Name="YamlEditor" Grid.Row="2" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="*"/>
+                  <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBox x:Name="YamlBox" Grid.Row="0" AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap"
+                         FontFamily="Consolas" FontSize="12" Background="#EEFFFFFF" Padding="6"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"/>
+                <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,6,0,0">
+                  <Button x:Name="ApplyYamlBtn" Content="Apply" Width="76" Height="26" Margin="0,0,6,0"/>
+                  <Button x:Name="CancelYamlBtn" Content="Cancel" Width="76" Height="26"/>
+                </StackPanel>
+              </Grid>
+            </Grid>
             </Grid>
           </Grid>
-        </Grid>
-      </Border>
+        </Border>
+      </Grid>
     </Grid>
+
+    <!-- 共用狀態列（#177）：兩子頁皆可見；載入/錯誤訊息不因切到內容頁而被遮 -->
+    <TextBlock x:Name="StatusText" Grid.Row="2" Margin="4,6,4,0" FontSize="12" Foreground="#B0578D" TextWrapping="Wrap"
+               Text="Search by keywords and pick a result, or paste a link — then Load."/>
   </Grid>
 </UserControl>
