@@ -43,7 +43,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private string? _currentVideoId;                               // 目前載入影片之 YouTube ID（字幕存檔鍵，#174）
     private readonly DispatcherTimer _poll;
-    private readonly DispatcherTimer _cueClickTimer;               // 區分字幕清單單擊（播/暫停切換）與雙擊（跳播）（#173）
+    private readonly DispatcherTimer _cueClickTimer;               // 區分字幕清單單擊（選取/播放暫停切換）與雙擊（跳轉）
+    private bool _cueClickWasSelected;                             // 按下當下該句是否**已選中**（單擊已選中者才播/暫停切換）
+    private bool _cueDoubleClicking;                               // 雙擊進行中：抑制其第二次放開再武裝單擊計時（否則雙擊跳轉暫停後又被單擊 toggle 續播）
     private IReadOnlyList<SubtitleCue> _cues = new List<SubtitleCue>();
     private int _lastPausedIndex = -1; // 上次已暫停之 cue（PauseDecider 用）
     private int _shownCue = -1;        // 目前字幕帶顯示之 cue
@@ -79,6 +81,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private const string EveryoneSpeaker = "Everyone"; // Pause-at 之「全部」選項（增量7）
 
     private const string HostName = "lingoisland.player"; // WebView2 虛擬主機：以真實 https origin 供 player.html（避 YouTube Error 150/153 之 null/opaque-origin 內嵌拒絕）
+    private static readonly string PlayerCacheBust = Guid.NewGuid().ToString("N"); // 每次啟動唯一：WebView2 依 URL 快取 player.html，同名檔會餵**舊 JS**（改動/更新後不生效）——故 player.html 帶此唯一碼為檔名，保證載當前版本
 
     /// <summary>暫停句點選單字＝查該字（App 導向獨立字典視窗，沿用 spec#1 查詢）。</summary>
     public event Action<string>? WordLookupRequested;
@@ -106,7 +109,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _poll.Tick += OnPoll;
         _cueClickTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(GetDoubleClickTime()) };
-        _cueClickTimer.Tick += (_, _) => { _cueClickTimer.Stop(); _ = TogglePlayPauseAsync(); }; // 單擊逾時未等到雙擊→播/暫停切換（#173）
+        _cueClickTimer.Tick += (_, _) => { _cueClickTimer.Stop(); if (_cueClickWasSelected) { _ = TogglePlayPauseAsync(); } }; // 單擊逾時未等到雙擊：已選中之句→播/暫停切換；未選中者僅選取（不動作）
 
         LoadBtn.Click += (_, _) => { if (_loading) _loadCts?.Cancel(); else _ = LoadFromInputAsync(); }; // 載入中兼作取消
         UrlBox.KeyDown += (_, e) => { if (e.Key == Key.Enter && !_loading) _ = LoadFromInputAsync(); };
@@ -129,9 +132,15 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         ResumeBtn.Click += (_, _) => _ = ResumeAsync();
         NextBtn.Click += (_, _) => _ = SkipNextAsync();
         AddNoteBtn.Click += (_, _) => AddCurrent();
-        // 字幕清單：單擊＝播/暫停切換（依此循環，#173）、雙擊＝跳到該句起點播放（#169）。以系統雙擊時間延後判定單擊，雙擊到達即取消單擊。
-        CueList.PreviewMouseLeftButtonUp += (_, _) => { _cueClickTimer.Stop(); _cueClickTimer.Start(); };
-        CueList.MouseDoubleClick += (_, _) => { _cueClickTimer.Stop(); _ = JumpToSelectedAsync(); };
+        // 字幕清單：單擊＝選取（點**已選中**之句才播/暫停切換）；**雙擊＝跳到該句起點並暫停顯示畫面**。以系統雙擊時間延後判定單擊、雙擊到達即取消單擊。
+        CueList.PreviewMouseLeftButtonDown += (_, _) => { _cueClickWasSelected = CueRowUnderMouse() is CueRow r && ReferenceEquals(r, CueList.SelectedItem); }; // 按下當下（WPF 選取尚未變）記該句是否已選中
+        CueList.PreviewMouseLeftButtonUp += (_, _) =>
+        {
+            _cueClickTimer.Stop();
+            if (_cueDoubleClicking) { _cueDoubleClicking = false; return; } // 雙擊之第二次放開：不再武裝單擊計時（跳轉暫停後不得被 toggle 續播）
+            _cueClickTimer.Start();
+        };
+        CueList.MouseDoubleClick += (_, _) => { _cueDoubleClicking = true; _cueClickWasSelected = false; _cueClickTimer.Stop(); _ = JumpToSelectedAsync(); }; // 雙擊＝跳轉暫停；一併解除單擊武裝，防跳轉後 toggle 續播
         // 右鍵選單（#189）：Copy line＋快速指定/修正說話人（依游標下之列動態填入）
         CueList.ContextMenu = new System.Windows.Controls.ContextMenu();
         CueList.ContextMenuOpening += OnCueContextMenuOpening;
@@ -225,7 +234,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             // player.html 以真實 https 虛擬主機供給——YouTube IFrame 拒 null/opaque origin（NavigateToString）之內嵌（Error 150/153）。
             var dir = Path.Combine(Path.GetTempPath(), "lingoisland-player");
             Directory.CreateDirectory(dir);
-            await File.WriteAllTextAsync(Path.Combine(dir, "player.html"), PlayerHtml());
+            // 檔名帶每次啟動唯一碼：WebView2 依 URL 快取，同名 player.html 會餵舊 JS（改動不生效）——唯一路徑保證載當前版本。清舊檔避免累積。
+            try { foreach (var old in Directory.EnumerateFiles(dir, "player-*.html")) { File.Delete(old); } } catch { /* 清理盡力 */ }
+            await File.WriteAllTextAsync(Path.Combine(dir, $"player-{PlayerCacheBust}.html"), PlayerHtml());
             Web.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 HostName, dir, Microsoft.Web.WebView2.Core.CoreWebView2HostResourceAccessKind.Allow);
             _webReady = true;
@@ -296,7 +307,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             await EnsureWebAsync();
             if (_webReady)
             {
-                Web.CoreWebView2.Navigate($"https://{HostName}/player.html?v={id}");
+                Web.CoreWebView2.Navigate($"https://{HostName}/player-{PlayerCacheBust}.html?v={id}");
                 _guiding = true;
                 _poll.Start();
                 if (addToStore) // 貼連結載入＝加入影片清單（依 VideoId 去重、記錄使用中主題）；標題先用 id、起播後自播放器更新
@@ -1011,22 +1022,23 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 <style>html,body{margin:0;height:100%;background:#000;overflow:hidden}#p{width:100%;height:100%}</style></head>
 <body><div id="p"></div>
 <script>
-var player,ready=false,lastErr=-1;
+var player,ready=false,lastErr=-1,seekPausePending=false;
 var vid=new URLSearchParams(location.search).get('v')||'';
 var tag=document.createElement('script');tag.src="https://www.youtube.com/iframe_api";
 document.head.appendChild(tag);
 function onYouTubeIframeAPIReady(){player=new YT.Player('p',{height:'100%',width:'100%',videoId:vid,
  playerVars:{'playsinline':1,'rel':0,'modestbranding':1,'origin':location.origin},
  events:{'onReady':function(){ready=true;},
+         'onStateChange':function(e){if(seekPausePending&&e.data==1){player.pauseVideo();}},
          'onError':function(e){lastErr=e.data;}}});}
 window.li_time=function(){return (ready&&player&&player.getCurrentTime)?player.getCurrentTime():-1;};
 window.li_title=function(){return (ready&&player&&player.getVideoData)?(player.getVideoData().title||''):'';};
 window.li_err=function(){return lastErr;};
 window.li_pause=function(){if(ready&&player)player.pauseVideo();};
-window.li_play=function(){if(ready&&player)player.playVideo();};
-window.li_toggle=function(){if(ready&&player){var s=(player.getPlayerState?player.getPlayerState():-1);if(s==1){player.pauseVideo();}else{player.playVideo();}}};
-window.li_seek=function(t){if(ready&&player){player.seekTo(t,true);player.playVideo();}};
-window.li_seek_pause=function(t){if(ready&&player){player.seekTo(t,true);player.pauseVideo();}};
+window.li_play=function(){if(ready&&player){seekPausePending=false;player.playVideo();}};
+window.li_toggle=function(){if(ready&&player){seekPausePending=false;var s=(player.getPlayerState?player.getPlayerState():-1);if(s==1){player.pauseVideo();}else{player.playVideo();}}};
+window.li_seek=function(t){if(ready&&player){seekPausePending=false;player.seekTo(t,true);player.playVideo();}};
+window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.seekTo(t,true);player.playVideo();if(window._sp)clearInterval(window._sp);var k=0;window._sp=setInterval(function(){if(!seekPausePending||!player){clearInterval(window._sp);window._sp=null;return;}var s=(player.getPlayerState?player.getPlayerState():-1);var now=(player.getCurrentTime?player.getCurrentTime():t);if(s==1||now>t+0.03){player.pauseVideo();}if(++k>=40){clearInterval(window._sp);window._sp=null;}},50);}};
 </script></body></html>
 """;
 
@@ -1056,8 +1068,8 @@ window.li_seek_pause=function(t){if(ready&&player){player.seekTo(t,true);player.
                 _ = UpdateCurrentVideoTitleAsync(); // epic #145 增量4：就緒後自播放器取標題回寫影片清單
                 ShowCue(0);                         // 顯示第一句＋啟用控制鈕（不自動播放）
                 SetStatus(_isAuto
-                    ? $"{_cues.Count} auto-generated lines — press ▶ Continue or double-click a line to play (pauses at each line)."
-                    : $"{_cues.Count} lines loaded — press ▶ Continue or double-click a line to play (pauses at each line).");
+                    ? $"{_cues.Count} auto-generated lines — press ▶ Continue to play (pauses at each line), or double-click a line to jump there (paused)."
+                    : $"{_cues.Count} lines loaded — press ▶ Continue to play (pauses at each line), or double-click a line to jump there (paused).");
             }
 
             var pause = PauseDecider.NextPause(t, _cues, _lastPausedIndex, pauseSpeaker: _pauseSpeaker, pauseNoSpeaker: _pauseNoSpeaker); // 指定說話人（或未標示者）才暫停（增量7／#189）
@@ -1164,10 +1176,17 @@ window.li_seek_pause=function(t){if(ready&&player){player.seekTo(t,true);player.
         var dep = System.Windows.Input.Mouse.DirectlyOver as System.Windows.DependencyObject;
         while (dep is not null and not System.Windows.Controls.ListBoxItem)
         {
-            dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
+            dep = VisualOrLogicalParent(dep);
         }
         return (dep as System.Windows.Controls.ListBoxItem)?.DataContext as CueRow;
     }
+
+    /// <summary>取父節點，可跨 Visual 與 ContentElement：點在字幕之 <c>Run</c>（ContentElement，非 Visual）上時，
+    /// <see cref="System.Windows.Media.VisualTreeHelper.GetParent"/> 會擲「not a Visual」——故 Visual/Visual3D 走視覺樹、其餘（Run/Inline 等）走邏輯樹（Run 之邏輯父為所屬 TextBlock，回到視覺樹）。</summary>
+    private static System.Windows.DependencyObject? VisualOrLogicalParent(System.Windows.DependencyObject d)
+        => d is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
+            ? System.Windows.Media.VisualTreeHelper.GetParent(d)
+            : System.Windows.LogicalTreeHelper.GetParent(d);
 
     /// <summary>快速指定/修正某句說話人（#189）：改該句 Speaker（null／空＝清除為 unknown）、**就地更新該列**（不重建清單→不跳捲軸）、存檔、同步篩選/暫停下拉，當前句則重繪字幕帶。</summary>
     private void AssignSpeaker(CueRow row, string? speaker)
@@ -1277,9 +1296,9 @@ window.li_seek_pause=function(t){if(ready&&player){player.seekTo(t,true);player.
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern uint GetDoubleClickTime(); // 系統雙擊判定時間（ms），供區分字幕清單單擊/雙擊（#173）
+    private static extern uint GetDoubleClickTime(); // 系統雙擊判定時間（ms），供區分字幕清單單擊/雙擊
 
-    /// <summary>字幕清單單擊：切換播放/暫停（依播放器實際狀態，依此循環，#173）；未就緒／無字幕／YAML 編修中則忽略。</summary>
+    /// <summary>字幕清單單擊**已選中**之句：切換播放/暫停（依播放器實際狀態）；未就緒／無字幕／YAML 編修中則忽略。</summary>
     private async Task TogglePlayPauseAsync()
     {
         if (!_webReady || _cues.Count == 0 || _yamlEditing) { return; }
@@ -1296,11 +1315,12 @@ window.li_seek_pause=function(t){if(ready&&player){player.seekTo(t,true);player.
         await SeekAsync(_cues[next].StartSec);
     }
 
-    /// <summary>雙擊字幕句→**跳到該句起點並暫停**（#189：只定位不自動播放；之後按 ▶ Continue 才自該句起播、到句末暫停）。</summary>
+    /// <summary>雙擊字幕句→**跳到該句起點、暫停並顯示該處畫面**（只定位不續播；之後按 ▶ Continue 才自該句起播、到句末暫停）。</summary>
     private async Task JumpToSelectedAsync()
     {
         if (CueList.SelectedItem is not CueRow row || !_webReady) return;
         var i = row.Index;
+        if (i < 0 || i >= _cues.Count) return;
         _lastPausedIndex = i - 1; // 之後 Continue＝自此句起點播、到句末暫停（不影響本次「只定位不播」）
         ShowCue(i);
         await SeekPauseAsync(_cues[i].StartSec);
