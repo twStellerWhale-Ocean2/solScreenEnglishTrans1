@@ -27,13 +27,14 @@ public sealed class VideoSubtitleStatusStore
     public const string WebFound = "found";
     public const string WebNone = "none";
 
-    /// <summary>單支影片之字幕狀態：內嵌人工/自動（bool?，null＝尚未探測成功）、網路（found/none/null）＋來源。</summary>
+    /// <summary>單支影片之字幕狀態：內嵌人工/自動（bool?，null＝尚未探測成功）、網路（found/none/null）＋來源描述＋字幕檔原始 URL（#182）。</summary>
     public sealed class Entry
     {
         [JsonPropertyName("manual")] public bool? Manual { get; set; }
         [JsonPropertyName("auto")] public bool? Auto { get; set; }
         [JsonPropertyName("web")] public string? Web { get; set; }        // "found" | "none" | null（未查）
         [JsonPropertyName("webSource")] public string? WebSource { get; set; }
+        [JsonPropertyName("transcriptUrl")] public string? TranscriptUrl { get; set; } // 字幕檔原始 URL（#182）：供表格 Web 欄超連結（增量3）、主從合成之逐字稿來源（增量5）
     }
 
     /// <summary>讀出 VideoId→狀態；缺檔或格式毀損 → 空、不致命。</summary>
@@ -69,12 +70,12 @@ public sealed class VideoSubtitleStatusStore
         TrySave(map);
     }
 
-    /// <summary>記/更新網路字幕探測結果（保留既有內嵌部分）；寫入失敗靜默降級。</summary>
-    public void SaveWeb(string videoId, bool found, string? source)
+    /// <summary>記/更新網路字幕探測結果（保留既有內嵌部分）；<paramref name="transcriptUrl"/>＝字幕檔原始 URL（#182，found 才留）；寫入失敗靜默降級。</summary>
+    public void SaveWeb(string videoId, bool found, string? source, string? transcriptUrl = null)
     {
         if (string.IsNullOrEmpty(videoId)) { return; }
         var map = Load();
-        MergeWeb(map, videoId, found, source);
+        MergeWeb(map, videoId, found, source, transcriptUrl);
         TrySave(map);
     }
 
@@ -89,12 +90,13 @@ public sealed class VideoSubtitleStatusStore
         return map;
     }
 
-    /// <summary>純函式：更新網路部分（found/none＋來源），保留既有內嵌部分。回傳同一 <paramref name="map"/>（就地更新）。</summary>
-    internal static Dictionary<string, Entry> MergeWeb(Dictionary<string, Entry> map, string videoId, bool found, string? source)
+    /// <summary>純函式：更新網路部分（found/none＋來源描述＋字幕檔原始 URL，#182），保留既有內嵌部分。無結果（none）不留來源與 URL。回傳同一 <paramref name="map"/>（就地更新）。</summary>
+    internal static Dictionary<string, Entry> MergeWeb(Dictionary<string, Entry> map, string videoId, bool found, string? source, string? transcriptUrl = null)
     {
         if (!map.TryGetValue(videoId, out var e)) { e = new Entry(); map[videoId] = e; }
         e.Web = found ? WebFound : WebNone;
         e.WebSource = found ? source : null;
+        e.TranscriptUrl = found ? transcriptUrl : null;
         return map;
     }
 

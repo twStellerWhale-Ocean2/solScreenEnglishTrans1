@@ -53,6 +53,31 @@ public class VideoSubtitleStatusStoreTests
         Assert.Null(map["v"].WebSource); // 無結果不留來源
     }
 
+    [Fact]
+    public void MergeWeb_Found_KeepsTranscriptUrl_None_ClearsIt()
+    {
+        var map = new Dictionary<string, VideoSubtitleStatusStore.Entry>();
+        VideoSubtitleStatusStore.MergeWeb(map, "v", found: true, source: "PAW Patrol Wiki", transcriptUrl: "https://scripts.example.com/ep1");
+        Assert.Equal("https://scripts.example.com/ep1", map["v"].TranscriptUrl); // #182：字幕檔原始 URL 帶入
+        VideoSubtitleStatusStore.MergeWeb(map, "v", found: false, source: null, transcriptUrl: "https://ignored");
+        Assert.Null(map["v"].TranscriptUrl); // 無結果不留 URL
+    }
+
+    [Fact]
+    public void SaveWeb_TranscriptUrl_RoundTrips()
+    {
+        var path = TempPath();
+        try
+        {
+            var store = new VideoSubtitleStatusStore(path);
+            store.SaveWeb("v", found: true, source: "site", transcriptUrl: "https://scripts.example.com/ep1");
+            var e = store.Get("v")!;
+            Assert.Equal(VideoSubtitleStatusStore.WebFound, e.Web);
+            Assert.Equal("https://scripts.example.com/ep1", e.TranscriptUrl); // #182：存檔往返保留字幕檔原始 URL
+        }
+        finally { File.Delete(path); }
+    }
+
     // ── 檔案往返 ──
 
     [Fact]

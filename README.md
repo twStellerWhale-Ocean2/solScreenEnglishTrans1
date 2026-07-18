@@ -176,7 +176,13 @@
 ![影片頁「獲得」子頁（v3.0.0）：找片入口收斂為單一「由逐字稿」（Find videos that have a transcript）；原「依關鍵字」「貼網址」兩路子頁籤已不見](docs/manual-assets/video-acquire-transcript.png)
 
 ![影片頁「內容」子頁（v3.0.0）：載入影片後右側字幕區只剩來源顯示、🎙 Voice、📁＋📝 Edit YAML——原「🧠 AI／🌐 Script」講話人補強整列已移除](docs/manual-assets/video-content-rows.png)
-- **後續增量**：把「由逐字稿」入口改為**貼字幕檔網址**（AI 解析驗證含說話人再配 YouTube）、字幕改以**逐字稿為主**重建說話人與斷句、搜尋結果表 Web 欄改超連結字幕檔、無時間來源時以 Whisper 補時間（詳 epic #178）。
+
+- **增量 2〔由逐字稿改造〕（#182，v3.1.0）**：「由逐字稿」入口由「輸入主題」改為**貼字幕檔網站／網址**（站台無關）——可貼單一逐字稿頁，或**一頁列多份逐字稿連結的目錄頁**。以 OpenAI `web_search`（gpt-4.1）**兩階段**處理：先讀輸入頁列出各逐字稿連結、再逐支開啟驗證**含說話人**、配對 YouTube。可設 **Find up to N** 找片上限、勾 **Skip videos I already have** 只看新的；字幕檔原始 URL 隨候選帶入（供後續增量）。
+  > **目前限制（增量 5 解除）**：找到的影片仍需**有 YouTube 內嵌字幕（manual/auto）才能載入**——app 現階段靠 yt-dlp 字幕取得時間軸，逐字稿只提供說話人。因此配到「無字幕上傳版」的影片會被濾掉、結果可能偏少。增量 5（逐字稿當字幕主體、時間另補）將解除此限制，讓任何找到的影片都能用。
+
+![影片頁「獲得」子頁（v3.1.0）：入口改「Load videos from a subtitle page」貼字幕檔網址；下方 Find up to N 找片上限＋Skip videos I already have](docs/manual-assets/video-acquire-subtitle-url.png)
+
+- **後續增量**：字幕改以**逐字稿為主**重建說話人與斷句、並讓無 YouTube 字幕之影片亦可用（增量 5）；搜尋結果表 Web 欄改超連結字幕檔（增量 3）；無時間來源時以 Whisper 補時間（增量 6）（詳 epic #178）。
 
 > 需要：本機 `yt-dlp`（同字幕擷取）與網路連線；搜尋只列清單、不下載影片，縮圖取自 YouTube 縮圖。
 

@@ -58,32 +58,35 @@
         <StackPanel>
           <TextBlock Text="Load a video" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}" Margin="0,0,0,8"/>
 
-          <!-- 由逐字稿（#189；#180 起為唯一獲得路）：先上網找「有公開逐字稿可用」之影片、再定位到 YouTube，成果列於下方成果區塊。用 OpenAI（gpt-4.1 web_search），跑前確認費用。
-               #180 清理：移除「由關鍵字」「由網址」獲得路與獲取路徑子頁籤列；本面板恆顯。 -->
+          <!-- 由字幕檔網址（epic #178 增量2，#182；唯一獲得路）：貼字幕檔網站／網址→AI 解析驗證含說話人→配 YouTube，成果列於下方成果區塊。
+               用 OpenAI（gpt-4.1 web_search），跑前確認費用。輸入可為單一字幕檔頁 或 列多份字幕檔連結之目錄頁（站台無關）。 -->
           <StackPanel x:Name="AcqPaneTranscript">
-            <TextBlock Text="Find videos that have a transcript" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
-            <TextBlock Text="Enter a topic — LingoIsland searches the web for videos whose full transcript (with speakers) is published online (manual subtitles carry speaker tags). Uses your OpenAI key; confirms cost first."
+            <TextBlock Text="Load videos from a subtitle page" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
+            <TextBlock Text="Paste a subtitle-file URL — a single transcript page, or an index page that lists several. LingoIsland reads it, keeps the ones that name a speaker, and matches each to its YouTube video. Uses your OpenAI key; confirms cost first."
                        Foreground="#9A6A82" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,6"/>
             <Grid>
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
               </Grid.ColumnDefinitions>
-              <!-- 逐字稿主題框：可編輯 ComboBox，下拉顯示主題歷史（比照關鍵字框 #186）；↑↓ 選、Delete 刪該筆 -->
+              <!-- 字幕檔網址框：可編輯 ComboBox，下拉顯示字幕檔網址歷史（比照關鍵字框 #186）；↑↓ 選、Delete 刪該筆 -->
               <ComboBox x:Name="TranscriptBox" Grid.Column="0" Height="30" IsEditable="True" StaysOpenOnEdit="True"
                         IsTextSearchEnabled="False" VerticalContentAlignment="Center" Padding="6,0"
-                        ToolTip="Enter a topic (or pick from history); ↑↓ then Delete removes a history entry"/>
+                        ToolTip="Paste a subtitle-file URL (or pick from history); ↑↓ then Delete removes a history entry"/>
               <Button x:Name="TranscriptSearchBtn" Grid.Column="1" Content="&#x1F4C4; Find" Width="100" Height="30" Margin="8,0,0,0"/>
             </Grid>
-            <!-- 自動網搜前 N 筆（#184；#180 自「由關鍵字」搬入，x:Name 不變）：找到影片後對推薦前 N 列自動上網確認逐字稿（花額度） -->
+            <!-- 找片選項（epic #178 增量2，#182）：Find up to N＝一次最多解析/驗證幾份字幕檔（花額度、控管筆數）；Skip existing＝濾掉已在影片清單者 -->
             <StackPanel Orientation="Horizontal" Margin="0,6,0,0" VerticalAlignment="Center">
-              <CheckBox x:Name="AutoWebCheck" Content="Auto web-check top" IsChecked="True" VerticalAlignment="Center" Foreground="#B0578D"
-                        ToolTip="After a search, auto-check web transcripts for the top-N results by Pick score (uses your OpenAI key — costs a small fee each)"/>
-              <ComboBox x:Name="AutoWebCount" Width="50" Height="26" Margin="4,0,0,0" VerticalContentAlignment="Center" ToolTip="How many top results to auto-check">
+              <TextBlock Text="Find up to" VerticalAlignment="Center" Foreground="#B0578D"/>
+              <ComboBox x:Name="FindMaxCount" Width="50" Height="26" Margin="4,0,0,0" VerticalContentAlignment="Center"
+                        ToolTip="How many subtitle files to read and verify at most (each uses your OpenAI key)">
                 <ComboBoxItem Content="3"/>
                 <ComboBoxItem Content="5" IsSelected="True"/>
                 <ComboBoxItem Content="10"/>
               </ComboBox>
+              <CheckBox x:Name="SkipExistingVideos" Content="Skip videos I already have" IsChecked="False" VerticalAlignment="Center"
+                        Foreground="#B0578D" Margin="16,0,0,0"
+                        ToolTip="Leave out matches that are already in your Videos list"/>
             </StackPanel>
           </StackPanel>
 
@@ -267,7 +270,7 @@
                        HorizontalContentAlignment="Stretch"
                        ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                        ToolTip="Click to load; right-click or press Delete to remove"/>
-              <TextBlock x:Name="VideoEmptyHint" Text="No videos yet. Find one by transcript under Acquire."
+              <TextBlock x:Name="VideoEmptyHint" Text="No videos yet. Paste a subtitle-file URL under Acquire."
                          Foreground="#9A6A82" FontSize="12" TextWrapping="Wrap" MaxWidth="160"
                          TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Grid>
@@ -446,6 +449,6 @@
 
     <!-- 共用狀態列（#177）：兩子頁皆可見；載入/錯誤訊息不因切到內容頁而被遮 -->
     <TextBlock x:Name="StatusText" Grid.Row="2" Margin="4,6,4,0" FontSize="12" Foreground="#B0578D" TextWrapping="Wrap"
-               Text="Find a video by transcript under Acquire, then Load a result."/>
+               Text="Paste a subtitle-file URL under Acquire, then Load a result."/>
   </Grid>
 </UserControl>

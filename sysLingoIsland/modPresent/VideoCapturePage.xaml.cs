@@ -26,12 +26,12 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private readonly IWebTranscriptProbe _webProbe;                // 網路字幕可用性探測（#177）：搜尋結果表格「網路字幕」欄按需查（只跑 find 一步、便宜）
     private readonly IVideoSearcher _searcher;                     // 依關鍵字搜尋 YouTube（#171）
     private readonly IAudioTranscriber _transcriber;               // Whisper 音訊轉錄（#187）：抓真實聲音重轉字幕、修時間漂移；會用 API＋下載音訊、按鈕觸發、跑前確認費用
-    private readonly ITranscriptVideoFinder _finder;                // #189 獲得頁「由逐字稿找影片」：web_search 找有逐字稿之影片、再定位；會用 API、按鈕觸發、跑前確認費用
+    private readonly ITranscriptVideoFinder _finder;                // 由字幕檔網址配影片（epic #178 增量2，#182）：web_search 解析字幕檔網址、驗證含說話人、配 YouTube；會用 API、按鈕觸發、跑前確認費用
     private readonly SubtitleStore _subs;                          // 字幕存檔：免重抓、保留說話人/YAML 編修（#174）
     private List<SearchRow> _searchRows = new();                   // 搜尋結果表格資料（#177）：縮圖/名稱/連結/片長/三種字幕狀態
     private System.Windows.Data.ListCollectionView? _searchView;   // 可過濾/預設排序之檢視（#177）；點表頭排序由 DataGrid 內建接手
     private readonly SearchHistoryStore _searchHistory = new();     // 搜尋關鍵字歷史（#186）：搜尋框下拉、可刪
-    private readonly SearchHistoryStore _transcriptHistory = new(Path.Combine( // 由逐字稿主題歷史（#189）：與關鍵字分開存，逐字稿框下拉、可刪
+    private readonly SearchHistoryStore _transcriptHistory = new(Path.Combine( // 字幕檔網址歷史（epic #178 增量2，#182；機制沿用主題歷史、語意改為「貼過的字幕檔網址」）：字幕檔網址框下拉、可刪
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LingoIsland", "video-transcript-history.json"));
     private readonly SearchResultRecordStore _searchRecords = new();// 搜尋成果初次時間紀錄（#186）：First-seen 欄
     private readonly VideoSubtitleStatusStore _statusStore = new();  // 字幕狀態快取（#188）：還原已探測之 Manual/Auto/Web，重搜同片免重探/免重花額度
@@ -101,9 +101,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _cueClickTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(GetDoubleClickTime()) };
         _cueClickTimer.Tick += (_, _) => { _cueClickTimer.Stop(); if (_cueClickWasSelected) { _ = TogglePlayPauseAsync(); } }; // 單擊逾時未等到雙擊：已選中之句→播/暫停切換；未選中者僅選取（不動作）
 
-        // 由逐字稿找影片（#189）：Find／Enter → 上網找有逐字稿之影片、定位後列於成果區塊（花 OpenAI 額度、跑前確認費用）
+        // 由字幕檔網址配影片（epic #178 增量2，#182）：Find／Enter → 解析字幕檔網址、驗證含說話人、配 YouTube，定位後列於成果區塊（花 OpenAI 額度、跑前確認費用）
         TranscriptSearchBtn.Click += (_, _) => DoTranscriptSearch();
-        TranscriptBox.DropDownOpened += (_, _) => TranscriptBox.ItemsSource = _transcriptHistory.Load(); // 開下拉填入主題歷史（比照關鍵字框）
+        TranscriptBox.DropDownOpened += (_, _) => TranscriptBox.ItemsSource = _transcriptHistory.Load(); // 開下拉填入字幕檔網址歷史（比照關鍵字框）
         TranscriptBox.PreviewKeyDown += OnTranscriptBoxKey;                                               // Enter 搜尋、Delete 刪選中歷史
         // 右側子頁籤（#177 版面重整）：搜尋下載 / 播放學習，以可見性切換（WebView2 不被卸載重建）
         SubTabSearch.Checked += (_, _) => ShowSubTab(showSearch: true);
@@ -451,40 +451,48 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         }
     }
 
-    private const int TranscriptFindCount = 8; // 「由逐字稿找影片」一次 web_search 找最多 N 支（花額度、控管筆數）
+    /// <summary>找片上限選項值（#182 Q2-a：Find up to N，3/5/10；預設 5、界 1–20）：目錄頁一次最多解析/驗證幾份字幕檔連結（花額度、控管筆數）。</summary>
+    private int FindMaxValue()
+    {
+        var s = (FindMaxCount.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content as string;
+        return int.TryParse(s, out var n) ? Math.Clamp(n, 1, 20) : 5;
+    }
 
     /// <summary>
-    /// 「由逐字稿找影片」（#189 獲得頁重構「由逐字稿」子頁）：以 OpenAI <c>web_search</c> 找「該主題有公開逐字稿可用」之影片候選，
-    /// 模型未給明確 ID 者以 yt-dlp 依標題定位，去重後列於成果區塊；並把這些影片之網路字幕狀態**預存為 found**（#188 快取）——
-    /// 成果區塊 Web 欄即顯 ✓、載入後 🌐 Script 補說話人可用、自動網搜略過（免重花）。花 OpenAI 額度、模態顯進度與費用；空主題／取消／失敗以狀態列回報。
+    /// 「由字幕檔網址配影片」（epic #178 增量2，#182）：以 OpenAI <c>web_search</c> 解析使用者所貼之字幕檔網站／網址——
+    /// 單一字幕檔頁 或 列多份字幕檔連結之目錄頁——逐一驗證含說話人、去重濾失效，配對 YouTube 影片；模型未給明確 ID 者以 yt-dlp 依標題定位，
+    /// 濾合輯、篩可載入後列於成果區塊。字幕檔已驗證含說話人→Web 欄直接標 ✓、**字幕檔原始 URL 隨候選帶進 <see cref="SearchRow"/> 與 <c>_statusStore</c>**
+    /// （供增量3 Web 欄超連結、增量5 主從來源）。花 OpenAI 額度、模態顯進度與費用；空網址／取消／失敗以狀態列回報。
     /// </summary>
     private void DoTranscriptSearch()
     {
-        var topic = TranscriptBox.Text?.Trim() ?? "";
-        if (topic.Length == 0) { SetStatus("Enter a topic to find videos that have a transcript."); return; }
-        if (!ConfirmAiRun("Find videos with a transcript",
-            $"上網找「{topic}」有逐字稿可用的影片（OpenAI gpt-4.1 網搜）。\n找到後會依 Auto web-check 設定逐列上網確認有無逐字稿（費用另計、顯於狀態列）。",
-            EstimateWebSearchCallUsd())) { return; } // #189：跑前確認估價＋本日/小時
-        _transcriptHistory.Add(topic);          // #189：記入主題歷史（置頂去重、下拉可選/可刪）
+        var url = TranscriptBox.Text?.Trim() ?? "";
+        if (url.Length == 0) { SetStatus("Paste a subtitle-file URL to find its matching videos."); return; }
+        if (!ConfirmAiRun("Read subtitle page",
+            $"上網打開字幕檔網址並解析驗證含說話人，配對 YouTube 影片（OpenAI gpt-4.1 網搜）：\n{Truncate(url, 80)}",
+            EstimateWebSearchCallUsd())) { return; } // #182：跑前確認估價＋本日/小時
+        _transcriptHistory.Add(url);            // #182：記入字幕檔網址歷史（置頂去重、下拉可選/可刪）
         TranscriptBox.IsDropDownOpen = false;
         _searchCts?.Cancel();
-        _searchCts = new CancellationTokenSource();                 // 背景探測/自動網搜用（新搜尋取消）
-        var themeForAi = ThemeStore.GetActive(_themes.Load())?.Name; // 縮小網搜範圍
-        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Find videos with a transcript",
+        _searchCts = new CancellationTokenSource();                 // 背景探測用（新搜尋取消）
+        var themeForAi = ThemeStore.GetActive(_themes.Load())?.Name; // 供配對參考
+        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Read subtitle page",
             async (report, ct) =>
             {
                 var progress = new System.Progress<string>(s => report(s));
-                var find = await _finder.FindAsync(topic, TranscriptFindCount, progress, ct, themeForAi);
-                _spendLedger.Record(find.Usages.Sum(u => AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0), DateTimeOffset.Now); // #189 記帳
+                var find = await _finder.FindAsync(url, FindMaxValue(), progress, ct, themeForAi);
+                _spendLedger.Record(find.Usages.Sum(u => AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0), DateTimeOffset.Now); // #182 記帳
                 if (find.Candidates.Count == 0)
                 {
-                    SetStatus("No videos with a usable transcript found — try a broader topic, or use the keyword tab.");
+                    SetStatus("No subtitle file with a visible speaker was found on that page — check the URL, or try an index page that lists transcripts.");
                     return TranscriptCost(find.Usages);
                 }
                 // 定位每支影片：優先模型給的 11 碼 ID，否則以標題 yt-dlp 取前 3、挑**非合輯**者；濾掉合輯／長片彙編
-                // （「& MORE」「compilation」等——那類沒有單一乾淨逐字稿、Script 對不上，實測 not-usable 主因之一）；去重
+                // （「& MORE」「compilation」等——那類沒有單一乾淨逐字稿、對不上，實測 not-usable 主因之一）；去重。
+                // 同時記下每支定位到之影片對應的字幕檔來源與**原始 URL**（#182：帶進快取／SearchRow）。
                 report($"Locating {find.Candidates.Count} video(s) on YouTube…");
                 var located = new List<VideoSearchResult>();
+                var metaByVideoId = new Dictionary<string, (string Source, string? Url)>(StringComparer.Ordinal);
                 var seen = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var c in find.Candidates)
                 {
@@ -506,9 +514,28 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                     }
                     if (id is null || LooksLikeCompilation(title) || !seen.Add(id)) { continue; } // 定位到合輯也濾掉
                     located.Add(new VideoSearchResult(id, title, dur));
+                    metaByVideoId[id] = (c.Source, c.TranscriptUrl);   // #182：字幕檔來源描述＋原始 URL
+                }
+                // #182 增量2（Q2-b）：略過已在影片清單者（預設開）——定位出 VideoId 後即濾，免使用者重複載入已收錄影片。
+                // 語意：「Find up to N」限的是解析/驗證之字幕檔筆數（花額度那步），skip 為定位後之後濾，故最終顯示可能少於 N（不回頭多湊）。
+                var skippedExisting = 0;
+                if (SkipExistingVideos.IsChecked == true && located.Count > 0)
+                {
+                    var owned = new HashSet<string>(_videoStore.Load().Items.Select(i => i.VideoId), StringComparer.Ordinal);
+                    var before = located.Count;
+                    located = located.Where(v => !owned.Contains(v.VideoId)).ToList();
+                    skippedExisting = before - located.Count;
+                    if (skippedExisting > 0) { report($"Skipped {skippedExisting} already in your list…"); }
+                }
+                if (located.Count == 0)
+                {
+                    SetStatus(skippedExisting > 0
+                        ? $"All matched video(s) are already in your list — skipped {skippedExisting}, nothing new to add."
+                        : "Read the subtitle page, but couldn't match any usable videos on YouTube.");
+                    return TranscriptCost(find.Usages);
                 }
                 // **只留可載入者**（實測修）：免費探測內嵌 YT 字幕；無 manual/auto 之影片本 app 載不進來
-                // （例如某整集 YouTube 上無任何字幕——網路 Fandom 逐字稿無時間軸、不足以載入），先濾掉免使用者白載。並存快取供 PopulateResults 直接還原。
+                // （例如某整集 YouTube 上無任何字幕——網路逐字稿無時間軸、不足以載入），先濾掉免使用者白載。並存快取供 PopulateResults 直接還原。
                 report($"Checking which of {located.Count} have usable YouTube subtitles…");
                 var loadable = new List<VideoSearchResult>();
                 using (var gate = new SemaphoreSlim(4))
@@ -533,16 +560,19 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                 }
                 if (loadable.Count == 0)
                 {
-                    SetStatus("Found transcript sources, but the matching videos have no usable YouTube subtitles to load — try a more specific topic or the keyword tab.");
+                    SetStatus("Read the subtitle page, but the matching videos have no usable YouTube subtitles to load — try a more specific transcript URL.");
                     return TranscriptCost(find.Usages);
                 }
-                // **不再盲目預存 Web=found**（實測發現那會謊報「有逐字稿」但載入後 🌐 Script 其實對不上）。
-                // Web 欄改由一般路徑**真實確認**：PopulateResults 依 Auto web-check 設定對推薦前 N 列真上網探測標 ✓/✗；或使用者手動「🌐 Check」。
+                // #182：字幕檔已由 finder 驗證含說話人→Web 欄直接標 found，**字幕檔原始 URL 帶進 _statusStore**（供 RestoreCachedStatus 還原到 SearchRow、增量3 Web 欄超連結）。
+                // 不再走 topic 式 Auto web-check 重探（那會重花額度、又對不上——finder 已確認）。
+                foreach (var v in loadable)
+                {
+                    var meta = metaByVideoId.TryGetValue(v.VideoId, out var m) ? m : (Source: "", Url: (string?)null);
+                    _statusStore.SaveWeb(v.VideoId, found: true, source: meta.Source, transcriptUrl: meta.Url);
+                }
                 PopulateResults(loadable);
-                var note = AutoWebCheck.IsChecked == true
-                    ? "confirming web transcripts for the top results now (cost shown in status)…"
-                    : "click 🌐 Check on a row to confirm its transcript (or turn on Auto web-check).";
-                SetStatus($"{loadable.Count} loadable video(s) with subtitles — {note}");
+                var skipNote = skippedExisting > 0 ? $" (skipped {skippedExisting} already in your list)" : "";
+                SetStatus($"{loadable.Count} video(s) matched from the subtitle page — each transcript has a speaker{skipNote}. Load a result to start.");
                 return TranscriptCost(find.Usages);
             });
     }
@@ -587,7 +617,12 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         {
             if (!map.TryGetValue(row.VideoId, out var e)) { continue; }
             if (e.Manual.HasValue && e.Auto.HasValue) { row.SetEmbedded(e.Manual.Value, e.Auto.Value); } // 停 spinner、即時徽章
-            if (e.Web == VideoSubtitleStatusStore.WebFound) { row.SetWebResult("✓", EmbBlue, "Web transcript: " + Truncate(e.WebSource ?? "", 60), found: true); }
+            if (e.Web == VideoSubtitleStatusStore.WebFound)
+            {
+                row.SetTranscriptUrl(e.TranscriptUrl); // #182：字幕檔原始 URL 還原到列（供增量3 Web 欄超連結、載入時帶入內容區塊）
+                var label = !string.IsNullOrWhiteSpace(e.TranscriptUrl) ? e.TranscriptUrl! : (e.WebSource ?? "");
+                row.SetWebResult("✓", EmbBlue, "Subtitle file: " + Truncate(label, 60), found: true);
+            }
             else if (e.Web == VideoSubtitleStatusStore.WebNone) { row.SetWebResult("✗", EmbGray, "No web transcript found", found: false); }
         }
     }
@@ -620,57 +655,6 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                 .Select(r => (r.VideoId, r.ManualRank == 1, r.AutoRank == 1)));
             try { _searchView?.Refresh(); } catch { /* 重整盡力 */ } // 探測落定→依更新後推薦分重排（非即時、免逐列跳動）
         }
-        // 預設開啟自動網搜（#184，USR 選「只查前幾筆」）：探測落定、推薦排名反映字幕後，對推薦分前 N 列自動網搜（花額度、背景、無模態）
-        if (!ct.IsCancellationRequested && AutoWebCheck.IsChecked == true)
-        {
-            await AutoCheckWebTopAsync(rows, AutoWebCountValue(), ct);
-        }
-    }
-
-    /// <summary>自動網搜筆數選項值（3/5/10；預設 5、界 1–20）。</summary>
-    private int AutoWebCountValue()
-    {
-        var s = (AutoWebCount.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content as string;
-        return int.TryParse(s, out var n) ? Math.Clamp(n, 1, 20) : 5;
-    }
-
-    /// <summary>
-    /// 自動網搜推薦分前 <paramref name="topN"/> 列（#184）：只查尚未查者、逐一（不模態）、累計費用以台幣顯示於狀態列。
-    /// 無金鑰則略過；新搜尋（ct 取消）即止；個別失敗還原該列供手動再試。
-    /// </summary>
-    private async Task AutoCheckWebTopAsync(IReadOnlyList<SearchRow> rows, int topN, CancellationToken ct)
-    {
-        var targets = rows.Where(r => r.WebRank == 0)                                   // 未查過者
-                          .OrderByDescending(r => r.RecommendScore).ThenBy(r => r.DurationSec ?? int.MaxValue)
-                          .Take(topN).ToList();
-        if (targets.Count == 0) { return; }
-        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("OPENAI_API_KEY")))
-        {
-            SetStatus("Auto web-check skipped — OPENAI_API_KEY not set. Set it and restart to use web lookup.");
-            return;
-        }
-        var themeForAi = ThemeStore.GetActive(_themes.Load())?.Name;
-        double usd = 0; var done = 0;
-        foreach (var row in targets)
-        {
-            if (ct.IsCancellationRequested) { return; }
-            row.SetWebChecking();
-            try
-            {
-                var result = await _webProbe.ProbeAsync(row.Title, null, ct, themeForAi);
-                if (result.Found) { row.SetWebResult("✓", EmbBlue, "Web transcript: " + Truncate(result.Source, 60), found: true); }
-                else { row.SetWebResult("✗", EmbGray, "No web transcript found", found: false); }
-                _statusStore.SaveWeb(row.VideoId, result.Found, result.Source); // #188：存網路結果——重搜同片不再重花額度
-                var itemUsd = result.Usages.Sum(u => AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0);
-                usd += itemUsd;
-                _spendLedger.Record(itemUsd, DateTimeOffset.Now); // #189：花費記帳（逐列，取消時已花部分仍入帳）
-                done++;
-                SetStatus($"Auto web-check {done}/{targets.Count} — 約 NT${AiCost.ToTwd(usd):0.##} so far…");
-            }
-            catch (OperationCanceledException) { return; }
-            catch (Exception) { row.ResetWebButton(); } // 失敗→還原，可手動再查
-        }
-        SetStatus($"Auto web-check done — {done} checked，估算約 NT${AiCost.ToTwd(usd):0.##}（含網搜費，估算；匯率約 US$1≈NT${AiCost.UsdToTwd:0}）。");
     }
 
     /// <summary>預設排序（#177）：推薦分遞減、同分短片優先。使用者點 DataGrid 表頭排序時由 DataGrid 接手覆寫。</summary>
@@ -1546,6 +1530,11 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         public int? DurationSec { get; }            // 排序鍵（片長，秒；未知＝null 排末）
         public string DurationText { get; }         // 顯示（m:ss／h:mm:ss／—）
         public string FirstSeen { get; }            // 初次搜尋時間（#186）：yyyy-MM-dd HH:mm，字串即可排序
+
+        // 字幕檔原始 URL（#182）：由字幕檔網址配得之影片帶入；語意＝可導覽之連結（與 Web 徽章之來源描述分清）。供增量3 表格 Web 欄超連結、增量5 主從合成之逐字稿來源。
+        private string? _transcriptUrl;
+        public string? TranscriptUrl { get => _transcriptUrl; private set { _transcriptUrl = value; On(); } }
+        public void SetTranscriptUrl(string? url) => TranscriptUrl = url;
 
         public SearchRow(string videoId, string title, int? durationSec, DateTimeOffset firstSeen)
         {
