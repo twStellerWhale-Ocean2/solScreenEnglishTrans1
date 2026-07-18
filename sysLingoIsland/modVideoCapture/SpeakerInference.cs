@@ -4,86 +4,13 @@ using System.Text.Json;
 namespace LingoIsland.Video;
 
 /// <summary>
-/// 說話人推斷之純函式（[modVideoCapture模組]，epic #145 增量6，#156）：組推斷提示、解析 OpenAI 回應為
-/// 逐句說話人、非破壞疊加回 cue。不依賴網路／UI，可單元測試；HTTP 由 <see cref="OpenAiSpeakerEnricher"/> 負責。
-/// **推斷來源為台詞文字＋常識、非觀看畫面**——標註為推斷、非 ground truth。
+/// 說話人解析之純函式（[modVideoCapture模組]，epic #145 增量6b，#145 §D）：解析 OpenAI（Responses API＋web_search）
+/// 回應為逐句說話人、組逐字稿 find／align 提示、非破壞疊加回 cue。不依賴網路／UI，可單元測試；HTTP 由 <see cref="OpenAiWebSpeakerEnricher"/> 負責。
+/// **來源為網路逐字稿對照、非觀看畫面**——標註為推斷、非 ground truth。
 /// </summary>
 public static class SpeakerInference
 {
-    /// <summary>組逐句編號之推斷提示（含可選影片標題／所屬主題輔助判斷角色）；要求回 <c>{"speakers":[...]}</c> 依序對應。</summary>
-    public static string BuildPrompt(IReadOnlyList<SubtitleCue> cues, string? videoTitle, string? videoTheme = null)
-    {
-        var sb = new StringBuilder();
-        sb.Append("下面是一支影片的英文字幕逐句（已編號，共 ").Append(cues.Count).Append(" 句）。請依對話內容與常識，推斷每一句最可能的說話者");
-        sb.Append("（**具體**角色名或人名，非群體名如「PAW Patrol」，除非真的無法判斷）。這是根據台詞文字的推斷、非觀看畫面。");
-        sb.Append("非台詞之句（音效／音樂／掌聲等，如 [music]、[applause]、[laughs]、純狀聲）與無法判斷者，一律回空字串。");
-        if (!string.IsNullOrWhiteSpace(videoTitle))
-        {
-            sb.Append("\n影片標題（輔助判斷角色）：").Append(videoTitle.Trim());
-        }
-        if (!string.IsNullOrWhiteSpace(videoTheme))
-        {
-            sb.Append("\n所屬主題／分類（輔助判斷角色與領域）：").Append(videoTheme.Trim());
-        }
-        sb.Append("\n只回傳 JSON：{\"speakers\":[...]}，speakers 為字串陣列、長度必須恰好 ").Append(cues.Count);
-        sb.Append(" 個、依序一一對應（第 n 句對第 n 個）。不要輸出任何說明或思考文字。\n\n逐句：");
-        for (var i = 0; i < cues.Count; i++)
-        {
-            sb.Append('\n').Append(i + 1).Append(". ").Append(cues[i].Text);
-        }
-        return sb.ToString();
-    }
-
-    /// <summary>
-    /// 解析 OpenAI 回應（<c>choices[0].message.content</c> 為 <c>{"speakers":[...]}</c>）為逐句說話人清單：
-    /// 空字串／非字串→null（未知）。缺 speakers 或空內容回空清單。malformed JSON 擲例外（由呼叫端轉可讀失敗）。
-    /// </summary>
-    public static IReadOnlyList<string?> ParseSpeakers(string apiJson)
-    {
-        using var doc = JsonDocument.Parse(apiJson);
-        var content = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
-        if (string.IsNullOrWhiteSpace(content)) return Array.Empty<string?>();
-
-        using var inner = JsonDocument.Parse(content);
-        if (inner.RootElement.ValueKind != JsonValueKind.Object
-            || !inner.RootElement.TryGetProperty("speakers", out var arr)
-            || arr.ValueKind != JsonValueKind.Array)
-        {
-            return Array.Empty<string?>();
-        }
-        var list = new List<string?>();
-        foreach (var e in arr.EnumerateArray())
-        {
-            list.Add(CleanSpeaker(e.ValueKind == JsonValueKind.String ? e.GetString() : null));
-        }
-        return list;
-    }
-
     // ---- 網路搜尋來源（epic #145 增量6b，#145 §D 第二來源）：OpenAI Responses API＋web_search 工具 ----
-
-    /// <summary>組【上網搜尋】提示：請模型搜該影集逐字稿/角色資料（優先熱門可信來源）判斷每句說話者，只回 <c>{"speakers":[...]}</c>。</summary>
-    public static string BuildWebPrompt(IReadOnlyList<SubtitleCue> cues, string? videoTitle, string? videoTheme = null)
-    {
-        var sb = new StringBuilder();
-        sb.Append("下面是一支影片的英文字幕逐句（已編號，共 ").Append(cues.Count).Append(" 句）。請【上網搜尋】這支影片／影集的逐字稿或角色台詞資料");
-        sb.Append("（優先採用熱門、可信來源，如官方或 fandom wiki 的逐字稿），據以判斷每一句最可能的說話者（**具體**角色名）。");
-        sb.Append("非台詞之句（音效／音樂／掌聲，如 [music]、[applause]）與無法對上逐字稿者，一律回空字串——**寧可留空，也不要硬填或整段重複同一個名字**。");
-        if (!string.IsNullOrWhiteSpace(videoTitle))
-        {
-            sb.Append("\n影片標題（搜尋與判斷角色用）：").Append(videoTitle.Trim());
-        }
-        if (!string.IsNullOrWhiteSpace(videoTheme))
-        {
-            sb.Append("\n所屬主題／分類（縮小搜尋範圍、判斷角色）：").Append(videoTheme.Trim());
-        }
-        sb.Append("\n**只**回傳 JSON 物件、不要任何搜尋過程／思考／說明文字或 markdown 圍籬：{\"speakers\":[...]}，");
-        sb.Append("speakers 長度必須恰好 ").Append(cues.Count).Append(" 個、依序一一對應（第 n 句對第 n 個）。\n\n逐句：");
-        for (var i = 0; i < cues.Count; i++)
-        {
-            sb.Append('\n').Append(i + 1).Append(". ").Append(cues[i].Text);
-        }
-        return sb.ToString();
-    }
 
     /// <summary>
     /// 解析 OpenAI Responses API 回應為逐句說話人：自 <c>output[]</c> 中 <c>type=="message"</c> 之

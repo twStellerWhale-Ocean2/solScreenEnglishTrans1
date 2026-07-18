@@ -129,19 +129,15 @@ public partial class App : System.Windows.Application
         _dictionaryWindow.Page.HistoryRequested += RefreshDictionaryHistory; // 下拉開啟→以查詢歷史填入
 
         // 影片擷取分頁（#139，spec#2）：yt-dlp 取字幕 → WebView2 導引播放到句暫停 → 暫停句點字沿用既有查詢、加入既有筆記
-        // 增量6：AI 說話人推斷疊加（按鈕觸發、沿用既有查詢模型/逾時；讀 OPENAI_API_KEY）
-        // 增量6b 重做：find（gpt-4.1＋web_search 找逐字稿）→逐塊 align（gpt-4o-mini 對照、不上網）→組合（#145 §D）。
-        // 同一顆亦實作 IWebTranscriptProbe：搜尋結果表格「網路字幕」欄按需查（#177，只跑 find 一步）。
-        var webEnricher = new OpenAiWebSpeakerEnricher("gpt-4.1", "gpt-4o-mini", _config.TimeoutSec);
+        // #180 清理：僅保留「由逐字稿」獲得路（DoTranscriptSearch）；已移除依台詞 AI 推斷與 Auto 重分句兩條說話人來源服務。
+        // OpenAiWebSpeakerEnricher 仍以 IWebTranscriptProbe（webProbe）角色注入：搜尋結果表格「網路字幕」欄按需查（#177，只跑 find 一步）。
+        var webProbe = new OpenAiWebSpeakerEnricher("gpt-4.1", "gpt-4o-mini", _config.TimeoutSec);
         _videoPage = new VideoCapturePage(new YtDlpSubtitleFetcher(), _videoStore,
             _themeStore, // 影片清單＋加入時記錄使用中主題（增量4）＋依 theme 篩選（B）＋搜尋關鍵字預填（#171）
-            new OpenAiSpeakerEnricher(_config.Model, _config.TimeoutSec),          // 增量6：依台詞 AI 推斷說話人
-            webEnricher,      // 增量6b：網搜補說話人（ISpeakerEnricher）
-            webEnricher,      // #177：網路字幕可用性探測（IWebTranscriptProbe，同一顆）
+            webProbe,      // #177：網路字幕可用性探測（IWebTranscriptProbe）
             new YtDlpVideoSearcher(), // 依關鍵字搜尋 YouTube（#171）
             new SubtitleStore(), // 字幕存檔：重開/重選同片還原、免重抓、保留說話人與 YAML 編修（#174）
             new WhisperTranscriber("whisper-1", _config.TimeoutSec), // #187：抓聲音以 Whisper 重轉字幕、修時間漂移（按鈕觸發、跑前確認費用）
-            new OpenAiRefiner(_config.Model, _config.TimeoutSec), // #189 Row2「🧠 AI」：Auto 基底 LLM 重分句＋標說話人、時間不變
             new OpenAiTranscriptVideoFinder("gpt-4.1", _config.TimeoutSec)); // #189 獲得頁「由逐字稿找影片」：web_search（gpt-4.1）找有逐字稿之影片
         _videoPage.WordLookupRequested += LookupWordFromVideo;
         _videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);

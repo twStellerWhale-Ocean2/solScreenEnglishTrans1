@@ -58,72 +58,11 @@
         <StackPanel>
           <TextBlock Text="Load a video" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}" Margin="0,0,0,8"/>
 
-          <!-- 搜尋區塊子頁籤（#189 獲得頁重構）：由關鍵字／由逐字稿／由網址；三路成果統一列於下方成果區塊 -->
-          <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-            <RadioButton x:Name="AcqTabKeyword" Style="{StaticResource SubTab}" GroupName="AcqTab" IsChecked="True" Content="&#x1F50E; 由關鍵字"/>
-            <RadioButton x:Name="AcqTabTranscript" Style="{StaticResource SubTab}" GroupName="AcqTab" Content="&#x1F4C4; 由逐字稿"/>
-            <RadioButton x:Name="AcqTabUrl" Style="{StaticResource SubTab}" GroupName="AcqTab" Content="&#x1F517; 由網址"/>
-          </StackPanel>
-
-          <!-- ① 由關鍵字：關鍵字 → 搜尋 → 成果區塊選擇 → 載入（#173 分路一） -->
-          <StackPanel x:Name="AcqPaneKeyword">
-          <TextBlock Text="Search YouTube by keywords" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
-          <Grid>
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*"/>
-              <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
-            <!-- 搜尋框：可編輯 ComboBox，下拉顯示關鍵字歷史（#186）；↑↓ 選、Delete 刪該筆 -->
-            <ComboBox x:Name="SearchBox" Grid.Column="0" Height="30" IsEditable="True" StaysOpenOnEdit="True"
-                      IsTextSearchEnabled="False" VerticalContentAlignment="Center" Padding="6,0"
-                      ToolTip="Type keywords (or pick from history); ↑↓ then Delete removes a history entry"/>
-            <Button x:Name="SearchBtn" Grid.Column="1" Content="&#x1F50E; Search" Width="100" Height="30" Margin="8,0,0,0"/>
-          </Grid>
-          <!-- 搜尋選項（#184）：上傳日期（伺服器端 sp 篩）｜長度（client 依片長篩）｜最多筆數｜自動網搜前 N 筆（預設開、花額度） -->
-          <WrapPanel Orientation="Horizontal" Margin="0,6,0,0">
-            <StackPanel Orientation="Horizontal" Margin="0,0,12,4" VerticalAlignment="Center">
-              <TextBlock Text="Date:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
-              <ComboBox x:Name="DateFilter" Width="108" Height="26" VerticalContentAlignment="Center" ToolTip="Filter by upload date (YouTube)">
-                <ComboBoxItem Content="Any time" Tag="" IsSelected="True"/>
-                <ComboBoxItem Content="Today" Tag="EgIIAg%3D%3D"/>
-                <ComboBoxItem Content="This week" Tag="EgIIAw%3D%3D"/>
-                <ComboBoxItem Content="This month" Tag="EgIIBA%3D%3D"/>
-                <ComboBoxItem Content="This year" Tag="EgIIBQ%3D%3D"/>
-              </ComboBox>
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Margin="0,0,12,4" VerticalAlignment="Center">
-              <TextBlock Text="Length:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
-              <ComboBox x:Name="LengthFilter" Width="128" Height="26" VerticalContentAlignment="Center" ToolTip="Filter by video length">
-                <ComboBoxItem Content="Any length" Tag="" IsSelected="True"/>
-                <ComboBoxItem Content="Short (&lt;4m)" Tag="short"/>
-                <ComboBoxItem Content="Medium (4–20m)" Tag="medium"/>
-                <ComboBoxItem Content="Long (&gt;20m)" Tag="long"/>
-              </ComboBox>
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Margin="0,0,12,4" VerticalAlignment="Center">
-              <TextBlock Text="Max:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
-              <ComboBox x:Name="MaxResults" Width="56" Height="26" VerticalContentAlignment="Center" ToolTip="Maximum number of results">
-                <ComboBoxItem Content="10"/>
-                <ComboBoxItem Content="25" IsSelected="True"/>
-                <ComboBoxItem Content="50"/>
-              </ComboBox>
-            </StackPanel>
-            <StackPanel Orientation="Horizontal" Margin="0,0,0,4" VerticalAlignment="Center">
-              <CheckBox x:Name="AutoWebCheck" Content="Auto web-check top" IsChecked="True" VerticalAlignment="Center" Foreground="#B0578D"
-                        ToolTip="After each search, auto-check web transcripts for the top-N results by Pick score (uses your OpenAI key — costs a small fee each)"/>
-              <ComboBox x:Name="AutoWebCount" Width="50" Height="26" Margin="4,0,0,0" VerticalContentAlignment="Center" ToolTip="How many top results to auto-check">
-                <ComboBoxItem Content="3"/>
-                <ComboBoxItem Content="5" IsSelected="True"/>
-                <ComboBoxItem Content="10"/>
-              </ComboBox>
-            </StackPanel>
-          </WrapPanel>
-          </StackPanel>
-
-          <!-- ② 由逐字稿（#189 新）：先上網找「有公開逐字稿可用」之影片、再定位到 YouTube，成果列於下方成果區塊。用 OpenAI（gpt-4.1 web_search），跑前確認費用 -->
-          <StackPanel x:Name="AcqPaneTranscript" Visibility="Collapsed">
+          <!-- 由逐字稿（#189；#180 起為唯一獲得路）：先上網找「有公開逐字稿可用」之影片、再定位到 YouTube，成果列於下方成果區塊。用 OpenAI（gpt-4.1 web_search），跑前確認費用。
+               #180 清理：移除「由關鍵字」「由網址」獲得路與獲取路徑子頁籤列；本面板恆顯。 -->
+          <StackPanel x:Name="AcqPaneTranscript">
             <TextBlock Text="Find videos that have a transcript" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
-            <TextBlock Text="Enter a topic — LingoIsland searches the web for videos whose full transcript (with speakers) is published online, so the 🌐 Script speaker-fix works. Uses your OpenAI key; confirms cost first."
+            <TextBlock Text="Enter a topic — LingoIsland searches the web for videos whose full transcript (with speakers) is published online (manual subtitles carry speaker tags). Uses your OpenAI key; confirms cost first."
                        Foreground="#9A6A82" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,6"/>
             <Grid>
               <Grid.ColumnDefinitions>
@@ -136,20 +75,16 @@
                         ToolTip="Enter a topic (or pick from history); ↑↓ then Delete removes a history entry"/>
               <Button x:Name="TranscriptSearchBtn" Grid.Column="1" Content="&#x1F4C4; Find" Width="100" Height="30" Margin="8,0,0,0"/>
             </Grid>
-          </StackPanel>
-
-          <!-- ③ 由網址（#173 分路二）：貼連結直接載入、跳到內容頁播放（不經成果區塊） -->
-          <StackPanel x:Name="AcqPaneUrl" Visibility="Collapsed">
-            <TextBlock Text="Paste a YouTube link" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-              </Grid.ColumnDefinitions>
-              <TextBox x:Name="UrlBox" Grid.Column="0" Height="30" VerticalContentAlignment="Center" Padding="6,0"
-                       Background="#66FFFFFF" ToolTip="Paste a YouTube link or 11-character video ID, then Load"/>
-              <Button x:Name="LoadBtn" Grid.Column="1" Content="Load" Width="90" Height="30" Margin="8,0,0,0"/>
-            </Grid>
+            <!-- 自動網搜前 N 筆（#184；#180 自「由關鍵字」搬入，x:Name 不變）：找到影片後對推薦前 N 列自動上網確認逐字稿（花額度） -->
+            <StackPanel Orientation="Horizontal" Margin="0,6,0,0" VerticalAlignment="Center">
+              <CheckBox x:Name="AutoWebCheck" Content="Auto web-check top" IsChecked="True" VerticalAlignment="Center" Foreground="#B0578D"
+                        ToolTip="After a search, auto-check web transcripts for the top-N results by Pick score (uses your OpenAI key — costs a small fee each)"/>
+              <ComboBox x:Name="AutoWebCount" Width="50" Height="26" Margin="4,0,0,0" VerticalContentAlignment="Center" ToolTip="How many top results to auto-check">
+                <ComboBoxItem Content="3"/>
+                <ComboBoxItem Content="5" IsSelected="True"/>
+                <ComboBoxItem Content="10"/>
+              </ComboBox>
+            </StackPanel>
           </StackPanel>
 
           <!-- 成果區塊（#189）：由關鍵字／由逐字稿之搜尋結果統一列於此；標準表格 DataGrid（#177，欄可調寬/重排、點表頭排序皆內建；上方過濾框 + 逐列 Load 鈕） -->
@@ -332,7 +267,7 @@
                        HorizontalContentAlignment="Stretch"
                        ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                        ToolTip="Click to load; right-click or press Delete to remove"/>
-              <TextBlock x:Name="VideoEmptyHint" Text="No videos yet. Search or paste a YouTube link under Acquire."
+              <TextBlock x:Name="VideoEmptyHint" Text="No videos yet. Find one by transcript under Acquire."
                          Foreground="#9A6A82" FontSize="12" TextWrapping="Wrap" MaxWidth="160"
                          TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Grid>
@@ -440,7 +375,6 @@
                   <RowDefinition Height="Auto"/>
                   <RowDefinition Height="Auto"/>
                   <RowDefinition Height="Auto"/>
-                  <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
                 <!-- ① 初始資料（#189）：字幕**來源**——僅顯示（不可操作，避免誤會可切換）。Manual＝人工字幕（時間+斷句皆準）、Auto＝自動字幕（時間準、斷句可能錯）；皆無講話人 -->
                 <Grid Grid.Row="0" Height="26">
@@ -454,22 +388,8 @@
                              FontSize="12.5" Margin="2,0,0,0"
                              ToolTip="字幕來源：Manual＝人工字幕（最佳）、Auto＝自動字幕。這是本片實際取得的來源，僅供顯示。"/>
                 </Grid>
-                <!-- ② 講話人／斷句（#189）：不動時間。🌐 Script＝用網路逐字稿；🧠 AI＝用 AI 推理。Manual 基底只補講話人；Auto 基底另補斷句 -->
+                <!-- ② 精修時間（#189；#180 移除原「講話人／斷句」🌐Script/🧠AI 那列）：🎙 Voice＝抓音檔把時間對到真實發音（Auto 基底另補斷句）。取代原「Re-transcribe」 -->
                 <Grid Grid.Row="1" Margin="0,4,0,0">
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="26"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                  </Grid.ColumnDefinitions>
-                  <TextBlock Grid.Column="0" Text="&#x1F9D1;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
-                             ToolTip="標示講話人，若為 Auto 還增加修訂斷句。"/>
-                  <Button x:Name="WebSpeakersBtn" Grid.Column="1" Content="&#x1F310; Script" Height="26" Margin="0,0,3,0"
-                          IsEnabled="False" ToolTip="Use a web transcript to fix speakers (and sentence breaks when the base is Auto), keeping the timing. Uses your OpenAI key; confirms cost first."/>
-                  <Button x:Name="InferSpeakersBtn" Grid.Column="2" Content="&#x1F9E0; AI" Height="26" Margin="3,0,0,0"
-                          IsEnabled="False" ToolTip="Use AI reasoning to fix speakers (and sentence breaks when the base is Auto), keeping the timing. Uses your OpenAI key; confirms cost first."/>
-                </Grid>
-                <!-- ③ 精修時間（#189）：🎙 Voice＝抓音檔把時間對到真實發音（Auto 基底另補斷句）。取代原「Re-transcribe」 -->
-                <Grid Grid.Row="2" Margin="0,4,0,0">
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="26"/>
                     <ColumnDefinition Width="*"/>
@@ -480,8 +400,8 @@
                   <Button x:Name="TranscribeBtn" Grid.Column="1" Grid.ColumnSpan="2" Content="&#x1F399; Voice" Height="26" Margin="0,0,0,0"
                           IsEnabled="False" ToolTip="Transcribe the actual audio (OpenAI Whisper) to refine the timing to the real speech. Downloads audio; confirms cost first."/>
                 </Grid>
-                <!-- ④ 開啟本片資料夾（#189，📁）＋整檔 YAML 編修（📝）：資料夾鈕在 Edit YAML 左側，開該片 video\{日期 標題}\ -->
-                <Grid Grid.Row="3" Margin="0,6,0,0">
+                <!-- ③ 開啟本片資料夾（#189，📁）＋整檔 YAML 編修（📝）：資料夾鈕在 Edit YAML 左側，開該片 video\{日期 標題}\ -->
+                <Grid Grid.Row="2" Margin="0,6,0,0">
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
@@ -526,6 +446,6 @@
 
     <!-- 共用狀態列（#177）：兩子頁皆可見；載入/錯誤訊息不因切到內容頁而被遮 -->
     <TextBlock x:Name="StatusText" Grid.Row="2" Margin="4,6,4,0" FontSize="12" Foreground="#B0578D" TextWrapping="Wrap"
-               Text="Search by keywords and pick a result, or paste a link — then Load."/>
+               Text="Find a video by transcript under Acquire, then Load a result."/>
   </Grid>
 </UserControl>

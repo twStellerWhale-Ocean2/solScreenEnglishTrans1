@@ -2,6 +2,19 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [3.0.0] - 2026-07-18
+
+影片功能大改（epic #178）起手第一顆〔清理〕：找片入口收斂、移除多餘說話人補強按鈕（#180）。
+
+### 移除
+- **找片入口收斂為「由逐字稿」單一路**：移除「依關鍵字搜尋 YouTube」與「貼網址載入」兩路（`AcqPaneKeyword`／`AcqPaneUrl`：搜尋框／日期·長度·筆數選項／網址列）。影片改由「由逐字稿」入口取得（成果表逐列 Load 載入仍在）。
+- **內容頁「講話人補強」列整列移除**：移除「🧠 AI 純推斷」（`OpenAiSpeakerEnricher`，依台詞猜說話人）與「🌐 Script」（`OpenAiWebSpeakerEnricher` 網搜逐字稿補說話人）兩顆按鈕；說話人回歸字幕本身之人工標記（VTT `<v>`）。連帶清除服務型 `RefineWithAi`／`OpenAiRefiner`／`ISubtitleRefiner` 與純推斷死碼（`SpeakerInference` 的 chat 版 `BuildPrompt`／`ParseSpeakers`／死碼 `BuildWebPrompt`）。
+
+### 備註
+- 為 epic #178「影片功能由多路工具箱收斂為以字幕檔（逐字稿）為單一主線」之起手清理；後續增量將把「由逐字稿」入口改為貼字幕檔網址、字幕改以逐字稿為主重建說話人與斷句。
+- **保留**：`IVideoSearcher`（逐字稿路仍靠它依標題定位影片）、`OpenAiWebSpeakerEnricher`（表格 Web 欄探測＋其對齊管線留待增量5）、Manual/Auto 抓字幕、🎙 Voice/Whisper、`SubtitleRefine` 靜態純函式。
+- 純移除性重構、無 OpenAI 金鑰測試需求；單元測試全套 574 綠。
+
 ## [2.13.1] - 2026-07-16
 
 字幕點跳暫停修復（延續 #145／#189；使用者試用回報）。

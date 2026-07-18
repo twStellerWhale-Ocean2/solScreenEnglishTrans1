@@ -12,84 +12,22 @@ public class SpeakerInferenceTests
 {
     private static SubtitleCue C(string text, string? speaker = null) => new(text, 0, speaker);
 
-    /// <summary>把逐句說話人內容包成 OpenAI chat/completions 回應形狀。</summary>
-    private static string Api(string innerContent) =>
-        JsonSerializer.Serialize(new { choices = new[] { new { message = new { content = innerContent } } } });
-
-    // ── BuildPrompt ──
+    // ── BuildFindTranscriptPrompt 主題／CleanSpeaker 雜訊清理 ──
+    // #180 清理：純推斷之 BuildPrompt／ParseSpeakers 與死碼 BuildWebPrompt 已移除；
+    // CleanSpeaker（保留）之雜訊清理改由保留的 web 解析路徑（ParseWebSpeakers）覆蓋。
 
     [Fact]
-    public void BuildPrompt_NumbersLines_AndIncludesTitle()
+    public void BuildFindTranscriptPrompt_IncludesTheme_WhenProvided()
     {
-        var p = SpeakerInference.BuildPrompt(new[] { C("Hello there"), C("General Kenobi") }, "Star Wars clip");
-        Assert.Contains("1. Hello there", p);
-        Assert.Contains("2. General Kenobi", p);
-        Assert.Contains("Star Wars clip", p);
-        Assert.Contains("speakers", p);
-    }
-
-    [Fact]
-    public void BuildPrompt_NoTitle_OmitsTitleLine()
-    {
-        var p = SpeakerInference.BuildPrompt(new[] { C("solo line") }, null);
-        Assert.Contains("1. solo line", p);
-        Assert.DoesNotContain("影片標題", p);
-    }
-
-    [Fact]
-    public void BuildPrompt_IncludesTheme_WhenProvided_OmitsWhenNot()
-    {
-        var withTheme = SpeakerInference.BuildPrompt(new[] { C("hi") }, "Some Title", "PAW Patrol");
-        Assert.Contains("PAW Patrol", withTheme);
-        Assert.Contains("所屬主題", withTheme);
-        Assert.DoesNotContain("所屬主題", SpeakerInference.BuildPrompt(new[] { C("hi") }, "Some Title")); // 無主題→不加行
-    }
-
-    [Fact]
-    public void BuildWebPrompt_And_FindPrompt_IncludeTheme()
-    {
-        Assert.Contains("PAW Patrol", SpeakerInference.BuildWebPrompt(new[] { C("hi") }, "T", "PAW Patrol"));
         Assert.Contains("PAW Patrol", SpeakerInference.BuildFindTranscriptPrompt("T", retryHint: null, videoTheme: "PAW Patrol"));
     }
 
-    // ── ParseSpeakers ──
-
     [Fact]
-    public void ParseSpeakers_ExtractsArray_EmptyStringToNull()
+    public void ParseWebSpeakers_CleansNoiseLabels()
     {
-        var speakers = SpeakerInference.ParseSpeakers(Api("{\"speakers\":[\"Ryder\",\"\",\"Rubble\"]}"));
-        Assert.Equal(3, speakers.Count);
-        Assert.Equal("Ryder", speakers[0]);
-        Assert.Null(speakers[1]);      // 空字串→null（未知）
-        Assert.Equal("Rubble", speakers[2]);
-    }
-
-    [Fact]
-    public void ParseSpeakers_MissingSpeakersKey_ReturnsEmpty()
-    {
-        Assert.Empty(SpeakerInference.ParseSpeakers(Api("{\"nope\":1}")));
-    }
-
-    [Fact]
-    public void ParseSpeakers_EmptyOrWhitespaceContent_ReturnsEmpty()
-    {
-        Assert.Empty(SpeakerInference.ParseSpeakers(Api("")));
-        Assert.Empty(SpeakerInference.ParseSpeakers(Api("   ")));
-    }
-
-    [Fact]
-    public void ParseSpeakers_MalformedContent_Throws()
-    {
-        // content 非 JSON → JsonDocument.Parse(content) 擲例外（由 OpenAiSpeakerEnricher 轉可讀失敗）
-        Assert.ThrowsAny<System.Exception>(() => SpeakerInference.ParseSpeakers(Api("not json at all")));
-    }
-
-    [Fact]
-    public void ParseSpeakers_CleansNoiseLabels()
-    {
-        // #品質修：音效[.../旁白(.../不確定?/過長 → null（未知）；正常名保留
-        var speakers = SpeakerInference.ParseSpeakers(
-            Api("{\"speakers\":[\"[music]\",\"(applause)\",\"?\",\"Chase/Ryder (?)\",\"Ryder\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}"));
+        // #品質修：音效[.../旁白(.../不確定?/過長 → null（未知）；正常名保留（CleanSpeaker，經保留的 web 解析路徑）
+        var speakers = SpeakerInference.ParseWebSpeakers(
+            WebApi("{\"speakers\":[\"[music]\",\"(applause)\",\"?\",\"Chase/Ryder (?)\",\"Ryder\",\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"]}"));
         Assert.Equal(6, speakers.Count);
         Assert.Null(speakers[0]);  // [music]
         Assert.Null(speakers[1]);  // (applause)
@@ -144,7 +82,7 @@ public class SpeakerInferenceTests
         Assert.Equal(1, SpeakerInference.CountNewlyLabeled(before, after)); // 僅 a：未標示→有值
     }
 
-    // ── 網搜來源（增量6b）：BuildWebPrompt／ParseWebSpeakers（Responses API 形狀） ──
+    // ── 網搜來源（增量6b）：ParseWebSpeakers（Responses API 形狀） ──
 
     /// <summary>把逐句說話人內容包成 OpenAI Responses API 回應形狀（web_search_call ＋ message.output_text）。</summary>
     private static string WebApi(string outputText) =>
@@ -157,17 +95,6 @@ public class SpeakerInferenceTests
                     { new { type = "output_text", text = outputText } } },
             },
         });
-
-    [Fact]
-    public void BuildWebPrompt_InstructsWebSearch_NumbersLines_IncludesTitle()
-    {
-        var p = SpeakerInference.BuildWebPrompt(new[] { C("Hello there"), C("General Kenobi") }, "Star Wars clip");
-        Assert.Contains("1. Hello there", p);
-        Assert.Contains("2. General Kenobi", p);
-        Assert.Contains("Star Wars clip", p);
-        Assert.Contains("上網搜尋", p);   // 指示模型上網
-        Assert.Contains("speakers", p);
-    }
 
     [Fact]
     public void ParseWebSpeakers_FromMessageOutputText_EmptyToNull()
