@@ -45,19 +45,25 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     // 說話人字幕（epic #145 增量5）：CueList 綁 CueRow view-model（保留原始 _cues index，篩選/顯示不動播放 index）
     private List<CueRow> _rows = new();
     private System.ComponentModel.ICollectionView? _cueView; // _rows 之預設檢視，套說話人篩選
-    private string? _speakerFilter;    // null＝全部；否則特定說話人名
-    private bool _filterNoSpeaker;     // true＝僅顯示未標示說話人之句
-    private bool _refreshingCues;      // 重建/篩選/程式化選取期間，抑制 SelectionChanged→跳播
     private bool _yamlEditing;         // 整檔 YAML 編修模式中
     private string? _currentTitle;     // 目前影片標題（起播後取得，供 AI 推斷輔助判斷角色）（增量6）
-    private string? _pauseSpeaker;     // 指定說話人才暫停（增量7）；null＝全部說話人皆暫停
-    private bool _pauseNoSpeaker;      // #189：只在未標示（unknown）之句暫停（Pause-at 選 (no speaker)）
-    private bool _pauseDisabled;       // #178 增量6′-B USR：Pause-at 選「(no stop)」＝完全不自動暫停、只跟隨字幕
-    private bool _populatingPauseAt;   // 重填 Pause-at 下拉期間抑制 SelectionChanged
-    private const string AllSpeakers = "All speakers";
+    private bool _populatingModes;     // 填模式下拉/勾選面板期間抑制 SelectionChanged／勾選事件
+
+    // 說話人顯示模式與等待模式（#189-checklist USR）：篩選/顯示三態＋等待兩態；對象取自共用之勾選面板 _speakerChecks
+    private enum FilterMode { None, ShowSelected, ColorSelected }
+    private enum PauseMode { Off, Selected }
+    private FilterMode _filterMode = FilterMode.None;
+    private PauseMode _pauseMode = PauseMode.Selected;   // 預設依勾選等待（Everyone 全勾→等同原「逐句停」行為）
+    // 勾選面板（Everyone＋各原子說話人＋(no speaker)）：字幕篩選/顯示與影片等待共用同一份勾選
+    private readonly System.Collections.ObjectModel.ObservableCollection<SpeakerCheck> _speakerChecks = new();
+    private SpeakerCheck? _everyoneCheck;                // Everyone 列（全選/全清；亦為「等同全部」判準）
+    private SpeakerCheck? _noSpeakerCheck;               // (no speaker) 列（未標示句）；無未標示句時不建
+    private bool _syncingChecks;                         // Everyone↔各列連動時抑制遞迴
+    private readonly HashSet<string> _checkedNames = new(StringComparer.OrdinalIgnoreCase); // 已勾之原子說話人（快取，供每句比對）
+    private Dictionary<string, string> _speakerColorHex = new(StringComparer.OrdinalIgnoreCase); // 原子說話人→主題色 hex（無主題色則空）
+
     private const string NoSpeaker = "(no speaker)";
-    private const string EveryoneSpeaker = "Everyone"; // Pause-at 之「全部」選項（增量7）
-    private const string NoStop = "(no stop)";         // Pause-at 之「都不暫停、只跟隨字幕」選項（#178 增量6′-B USR）
+    private const string EveryoneSpeaker = "(all speakers)"; // 全選列（括號式，避與逐字稿真有「Everyone」說話人撞名；#189-checklist）
 
     private const string HostName = "lingoisland.player"; // WebView2 虛擬主機：以真實 https origin 供 player.html（避 YouTube Error 150/153 之 null/opaque-origin 內嵌拒絕）
     private static readonly string PlayerCacheBust = Guid.NewGuid().ToString("N"); // 每次啟動唯一：WebView2 依 URL 快取 player.html，同名檔會餵**舊 JS**（改動/更新後不生效）——故 player.html 帶此唯一碼為檔名，保證載當前版本
@@ -109,12 +115,13 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         // 右鍵選單（#189）：Copy line＋快速指定/修正說話人（依游標下之列動態填入）
         CueList.ContextMenu = new System.Windows.Controls.ContextMenu();
         CueList.ContextMenuOpening += OnCueContextMenuOpening;
-        // 說話人篩選＋來源疊加＋整檔 YAML 編修（epic #145 增量5／6）
-        SpeakerFilter.SelectionChanged += (_, _) => ApplySpeakerFilter();
+        // 說話人顯示模式（無篩選／只顯示勾選／粗體+顏色）＋整檔 YAML 編修（epic #145 增量5／6；#189-checklist）
+        SpeakerFilter.SelectionChanged += (_, _) => { if (!_populatingModes) { ApplyFilterMode(); } };
         EditYamlBtn.Click += (_, _) => EnterYamlEdit();
         OffsetApplyBtn.Click += (_, _) => ApplyOffset();                                                          // 增量6′-B：整份字幕時間偏移校正
         OffsetBox.PreviewKeyDown += (_, e) => { if (e.Key == Key.Enter) { ApplyOffset(); e.Handled = true; } };   // Enter 即套用偏移
-        PauseAtSpeaker.SelectionChanged += (_, _) => { if (!_populatingPauseAt) { ApplyPauseAtSpeaker(); } }; // 指定說話人才暫停（增量7）
+        PauseAtSpeaker.SelectionChanged += (_, _) => { if (!_populatingModes) { ApplyPauseMode(); } };           // 等待模式（不等待／依勾選）（#189-checklist）
+        SpeakerChecks.ItemsSource = _speakerChecks;                                                               // 說話人勾選面板（篩選/顯示/等待共用）
         ApplyYamlBtn.Click += (_, _) => _ = ApplyYamlEditAsync();
         CancelYamlBtn.Click += (_, _) => CancelYamlEdit();
         Loaded += async (_, _) => await EnsureWebAsync();
@@ -471,6 +478,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         var name = id is null ? null : ThemeStore.Find(_themes.Load(), id)?.Name;
         _videoStore.UpdateTheme(_currentVideoItemId, id, name);
         RefreshVideoList(); // 反映清單主題名／篩選（目前片仍以 _currentVideoItemId 選中或落選）
+        RebuildSpeakerColors();  // 主題改變→重算說話人自動配色（#189-checklist）
+        RefreshCueEmphasis();    // 粗體+顏色模式立即反映新主題色
     }
 
     private System.Windows.Controls.StackPanel VideoItemView(VideoItem it)
@@ -752,9 +761,9 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
             var cur = PauseDecider.CueAt(t, _cues);
             if (cur >= 0 && cur != _shownCue) { ShowCue(cur); }
 
-            if (!_pauseDisabled) // Pause-at 選「(no stop)」＝不自動暫停、只跟隨（#178 增量6′-B USR）
+            if (PauseTargets() is { } pt) // 等待模式＝依勾選（#189-checklist）：不等待模式回 null→只跟隨、不暫停
             {
-                var pause = PauseDecider.NextPause(t, _cues, _lastPausedIndex, pauseSpeaker: _pauseSpeaker, pauseNoSpeaker: _pauseNoSpeaker); // 指定說話人（或未標示者）才暫停（增量7／#189）
+                var pause = PauseDecider.NextPause(t, _cues, _lastPausedIndex, pauseSpeakers: pt.Targets, pauseNoSpeaker: pt.NoSpeaker); // 勾選之說話人（含未標示）才暫停；Everyone 全勾→逐句停
                 if (pause >= 0)
                 {
                     _lastPausedIndex = pause;
@@ -773,12 +782,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         _shownCue = i;
         SetControls(true); // 控制鈕於首次顯示字幕（自動暫停或點清單跳播）後才生效，避免暫停前空點無反應
         var row = _rows[i]; // _rows 依原始順序建立，Index 與 _cues 對齊
-        if (!ReferenceEquals(CueList.SelectedItem, row))
-        {
-            _refreshingCues = true;      // 程式化選取，勿觸發 JumpToSelected 跳播
-            CueList.SelectedItem = row;
-            _refreshingCues = false;
-        }
+        if (!ReferenceEquals(CueList.SelectedItem, row)) { CueList.SelectedItem = row; } // 程式化選取；CueList 無 SelectionChanged 處理器（跳播走滑鼠事件），不需抑制旗標
         CueList.ScrollIntoView(row);     // 若當前句被說話人篩選濾掉則不捲動（正常，字幕帶仍顯示）
         RenderClickable(_cues[i]);
     }
@@ -884,8 +888,9 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         row.UpdateSpeaker(clean);                                                   // 就地通知 UI（該列 SpeakerLabel 更新）
         if (_currentVideoId is not null) { _subs.Save(_currentVideoId, CurrentVideoTitle(), isAutoGenerated: false, list); } // 存回（#174；增量5′ 已無 Auto/Manual 之分）
         if (_shownCue == i) { RenderClickable(_cues[i]); }                          // 當前句→重繪字幕帶（含新說話人前綴）
-        PopulateSpeakerFilter();                                                    // 新說話人可能出現/消失→同步下拉
-        PopulatePauseAtSpeaker();
+        PopulateSpeakerChecks();                                                    // 新說話人可能出現/消失→重建勾選面板（保留原勾選）＋同步配色
+        RefreshFilterView();                                                        // 篩選/顯示依新說話人重整
+        RefreshCueEmphasis();
         SetStatus(clean is null ? $"Cleared speaker on line {i + 1}." : $"Set line {i + 1} speaker to “{clean}”.");
     }
 
@@ -1036,12 +1041,13 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         for (var i = 0; i < _cues.Count; i++) _rows.Add(new CueRow(i, _cues[i]));
         CueList.ItemsSource = _rows;
         _cueView = System.Windows.Data.CollectionViewSource.GetDefaultView(_rows);
-        _speakerFilter = null; _filterNoSpeaker = false; // 新字幕一律不篩選（與下拉重置 All 一致）——修 YAML 套用後殘留舊篩選（此路徑未經 ClearCues 重置）
         _cueView.Filter = CueRowFilter;
-        PopulateSpeakerFilter();
-        PopulatePauseAtSpeaker(); // 指定說話人才暫停（增量7）
+        PopulateSpeakerChecks();   // 重建說話人勾選面板（保留原勾選）＋同步主題配色
+        SyncModeSelectors();       // 下拉選取反映目前模式
+        RefreshFilterView();       // 依模式套篩選
+        RefreshCueEmphasis();      // 依模式套粗體+顏色
         var has = _cues.Count > 0;
-        SpeakerFilter.IsEnabled = has;
+        SetSpeakerControlsEnabled(has);
         EditYamlBtn.IsEnabled = has;
         SyncOffsetEnabled(has); // #187 有字幕載入；增量5′：已帶說話人則停用（見方法）
     }
@@ -1062,92 +1068,188 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         _rows = new List<CueRow>();
         CueList.ItemsSource = null;
         _cueView = null;
-        _refreshingCues = true;
-        SpeakerFilter.Items.Clear();
-        _refreshingCues = false;
-        _speakerFilter = null; _filterNoSpeaker = false;
-        _pauseSpeaker = null;
-        _pauseNoSpeaker = false; // #189
-        _pauseDisabled = false;  // #178 增量6′-B
-        _populatingPauseAt = true; PauseAtSpeaker.Items.Clear(); _populatingPauseAt = false;
-        SpeakerFilter.IsEnabled = false;
+        // 清空勾選面板（解除訂閱免殘留）＋回預設模式（無篩選／依勾選等待）
+        _populatingModes = true;
+        foreach (var sc in _speakerChecks) sc.PropertyChanged -= OnSpeakerCheckPropChanged;
+        _speakerChecks.Clear(); _everyoneCheck = null; _noSpeakerCheck = null; _checkedNames.Clear();
+        _populatingModes = false;
+        _filterMode = FilterMode.None; _pauseMode = PauseMode.Selected;
+        SyncModeSelectors();
+        SetSpeakerControlsEnabled(false);
         EditYamlBtn.IsEnabled = false;
         OffsetBox.IsEnabled = false; OffsetApplyBtn.IsEnabled = false;    // 增量6′-B：清空時停用時間偏移列
-        PauseAtSpeaker.IsEnabled = false;
     }
 
-    /// <summary>重填說話人下拉：All＋各具名說話人（去重排序）；有具名又有未標示句時另加「(no speaker)」。預設選 All。</summary>
-    private void PopulateSpeakerFilter()
+    // ---- 說話人勾選面板（#189-checklist USR）：Everyone＋各原子說話人（合唸句拆開去重）＋(no speaker)；篩選/顯示/等待共用 ----
+
+    /// <summary>
+    /// 重建說話人勾選面板：Everyone＋各**原子**說話人（把「Ryder and Marshall」拆成 Ryder／Marshall 去重排序）＋（有未標示句時）「(no speaker)」。
+    /// 保留原勾選狀態（依名字；新名預設勾）；首次全勾。同步 _checkedNames 快取與主題自動配色。清單/顯示/等待統一由呼叫端刷新。
+    /// </summary>
+    private void PopulateSpeakerChecks()
     {
-        _refreshingCues = true;
-        SpeakerFilter.Items.Clear();
-        SpeakerFilter.Items.Add(AllSpeakers);
-        var names = _cues.Where(c => !string.IsNullOrEmpty(c.Speaker))
-                         .Select(c => c.Speaker!)
+        // 保留原勾選（依名字；重建後同名沿用、新增預設勾）
+        var prevChecked = _speakerChecks.Count > 0
+            ? new HashSet<string>(_speakerChecks.Where(s => s.IsChecked).Select(s => s.Name), StringComparer.OrdinalIgnoreCase)
+            : null;
+        bool WasChecked(string name) => prevChecked is null || prevChecked.Contains(name);
+
+        _populatingModes = true;
+        foreach (var sc in _speakerChecks) sc.PropertyChanged -= OnSpeakerCheckPropChanged;
+        _speakerChecks.Clear();
+        _everyoneCheck = null; _noSpeakerCheck = null;
+
+        var atoms = _cues.Where(c => !string.IsNullOrEmpty(c.Speaker))
+                         .SelectMany(c => PauseDecider.SplitSpeakers(c.Speaker))     // 合唸句拆為個別名字
                          .Distinct(StringComparer.OrdinalIgnoreCase)
                          .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                          .ToList();
-        foreach (var n in names) SpeakerFilter.Items.Add(n);
-        if (names.Count > 0 && _cues.Any(c => string.IsNullOrEmpty(c.Speaker)))
-            SpeakerFilter.Items.Add(NoSpeaker);
-        _speakerFilter = null; _filterNoSpeaker = false;
-        SpeakerFilter.SelectedIndex = 0; // All
-        _refreshingCues = false;
+        var hasNoSpeaker = _cues.Any(c => string.IsNullOrEmpty(c.Speaker));
+
+        if (atoms.Count > 0 || hasNoSpeaker)
+        {
+            _everyoneCheck = AddCheck(new SpeakerCheck(EveryoneSpeaker, isEveryone: true));
+            foreach (var a in atoms) AddCheck(new SpeakerCheck(a) { IsChecked = WasChecked(a) });
+            if (hasNoSpeaker) _noSpeakerCheck = AddCheck(new SpeakerCheck(NoSpeaker, isNoSpeaker: true) { IsChecked = WasChecked(NoSpeaker) });
+            _everyoneCheck.IsChecked = _speakerChecks.Where(x => !x.IsEveryone).All(x => x.IsChecked); // 全勾才勾 Everyone
+        }
+        _populatingModes = false;
+
+        RebuildCheckedNames();
+        RebuildSpeakerColors();
+
+        SpeakerCheck AddCheck(SpeakerCheck sc) { sc.PropertyChanged += OnSpeakerCheckPropChanged; _speakerChecks.Add(sc); return sc; }
     }
 
-    /// <summary>下拉改變→更新篩選條件、重整檢視（僅影響顯示，不動 _cues／播放 index）。</summary>
-    private void ApplySpeakerFilter()
+    /// <summary>勾選變更：Everyone↔各列連動；重算已勾快取；暫停自目前時間重算；刷新篩選檢視與強調（粗體+顏色）。</summary>
+    private void OnSpeakerCheckPropChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (_refreshingCues) return;
-        var sel = SpeakerFilter.SelectedItem as string;
-        _filterNoSpeaker = sel == NoSpeaker;
-        _speakerFilter = (sel is null || sel == AllSpeakers || sel == NoSpeaker) ? null : sel;
-        _refreshingCues = true;   // Refresh 濾掉當前選取項時會清選取觸發 SelectionChanged——抑制其誤觸跳播
-        _cueView?.Refresh();
-        _refreshingCues = false;
+        if (_populatingModes || _syncingChecks || sender is not SpeakerCheck sc) return;
+        _syncingChecks = true;
+        if (sc.IsEveryone)
+        {
+            foreach (var other in _speakerChecks) if (!other.IsEveryone) other.IsChecked = sc.IsChecked; // 全選/全清
+        }
+        else if (_everyoneCheck is not null)
+        {
+            _everyoneCheck.IsChecked = _speakerChecks.Where(x => !x.IsEveryone).All(x => x.IsChecked);    // 全部個別勾→Everyone 勾
+        }
+        _syncingChecks = false;
+
+        RebuildCheckedNames();
+        _lastPausedIndex = -1;      // 勾選變→暫停判定自目前時間重算
+        RefreshFilterView();
+        RefreshCueEmphasis();
     }
 
+    /// <summary>依勾選面板重算「已勾原子說話人」快取（供每句比對，免每次掃 ObservableCollection）。</summary>
+    private void RebuildCheckedNames()
+    {
+        _checkedNames.Clear();
+        foreach (var sc in _speakerChecks)
+            if (sc.IsChecked && !sc.IsEveryone && !sc.IsNoSpeaker) _checkedNames.Add(sc.Name);
+    }
+
+    /// <summary>某句之說話人是否被勾選（未標示句看 (no speaker) 勾選；具名句看其拆出之任一原子名是否在已勾集合）。</summary>
+    private bool SpeakerChecked(string? cueSpeaker)
+    {
+        if (string.IsNullOrEmpty(cueSpeaker)) return _noSpeakerCheck?.IsChecked == true;
+        foreach (var a in PauseDecider.SplitSpeakers(cueSpeaker)) if (_checkedNames.Contains(a)) return true;
+        return false;
+    }
+
+    /// <summary>粗體+顏色模式下某句之背景色 hex（該句第一個「已勾且有配色」之原子說話人色）；無則 null（只粗體、不上色）。</summary>
+    private string? ColorForSpeaker(string? cueSpeaker)
+    {
+        if (string.IsNullOrEmpty(cueSpeaker)) return null;
+        foreach (var a in PauseDecider.SplitSpeakers(cueSpeaker))
+            if (_checkedNames.Contains(a) && _speakerColorHex.TryGetValue(a, out var hex)) return hex;
+        return null;
+    }
+
+    /// <summary>依現用主題之 ColorRules 色盤，自動輪派給各原子說話人（USR：自動配色）。主題無定義顏色→留空→僅粗體、不上色。</summary>
+    private void RebuildSpeakerColors()
+    {
+        _speakerColorHex = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var theme = CurrentTheme();
+        var hexes = theme?.ColorRules is { Count: > 0 } rules
+            ? NoteColors.Palette.Where(p => rules.TryGetValue(p.Name, out var d) && !string.IsNullOrWhiteSpace(d)).Select(p => p.Hex).ToList()
+            : new List<string>();
+        if (hexes.Count == 0) return; // 主題無配色→只粗體
+        var atoms = _speakerChecks.Where(sc => !sc.IsEveryone && !sc.IsNoSpeaker).Select(sc => sc.Name).ToList();
+        for (var i = 0; i < atoms.Count; i++) _speakerColorHex[atoms[i]] = hexes[i % hexes.Count];
+    }
+
+    /// <summary>目前內容頁所選之主題（供自動配色取 ColorRules）；未指派→null。</summary>
+    private LingoIsland.Query.ThemeItem? CurrentTheme()
+    {
+        var id = ThemeFilter.PickedThemeId(VideoThemePicker);
+        return id is null ? null : ThemeStore.Find(_themes.Load(), id);
+    }
+
+    /// <summary>刷新每列強調（粗體+顏色）：僅「粗體+顏色」模式且該句說話人被勾選時，套主題色背景＋台詞加粗；其餘還原正常。</summary>
+    private void RefreshCueEmphasis()
+    {
+        var color = _filterMode == FilterMode.ColorSelected;
+        foreach (var row in _rows)
+        {
+            var on = color && SpeakerChecked(row.Cue.Speaker);
+            row.SetEmphasis(on, on ? ColorForSpeaker(row.Cue.Speaker) : null);
+        }
+    }
+
+    /// <summary>重整清單檢視（套 CueRowFilter）。</summary>
+    private void RefreshFilterView() => _cueView?.Refresh();
+
+    /// <summary>清單篩選：僅「只顯示勾選者」模式才隱藏未勾之句；「無篩選」「粗體+顏色」皆全顯示。</summary>
     private bool CueRowFilter(object o)
     {
         if (o is not CueRow row) return true;
-        if (_filterNoSpeaker) return string.IsNullOrEmpty(row.Cue.Speaker);
-        if (_speakerFilter is null) return true;
-        return string.Equals(row.Cue.Speaker, _speakerFilter, StringComparison.OrdinalIgnoreCase);
+        if (_filterMode != FilterMode.ShowSelected) return true;
+        return SpeakerChecked(row.Cue.Speaker);
     }
 
-    // ---- 指定說話人才暫停（增量7）：Everyone＋各具名說話人；選定後導引播放只在該說話人之句到句暫停 ----
-
-    /// <summary>重填 Pause-at 下拉：Everyone＋各具名說話人（去重排序）＋（有具名又有未標示句時）「(no speaker)」；保留選取（原選項已無則回 Everyone）；無具名說話人則停用。</summary>
-    private void PopulatePauseAtSpeaker()
+    /// <summary>顯示模式下拉改變（0 無篩選／1 只顯示勾選／2 粗體+顏色）→重整檢視與強調。</summary>
+    private void ApplyFilterMode()
     {
-        _populatingPauseAt = true;
-        // 以目前選項文字保留（含 (no speaker)）；下拉尚未建時由狀態反推
-        var prevSel = PauseAtSpeaker.SelectedItem as string ?? (_pauseNoSpeaker ? NoSpeaker : _pauseSpeaker) ?? EveryoneSpeaker;
-        PauseAtSpeaker.Items.Clear();
-        PauseAtSpeaker.Items.Add(EveryoneSpeaker);
-        PauseAtSpeaker.Items.Add(NoStop);                 // #178 增量6′-B USR：都不暫停、只跟隨字幕
-        var names = _cues.Where(c => !string.IsNullOrEmpty(c.Speaker)).Select(c => c.Speaker!)
-                         .Distinct(StringComparer.OrdinalIgnoreCase)
-                         .OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList();
-        foreach (var n in names) PauseAtSpeaker.Items.Add(n);
-        // #189：有具名又有未標示句時，另加「只在未標示（unknown）之句暫停」選項
-        if (names.Count > 0 && _cues.Any(c => string.IsNullOrEmpty(c.Speaker))) { PauseAtSpeaker.Items.Add(NoSpeaker); }
-        var idx = PauseAtSpeaker.Items.IndexOf(prevSel);
-        PauseAtSpeaker.SelectedIndex = idx >= 0 ? idx : 0;
-        ApplyPauseAtSelection(PauseAtSpeaker.SelectedItem as string); // 依還原後之選項設定 _pauseSpeaker／_pauseNoSpeaker
-        PauseAtSpeaker.IsEnabled = names.Count > 0; // 有具名說話人才有意義
-        _populatingPauseAt = false;
+        _filterMode = SpeakerFilter.SelectedIndex switch { 1 => FilterMode.ShowSelected, 2 => FilterMode.ColorSelected, _ => FilterMode.None };
+        RefreshFilterView();
+        RefreshCueEmphasis();
     }
 
-    /// <summary>下拉改變→設定暫停對象（Everyone＝全部；具名＝該說話人；(no speaker)＝只在未標示之句暫停）。</summary>
-    private void ApplyPauseAtSpeaker() => ApplyPauseAtSelection(PauseAtSpeaker.SelectedItem as string);
-
-    /// <summary>依 Pause-at 選項字串設定 _pauseSpeaker／_pauseNoSpeaker（#189）。</summary>
-    private void ApplyPauseAtSelection(string? sel)
+    /// <summary>等待模式下拉改變（0 不等待／1 依勾選等待）→暫停自目前時間重算。</summary>
+    private void ApplyPauseMode()
     {
-        _pauseDisabled = sel == NoStop;                   // #178 增量6′-B USR：(no stop)＝完全不暫停
-        _pauseNoSpeaker = sel == NoSpeaker;
-        _pauseSpeaker = (sel is null || sel == EveryoneSpeaker || sel == NoSpeaker || sel == NoStop) ? null : sel;
+        _pauseMode = PauseAtSpeaker.SelectedIndex == 1 ? PauseMode.Selected : PauseMode.Off;
+        _lastPausedIndex = -1;
+    }
+
+    /// <summary>把下拉選取同步為目前模式（不觸發套用）。</summary>
+    private void SyncModeSelectors()
+    {
+        _populatingModes = true;
+        SpeakerFilter.SelectedIndex = _filterMode switch { FilterMode.ShowSelected => 1, FilterMode.ColorSelected => 2, _ => 0 };
+        PauseAtSpeaker.SelectedIndex = _pauseMode == PauseMode.Selected ? 1 : 0;
+        _populatingModes = false;
+    }
+
+    /// <summary>啟/停用說話人相關控制（顯示模式下拉＋等待模式下拉＋勾選面板）。</summary>
+    private void SetSpeakerControlsEnabled(bool on)
+    {
+        SpeakerFilter.IsEnabled = on;
+        PauseAtSpeaker.IsEnabled = on;
+        SpeakerChecks.IsEnabled = on;
+    }
+
+    /// <summary>
+    /// 等待對象（#189-checklist）：不等待模式→null（OnPoll 不暫停）；Everyone 全勾→(null,false)＝非指定（句末停、原逐句學習行為）；
+    /// 否則→(已勾原子集合, 是否含未標示)＝指定對象（於該句起點停；空集合→無人符合→不停）。
+    /// </summary>
+    private (IReadOnlyCollection<string>? Targets, bool NoSpeaker)? PauseTargets()
+    {
+        if (_pauseMode == PauseMode.Off) return null;
+        if (_everyoneCheck?.IsChecked == true) return (null, false);
+        return (_checkedNames, _noSpeakerCheck?.IsChecked == true);
     }
 
     /// <summary>
@@ -1221,9 +1323,9 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         if (_webReady) { try { _ = Web.ExecuteScriptAsync("window.li_pause&&window.li_pause()"); } catch { /* 盡力暫停 */ } }
         YamlBox.Text = SubtitleYaml.Serialize(_cues);
         _yamlEditing = true;
-        CueList.Visibility = System.Windows.Visibility.Collapsed;
+        CuePanel.Visibility = System.Windows.Visibility.Collapsed;   // 連同說話人勾選面板一併隱藏（#189-checklist）
         YamlEditor.Visibility = System.Windows.Visibility.Visible;
-        SpeakerFilter.IsEnabled = false;
+        SetSpeakerControlsEnabled(false);
         EditYamlBtn.IsEnabled = false;
         OffsetBox.IsEnabled = false; OffsetApplyBtn.IsEnabled = false; // 增量6′-B：YAML 編修期間停用時間偏移
         SetStatus("Editing subtitle as YAML — merge/split lines and set speakers, then Apply.");
@@ -1257,7 +1359,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         if (!_yamlEditing) return;
         ExitYamlEditUi();
         var has = _cues.Count > 0;
-        SpeakerFilter.IsEnabled = has;
+        SetSpeakerControlsEnabled(has);
         EditYamlBtn.IsEnabled = has;
         SyncOffsetEnabled(has); // #187；增量5′：已帶說話人則停用
         if (_webReady && IsVisible && has) { _guiding = true; _poll.Start(); }
@@ -1267,7 +1369,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     {
         _yamlEditing = false;
         YamlEditor.Visibility = System.Windows.Visibility.Collapsed;
-        CueList.Visibility = System.Windows.Visibility.Visible;
+        CuePanel.Visibility = System.Windows.Visibility.Visible;   // 還原清單＋說話人勾選面板（#189-checklist）
     }
 
     /// <summary>目前播放秒數（橋接失敗／未起播回 0）。</summary>
@@ -1295,12 +1397,50 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         public string SpeakerLabel => SpeakerLabelOf(Cue.Speaker);
         /// <summary>台詞文字（清單以正常字重 Run 呈現）。</summary>
         public string Text => Cue.Text;
+
+        // 粗體+顏色強調（#189-checklist）：僅「粗體+顏色」模式且本句說話人被勾選時，背景上主題色、台詞加粗；預設透明/正常＝與原外觀一致。
+        private System.Windows.Media.Brush _rowBg = System.Windows.Media.Brushes.Transparent;
+        public System.Windows.Media.Brush RowBackground { get => _rowBg; private set { if (!ReferenceEquals(_rowBg, value)) { _rowBg = value; Raise(nameof(RowBackground)); } } }
+        private System.Windows.FontWeight _lineWeight = System.Windows.FontWeights.Normal;
+        public System.Windows.FontWeight LineWeight { get => _lineWeight; private set { if (_lineWeight != value) { _lineWeight = value; Raise(nameof(LineWeight)); } } }
+        /// <summary>設定本列強調：on＝該句被勾選且處於粗體+顏色模式；hex 非 null 時上主題背景色（否則只加粗、不上色，＝主題無配色時之退回）。</summary>
+        public void SetEmphasis(bool on, string? hex)
+        {
+            RowBackground = on && hex is not null ? BrushOfHex(hex) : System.Windows.Media.Brushes.Transparent;
+            LineWeight = on ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
+        }
+
         /// <summary>就地更新說話人（#189 右鍵指定）：換 Cue 並通知 SpeakerLabel 變更，使清單該列即時更新、免重建（不跳捲軸）。</summary>
         public void UpdateSpeaker(string? speaker)
         {
             Cue = Cue with { Speaker = speaker };
             PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(SpeakerLabel)));
         }
+        private void Raise(string n) => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(n));
+    }
+
+    // 主題色 hex → 凍結筆刷（快取；色盤固定、跨列共用免重建）。供 CueRow 強調背景。
+    private static readonly Dictionary<string, System.Windows.Media.Brush> HexBrushCache = new(StringComparer.OrdinalIgnoreCase);
+    private static System.Windows.Media.Brush BrushOfHex(string hex)
+    {
+        if (HexBrushCache.TryGetValue(hex, out var b)) return b;
+        var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex);
+        var br = new System.Windows.Media.SolidColorBrush(color); br.Freeze();
+        HexBrushCache[hex] = br;
+        return br;
+    }
+
+    /// <summary>說話人勾選面板一列（#189-checklist）：名字＋是否 Everyone／(no speaker)＋勾選態（TwoWay 綁 CheckBox）。Everyone 列加粗以區別。</summary>
+    private sealed class SpeakerCheck : System.ComponentModel.INotifyPropertyChanged
+    {
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+        public SpeakerCheck(string name, bool isEveryone = false, bool isNoSpeaker = false) { Name = name; IsEveryone = isEveryone; IsNoSpeaker = isNoSpeaker; }
+        public string Name { get; }
+        public bool IsEveryone { get; }
+        public bool IsNoSpeaker { get; }
+        public System.Windows.FontWeight Weight => IsEveryone ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
+        private bool _checked = true;
+        public bool IsChecked { get => _checked; set { if (_checked != value) { _checked = value; PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsChecked))); } } }
     }
 
     /// <summary>取目前載入影片之所屬主題名（供 AI 字幕分析輔助）；無載入或未指派主題→null。</summary>

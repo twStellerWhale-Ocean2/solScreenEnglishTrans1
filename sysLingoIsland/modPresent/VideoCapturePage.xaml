@@ -199,9 +199,13 @@
                 <Button x:Name="AddNoteBtn" Content="&#xFF0B; Add to Notes" Width="132" Height="28" Margin="10,0,0,4" IsEnabled="False"/>
                 <!-- 指定說話人才暫停（增量7） -->
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,4">
-                  <TextBlock Text="Pause at:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
-                  <ComboBox x:Name="PauseAtSpeaker" MinWidth="110" Height="26" VerticalContentAlignment="Center"
-                            IsEnabled="False" ToolTip="Only pause at this speaker's lines (others play through)"/>
+                  <TextBlock Text="Pause:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
+                  <!-- 兩模式（#189-checklist USR）：不等待／依「說話人勾選面板」勾選者等待。對象＝字幕清單下方勾選清單。 -->
+                  <ComboBox x:Name="PauseAtSpeaker" MinWidth="140" Height="26" VerticalContentAlignment="Center"
+                            IsEnabled="False" ToolTip="Pause at the speakers checked in the Speakers list (below the subtitle list), or never.">
+                    <ComboBoxItem>Don't pause</ComboBoxItem>
+                    <ComboBoxItem>Pause at selected</ComboBoxItem>
+                  </ComboBox>
                 </StackPanel>
               </WrapPanel>
             </Grid>
@@ -216,9 +220,13 @@
                 <RowDefinition Height="*"/>
               </Grid.RowDefinitions>
 
-              <!-- 說話人篩選（#189：移到字幕清單正上方） -->
+              <!-- 說話人顯示模式（#189-checklist USR）：無篩選／只顯示勾選者／保留全部但把勾選者粗體+顏色（色依主題）。對象＝下方勾選清單。 -->
               <ComboBox x:Name="SpeakerFilter" Grid.Row="1" Height="26" VerticalContentAlignment="Center" Margin="0,2,0,4"
-                        IsEnabled="False" ToolTip="Filter the subtitle list by speaker"/>
+                        IsEnabled="False" ToolTip="How to use the checked speakers below: no filter, show only them, or keep all lines but bold + color theirs (color from the theme).">
+                <ComboBoxItem>No filter</ComboBoxItem>
+                <ComboBoxItem>Show selected only</ComboBoxItem>
+                <ComboBoxItem>Bold + color selected</ComboBoxItem>
+              </ComboBox>
 
               <Grid Grid.Row="0" Margin="0,0,0,2">
                 <Grid.RowDefinitions>
@@ -253,16 +261,51 @@
                 </Grid>
               </Grid>
 
-              <!-- 右鍵選單於程式端依游標下之列動態填入（Copy line＋快速指定/修正說話人，#189）；見 OnCueContextMenuOpening -->
-              <ListBox x:Name="CueList" Grid.Row="2" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"
-                       ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Double-click a line to jump there (paused); click a selected line to play/pause; right-click to copy or set the speaker">
-                <ListBox.ItemTemplate>
-                  <DataTemplate>
-                    <!-- 時間標(淡)＋說話人(粗)＋台詞。Run.Text 綁定預設 TwoWay，對唯讀屬性會擲例外 → 明指 OneWay -->
-                    <TextBlock TextWrapping="Wrap" Margin="2" FontSize="12"><Run Text="{Binding TimeLabel, Mode=OneWay}" Foreground="#9A6A82" FontSize="11"/><Run Text="{Binding SpeakerLabel, Mode=OneWay}" FontWeight="Bold"/><Run Text="{Binding Text, Mode=OneWay}"/></TextBlock>
-                  </DataTemplate>
-                </ListBox.ItemTemplate>
-              </ListBox>
+              <!-- 字幕清單（上）＋可上下拖拉之說話人勾選面板（下），中間 GridSplitter（#189-checklist USR） -->
+              <Grid x:Name="CuePanel" Grid.Row="2">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="*" MinHeight="120"/>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="150" MinHeight="46"/>
+                </Grid.RowDefinitions>
+
+                <!-- 右鍵選單於程式端依游標下之列動態填入（Copy line＋快速指定/修正說話人，#189）；見 OnCueContextMenuOpening -->
+                <ListBox x:Name="CueList" Grid.Row="0" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"
+                         HorizontalContentAlignment="Stretch"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Double-click a line to jump there (paused); click a selected line to play/pause; right-click to copy or set the speaker">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <!-- 時間標(淡)＋說話人(粗)＋台詞。Run.Text 綁定預設 TwoWay，對唯讀屬性會擲例外 → 明指 OneWay。
+                           RowBackground/LineWeight 綁 CueRow：粗體+顏色模式且該句說話人被勾選時→背景上主題色、台詞加粗（#189-checklist）。 -->
+                      <Border Background="{Binding RowBackground}" CornerRadius="3" HorizontalAlignment="Stretch" Padding="1,0">
+                        <TextBlock TextWrapping="Wrap" Margin="2" FontSize="12"><Run Text="{Binding TimeLabel, Mode=OneWay}" Foreground="#9A6A82" FontSize="11"/><Run Text="{Binding SpeakerLabel, Mode=OneWay}" FontWeight="Bold"/><Run Text="{Binding Text, Mode=OneWay}" FontWeight="{Binding LineWeight}"/></TextBlock>
+                      </Border>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+
+                <GridSplitter Grid.Row="1" Height="10" Margin="0,2" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" Background="#E8A9BE"
+                              ToolTip="Drag to resize the speaker list"/>
+
+                <!-- 說話人勾選面板（Everyone＋各原子說話人；合唸句拆開去重）：字幕篩選/顯示與影片等待共用同一份勾選（#189-checklist USR） -->
+                <Border Grid.Row="2" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1" CornerRadius="4">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Speakers — used by the filter &amp; pause above" Foreground="#B0578D"
+                               FontSize="11" Margin="6,3,6,2" TextTrimming="CharacterEllipsis"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,0,4,4">
+                      <ItemsControl x:Name="SpeakerChecks">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <CheckBox Content="{Binding Name}" IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                      FontWeight="{Binding Weight}" FontSize="12" Margin="2,1" VerticalContentAlignment="Center"/>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </ScrollViewer>
+                  </DockPanel>
+                </Border>
+              </Grid>
 
               <Grid x:Name="YamlEditor" Grid.Row="2" Visibility="Collapsed">
                 <Grid.RowDefinitions>
