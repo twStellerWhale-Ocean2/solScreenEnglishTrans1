@@ -102,6 +102,11 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _cueClickTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(GetDoubleClickTime()) };
         _cueClickTimer.Tick += (_, _) => { _cueClickTimer.Stop(); if (_cueClickWasSelected) { _ = TogglePlayPauseAsync(); } }; // 單擊逾時未等到雙擊：已選中之句→播/暫停切換；未選中者僅選取（不動作）
 
+        // 直接載入（epic #178 增量6′ 核心）：使用者提供影片網址＋字幕檔網址→直接建立字幕（繞過不穩的 finder；走已驗證之載入管線、跑前確認費用）
+        DirectBuildBtn.Click += (_, _) => DoDirectBuild();
+        DirectVideoBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { DoDirectBuild(); e.Handled = true; } };
+        DirectSubtitleBox.KeyDown += (_, e) => { if (e.Key == Key.Enter) { DoDirectBuild(); e.Handled = true; } };
+
         // 由字幕檔網址配影片（epic #178 增量2，#182）：Find／Enter → 解析字幕檔網址、驗證含說話人、配 YouTube，定位後列於成果區塊（花 OpenAI 額度、跑前確認費用）
         TranscriptSearchBtn.Click += (_, _) => DoTranscriptSearch();
         TranscriptBox.DropDownOpened += (_, _) => TranscriptBox.ItemsSource = _transcriptHistory.Load(); // 開下拉填入字幕檔網址歷史（比照關鍵字框）
@@ -552,6 +557,32 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     {
         var s = (FindMaxCount.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content as string;
         return int.TryParse(s, out var n) ? Math.Clamp(n, 1, 20) : 5;
+    }
+
+    /// <summary>
+    /// 直接載入（epic #178 增量6′ 核心）：使用者提供「影片網址（或 ID）＋字幕檔網址」→ 記字幕檔網址到該片、走載入管線建立字幕
+    /// （取字幕檔→整理說話人＋台詞→Whisper 取時間→逐句對齊；跑前確認費用）、加入影片清單。**繞過不穩的 AI 自動配片 finder**——使用者已知配對，不需模糊配。
+    /// 影片 ID 解析失敗／字幕檔網址非 http(s) 以狀態列回報、不動作。
+    /// </summary>
+    private void DoDirectBuild()
+    {
+        var id = ExtractVideoId(DirectVideoBox.Text);
+        if (id is null)
+        {
+            SetStatus("Enter a valid YouTube link or 11-character video ID in the Video box.");
+            return;
+        }
+        var subtitleUrl = DirectSubtitleBox.Text?.Trim() ?? "";
+        if (subtitleUrl.Length == 0
+            || (!subtitleUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !subtitleUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase)))
+        {
+            SetStatus("Enter the subtitle-file URL (must start with http:// or https://) in the Subtitle box.");
+            return;
+        }
+        // 記字幕檔網址到該片：LoadVideoAsync 未快取時即取此建立字幕（與 finder 存法一致，供快取還原與載入來源）。
+        _statusStore.SaveWeb(id, found: true, source: "Direct input", transcriptUrl: subtitleUrl);
+        _transcriptHistory.Add(subtitleUrl); // 沿用字幕檔網址歷史（下拉可選）
+        _ = LoadVideoAsync(id, addToStore: true); // 未快取→確認費用→建立管線；建立成功加入影片清單
     }
 
     /// <summary>

@@ -58,7 +58,37 @@
         <StackPanel>
           <TextBlock Text="Load a video" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}" Margin="0,0,0,8"/>
 
-          <!-- 由字幕檔網址（epic #178 增量2，#182；唯一獲得路）：貼字幕檔網站／網址→AI 解析驗證含說話人→配 YouTube，成果列於下方成果區塊。
+          <!-- 直接載入（epic #178 增量6′ 核心）：使用者已知影片＋字幕檔網址，直接建立字幕——繞過不穩的 AI 自動配片 finder，可靠路徑。
+               走與載入相同之管線（取字幕檔→整理說話人＋台詞→Whisper 取時間→逐句對齊），跑前確認費用。 -->
+          <StackPanel x:Name="AcqPaneDirect" Margin="0,0,0,10">
+            <TextBlock Text="Load a specific video (recommended)" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
+            <TextBlock Text="Paste a YouTube link (or ID) and its subtitle-file URL (a transcript page that names the speakers). LingoIsland builds speaker subtitles timed to the real audio. Uses your OpenAI key; confirms cost first."
+                       Foreground="#9A6A82" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,6"/>
+            <Grid Margin="0,0,0,4">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="0" Text="Video" VerticalAlignment="Center" Width="56" Foreground="#B0578D"/>
+              <TextBox x:Name="DirectVideoBox" Grid.Column="1" Height="30" VerticalContentAlignment="Center" Padding="6,0"
+                       ToolTip="YouTube link or 11-character video ID"/>
+            </Grid>
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+              </Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="0" Text="Subtitle" VerticalAlignment="Center" Width="56" Foreground="#B0578D"/>
+              <TextBox x:Name="DirectSubtitleBox" Grid.Column="1" Height="30" VerticalContentAlignment="Center" Padding="6,0"
+                       ToolTip="URL of a transcript/subtitle page that names the speakers (e.g. a fandom transcript)"/>
+              <Button x:Name="DirectBuildBtn" Grid.Column="2" Content="&#x2699; Build subtitles" Width="140" Height="30" Margin="8,0,0,0"/>
+            </Grid>
+          </StackPanel>
+
+          <TextBlock Text="— or auto-find videos from a subtitle page (may miss) —" Foreground="#C89AB0" FontSize="10.5" Margin="0,0,0,8" HorizontalAlignment="Center"/>
+
+          <!-- 由字幕檔網址（epic #178 增量2，#182）：貼字幕檔網站／網址→AI 解析驗證含說話人→配 YouTube，成果列於下方成果區塊。
                用 OpenAI（gpt-4.1 web_search），跑前確認費用。輸入可為單一字幕檔頁 或 列多份字幕檔連結之目錄頁（站台無關）。 -->
           <StackPanel x:Name="AcqPaneTranscript">
             <TextBlock Text="Load videos from a subtitle page" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
