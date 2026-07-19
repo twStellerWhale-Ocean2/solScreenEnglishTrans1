@@ -56,219 +56,36 @@
       <!-- 【獲得】關鍵字搜尋＋結果表格＋網址載入 -->
       <Border x:Name="SearchPane" Style="{StaticResource Card}" Padding="12" VerticalAlignment="Top">
         <StackPanel>
-          <TextBlock Text="Load a video" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}" Margin="0,0,0,8"/>
+          <TextBlock Text="Add a video" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}" Margin="0,0,0,6"/>
 
-          <!-- 直接載入（epic #178 增量6′ 核心）：使用者已知影片＋字幕檔網址，直接建立字幕——繞過不穩的 AI 自動配片 finder，可靠路徑。
-               走與載入相同之管線（取字幕檔→整理說話人＋台詞→Whisper 取時間→逐句對齊），跑前確認費用。 -->
-          <StackPanel x:Name="AcqPaneDirect" Margin="0,0,0,10">
-            <TextBlock Text="Load a specific video (recommended)" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
-            <TextBlock Text="Paste a YouTube link (or ID) and its subtitle-file URL (a transcript page that names the speakers). LingoIsland builds speaker subtitles timed to the real audio. Uses your OpenAI key; confirms cost first."
-                       Foreground="#9A6A82" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,6"/>
-            <Grid Margin="0,0,0,4">
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-              </Grid.ColumnDefinitions>
-              <TextBlock Grid.Column="0" Text="Video" VerticalAlignment="Center" Width="56" Foreground="#B0578D"/>
-              <TextBox x:Name="DirectVideoBox" Grid.Column="1" Height="30" VerticalContentAlignment="Center" Padding="6,0"
-                       ToolTip="YouTube link or 11-character video ID"/>
-            </Grid>
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-              </Grid.ColumnDefinitions>
-              <TextBlock Grid.Column="0" Text="Subtitle" VerticalAlignment="Center" Width="56" Foreground="#B0578D"/>
-              <TextBox x:Name="DirectSubtitleBox" Grid.Column="1" Height="30" VerticalContentAlignment="Center" Padding="6,0"
-                       ToolTip="URL of a transcript/subtitle page that names the speakers (e.g. a fandom transcript)"/>
-              <Button x:Name="DirectBuildBtn" Grid.Column="2" Content="&#x2699; Build subtitles" Width="140" Height="30" Margin="8,0,0,0"/>
-            </Grid>
-          </StackPanel>
+          <!-- 單一輸入框（epic #178 增量6′「輸入 pivot」）：貼含**具體 YouTube 影片網址＋字幕檔網址**之自然語言文字。
+               程式抽出兩網址（**不做關鍵字搜尋**——要求具體 URL、避免不穩的 AI 配片與鬼打牆），走載入管線建立字幕
+               （取字幕檔→整理說話人＋台詞→Whisper 取時間→逐句對齊；跑前確認費用），加入內容頁。字幕檔須為含說話人之逐字稿頁。 -->
+          <TextBlock TextWrapping="Wrap" Foreground="#9A6A82" FontSize="11.5" Margin="0,0,0,8"
+                     Text="Paste text that has a YouTube video URL and its subtitle-file URL (a transcript page that names the speakers). LingoIsland reads both, builds speaker subtitles timed to the real audio, and adds the video to your Content tab. Uses your OpenAI key; confirms the cost first."/>
+          <!-- 多行輸入框＋空框範例佔位（不搶輸入、有字即隱） -->
+          <Grid>
+            <TextBox x:Name="AcqInputBox" MinHeight="128" MaxHeight="240" AcceptsReturn="True" TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" Padding="8" FontSize="12.5"
+                     Background="#66FFFFFF" ToolTip="Paste a YouTube video URL and a subtitle-file URL (both required); Ctrl+Enter to add"/>
+            <TextBlock x:Name="AcqPlaceholder" IsHitTestVisible="False" Foreground="#B692A6" FontSize="12"
+                       Margin="11,9,10,10" VerticalAlignment="Top" TextWrapping="Wrap">
+              <Run Text="Paste the video and subtitle links, for example:"/><LineBreak/>
+              <Run Text="Pups and the Pirate Treasure"/><LineBreak/>
+              <Run Text="影片：https://www.youtube.com/watch?v=hc4hH7JMV_g"/><LineBreak/>
+              <Run Text="字幕：https://pawpatrol.fandom.com/wiki/Pups_and_the_Pirate_Treasure/Transcript"/>
+            </TextBlock>
+          </Grid>
+          <Grid Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Foreground="#C89AB0" FontSize="10.5" VerticalAlignment="Center" TextWrapping="Wrap"
+                       Text="Needs a real video URL and a real subtitle-file URL — no keyword search."/>
+            <Button x:Name="AcqBuildBtn" Grid.Column="1" Content="&#x2699; Add video" Width="132" Height="32" VerticalAlignment="Center"/>
+          </Grid>
 
-          <TextBlock Text="— or auto-find videos from a subtitle page (may miss) —" Foreground="#C89AB0" FontSize="10.5" Margin="0,0,0,8" HorizontalAlignment="Center"/>
-
-          <!-- 由字幕檔網址（epic #178 增量2，#182）：貼字幕檔網站／網址→AI 解析驗證含說話人→配 YouTube，成果列於下方成果區塊。
-               用 OpenAI（gpt-4.1 web_search），跑前確認費用。輸入可為單一字幕檔頁 或 列多份字幕檔連結之目錄頁（站台無關）。 -->
-          <StackPanel x:Name="AcqPaneTranscript">
-            <TextBlock Text="Load videos from a subtitle page" FontWeight="SemiBold" Foreground="#B0578D" Margin="0,0,0,4"/>
-            <TextBlock Text="Paste a subtitle-file URL — a single transcript page, or an index page that lists several. LingoIsland reads it, keeps the ones that name a speaker, and matches each to its YouTube video. Uses your OpenAI key; confirms cost first."
-                       Foreground="#9A6A82" FontSize="11.5" TextWrapping="Wrap" Margin="0,0,0,6"/>
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-              </Grid.ColumnDefinitions>
-              <!-- 字幕檔網址框：可編輯 ComboBox，下拉顯示字幕檔網址歷史（比照關鍵字框 #186）；↑↓ 選、Delete 刪該筆 -->
-              <ComboBox x:Name="TranscriptBox" Grid.Column="0" Height="30" IsEditable="True" StaysOpenOnEdit="True"
-                        IsTextSearchEnabled="False" VerticalContentAlignment="Center" Padding="6,0"
-                        ToolTip="Paste a subtitle-file URL (or pick from history); ↑↓ then Delete removes a history entry"/>
-              <Button x:Name="TranscriptSearchBtn" Grid.Column="1" Content="&#x1F4C4; Find" Width="100" Height="30" Margin="8,0,0,0"/>
-            </Grid>
-            <!-- 找片選項（epic #178 增量2，#182）：Find up to N＝一次最多解析/驗證幾份字幕檔（花額度、控管筆數）；Skip existing＝濾掉已在影片清單者 -->
-            <StackPanel Orientation="Horizontal" Margin="0,6,0,0" VerticalAlignment="Center">
-              <TextBlock Text="Find up to" VerticalAlignment="Center" Foreground="#B0578D"/>
-              <ComboBox x:Name="FindMaxCount" Width="50" Height="26" Margin="4,0,0,0" VerticalContentAlignment="Center"
-                        ToolTip="How many subtitle files to read and verify at most (each uses your OpenAI key)">
-                <ComboBoxItem Content="3"/>
-                <ComboBoxItem Content="5" IsSelected="True"/>
-                <ComboBoxItem Content="10"/>
-              </ComboBox>
-              <CheckBox x:Name="SkipExistingVideos" Content="Skip videos I already have" IsChecked="False" VerticalAlignment="Center"
-                        Foreground="#B0578D" Margin="16,0,0,0"
-                        ToolTip="Leave out matches that are already in your Videos list"/>
-            </StackPanel>
-          </StackPanel>
-
-          <!-- 成果區塊（#189）：由關鍵字／由逐字稿之搜尋結果統一列於此；標準表格 DataGrid（#177，欄可調寬/重排、點表頭排序皆內建；上方過濾框 + 逐列 Load 鈕） -->
-          <Border x:Name="SearchResultsPanel" Visibility="Collapsed" Margin="0,6,0,0"
-                  BorderBrush="#33B0578D" BorderThickness="1" CornerRadius="6" Background="#40FFFFFF">
-            <Grid>
-              <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-              </Grid.RowDefinitions>
-              <!-- 過濾（依標題即時篩選，#177） -->
-              <Grid Grid.Row="0" Margin="8,6,8,4">
-                <TextBox x:Name="ResultFilterBox" Height="26" VerticalContentAlignment="Center" Padding="6,0"
-                         Background="#66FFFFFF" TextChanged="OnResultFilterChanged" ToolTip="Filter results by title"/>
-                <TextBlock x:Name="FilterPlaceholder" Text="&#x1F50D; Filter by title…" Foreground="#9A6A82" FontSize="11.5"
-                           Margin="8,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
-              </Grid>
-              <!-- 標準表格 DataGrid（#177）：欄可拖曳調寬/重排、點表頭排序皆內建；篩選沿用上方過濾框（ListCollectionView.Filter）；雙擊列亦載入 -->
-              <DataGrid x:Name="SearchResultsGrid" Grid.Row="1" AutoGenerateColumns="False" IsReadOnly="True"
-                        HeadersVisibility="Column" CanUserResizeColumns="True" CanUserReorderColumns="True"
-                        CanUserSortColumns="True" CanUserResizeRows="False" CanUserAddRows="False" CanUserDeleteRows="False"
-                        SelectionMode="Single" SelectionUnit="FullRow" GridLinesVisibility="Horizontal"
-                        HorizontalGridLinesBrush="#22B0578D" Background="Transparent" RowBackground="Transparent"
-                        BorderThickness="0" MaxHeight="500" RowHeight="44" FontSize="12"
-                        HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"
-                        PreviewMouseRightButtonDown="OnResultRowRightClick"
-                        ColumnHeaderStyle="{StaticResource GridColHeader}" RowStyle="{StaticResource GridRow}" CellStyle="{StaticResource GridCell}">
-                <!-- 右鍵重新檢查（#188）：字幕狀態已快取、平常重搜直接還原不重探；需更新時於此手動重檢（內嵌免費、網路花額度） -->
-                <DataGrid.ContextMenu>
-                  <ContextMenu>
-                    <MenuItem Header="↻ Re-check embedded subtitles (free)" Click="OnRecheckEmbedded"/>
-                    <MenuItem Header="🌐 Re-check web subtitle (uses OpenAI)" Click="OnRecheckWeb"/>
-                  </ContextMenu>
-                </DataGrid.ContextMenu>
-                <DataGrid.Columns>
-                  <!-- 推薦優序（#183）：彩色圓標數字 1–5（5＝最佳、綠；3＝琥珀；低＝灰）——比星等好懂；點表頭以推薦分排序（預設排序欄） -->
-                  <DataGridTemplateColumn Header="Pick" SortMemberPath="RecommendScore" CanUserResize="False" MinWidth="48">
-                    <DataGridTemplateColumn.CellTemplate>
-                      <DataTemplate>
-                        <Border Background="{Binding RecommendBrush}" CornerRadius="10" Width="22" Height="22"
-                                HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="{Binding RecommendTip}">
-                          <TextBlock Text="{Binding RecommendLabel}" Foreground="White" FontWeight="Bold" FontSize="11.5"
-                                     HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                        </Border>
-                      </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                  </DataGridTemplateColumn>
-                  <!-- 縮圖 -->
-                  <DataGridTemplateColumn Header="" CanUserSort="False" CanUserResize="False" Width="64">
-                    <DataGridTemplateColumn.CellTemplate>
-                      <DataTemplate>
-                        <Image Source="{Binding ThumbSource}"
-                               Width="{Binding ThumbWidth, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                               Height="{Binding ThumbHeight, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                               Stretch="UniformToFill" VerticalAlignment="Center"/>
-                      </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                  </DataGridTemplateColumn>
-                  <!-- 名稱（排序 A–Z；可調寬；佔滿剩餘寬） -->
-                  <DataGridTextColumn Header="Title" Binding="{Binding Title}" SortMemberPath="Title" Width="*" MinWidth="140">
-                    <DataGridTextColumn.ElementStyle>
-                      <Style TargetType="TextBlock">
-                        <Setter Property="VerticalAlignment" Value="Center"/>
-                        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
-                        <Setter Property="ToolTip" Value="{Binding Title}"/>
-                      </Style>
-                    </DataGridTextColumn.ElementStyle>
-                  </DataGridTextColumn>
-                  <!-- 片長（排序鍵＝秒數 DurationSec） -->
-                  <DataGridTextColumn Header="Time" Binding="{Binding DurationText}" SortMemberPath="DurationSec" MinWidth="48">
-                    <DataGridTextColumn.ElementStyle>
-                      <Style TargetType="TextBlock">
-                        <Setter Property="HorizontalAlignment" Value="Center"/>
-                        <Setter Property="VerticalAlignment" Value="Center"/>
-                        <Setter Property="Foreground" Value="#6D3A4D"/>
-                      </Style>
-                    </DataGridTextColumn.ElementStyle>
-                  </DataGridTextColumn>
-                  <!-- 初次搜尋時間（#186）：yyyy-MM-dd HH:mm，字串即按時間排序 -->
-                  <DataGridTextColumn Header="First seen" Binding="{Binding FirstSeen}" SortMemberPath="FirstSeen" MinWidth="96">
-                    <DataGridTextColumn.ElementStyle>
-                      <Style TargetType="TextBlock">
-                        <Setter Property="HorizontalAlignment" Value="Center"/>
-                        <Setter Property="VerticalAlignment" Value="Center"/>
-                        <Setter Property="Foreground" Value="#9A6A82"/>
-                        <Setter Property="FontSize" Value="11"/>
-                      </Style>
-                    </DataGridTextColumn.ElementStyle>
-                  </DataGridTextColumn>
-                  <!-- 連結（開 YouTube 原頁） -->
-                  <DataGridTemplateColumn Header="Link" CanUserSort="False" CanUserResize="False" MinWidth="56">
-                    <DataGridTemplateColumn.CellTemplate>
-                      <DataTemplate>
-                        <TextBlock VerticalAlignment="Center" HorizontalAlignment="Center">
-                          <Hyperlink NavigateUri="{Binding WatchUri}" RequestNavigate="OnOpenExternalLink" ToolTip="{Binding WatchUrl}">YouTube &#x2197;</Hyperlink>
-                        </TextBlock>
-                      </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                  </DataGridTemplateColumn>
-                  <!-- 三種字幕狀態（排序鍵＝Rank；Manual綠／Auto琥珀免費自動填、Web藍逐列按需查） -->
-                  <DataGridTemplateColumn Header="Manual" SortMemberPath="ManualRank" CanUserResize="False" MinWidth="52">
-                    <DataGridTemplateColumn.CellTemplate>
-                      <DataTemplate>
-                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-                          <local:Spinner Width="14" Height="14" Foreground="#B0578D" Visibility="{Binding EmbeddedSpinnerVisibility}"/>
-                          <TextBlock Text="{Binding ManualText}" Foreground="{Binding ManualBrush}" FontWeight="SemiBold"
-                                     FontSize="12.5" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Human-made subtitles"/>
-                        </Grid>
-                      </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                  </DataGridTemplateColumn>
-                  <DataGridTemplateColumn Header="Auto" SortMemberPath="AutoRank" CanUserResize="False" MinWidth="46">
-                    <DataGridTemplateColumn.CellTemplate>
-                      <DataTemplate>
-                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-                          <local:Spinner Width="14" Height="14" Foreground="#B0578D" Visibility="{Binding EmbeddedSpinnerVisibility}"/>
-                          <TextBlock Text="{Binding AutoText}" Foreground="{Binding AutoBrush}" FontWeight="SemiBold"
-                                     FontSize="12.5" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Auto-generated captions"/>
-                        </Grid>
-                      </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                  </DataGridTemplateColumn>
-                  <DataGridTemplateColumn Header="Web" SortMemberPath="WebRank" CanUserResize="False" MinWidth="64">
-                    <DataGridTemplateColumn.CellTemplate>
-                      <DataTemplate>
-                        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-                          <Button Content="{Binding WebButtonText}" IsEnabled="{Binding WebButtonEnabled}" Visibility="{Binding WebButtonVisibility}"
-                                  Click="OnSearchRowWebProbe" Background="Transparent" BorderBrush="#66B0578D" BorderThickness="1"
-                                  FontSize="11" Padding="6,2" Cursor="Hand"
-                                  ToolTip="Check the web for a transcript (uses your OpenAI key; costs a small fee)"/>
-                          <local:Spinner Width="14" Height="14" Foreground="#1565C0" Visibility="{Binding WebCheckingVisibility}"/>
-                          <TextBlock Text="{Binding WebResultText}" Foreground="{Binding WebResultBrush}" Visibility="{Binding WebResultVisibility}"
-                                     FontSize="12.5" FontWeight="SemiBold" VerticalAlignment="Center" ToolTip="{Binding WebResultTip}"/>
-                        </Grid>
-                      </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                  </DataGridTemplateColumn>
-                  <!-- 載入鈕（#183：移到行尾）：唯一載入方式（已取消雙擊載入）；已在清單者停用、標「Added」灰 -->
-                  <DataGridTemplateColumn Header="Load" CanUserSort="False" CanUserResize="False" MinWidth="58">
-                    <DataGridTemplateColumn.CellTemplate>
-                      <DataTemplate>
-                        <Button Content="{Binding LoadText}" IsEnabled="{Binding CanLoad}" Click="OnSearchRowLoad"
-                                Padding="10,3" Margin="2" Cursor="Hand" VerticalAlignment="Center"
-                                ToolTip="Load this video into the player (disabled if already in your Videos list)"/>
-                      </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                  </DataGridTemplateColumn>
-                </DataGrid.Columns>
-              </DataGrid>
-            </Grid>
-          </Border>
         </StackPanel>
       </Border>
 
@@ -300,7 +117,7 @@
                        HorizontalContentAlignment="Stretch"
                        ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                        ToolTip="Click to load; right-click or press Delete to remove"/>
-              <TextBlock x:Name="VideoEmptyHint" Text="No videos yet. Paste a subtitle-file URL under Acquire."
+              <TextBlock x:Name="VideoEmptyHint" Text="No videos yet. Add one under the Acquire tab."
                          Foreground="#9A6A82" FontSize="12" TextWrapping="Wrap" MaxWidth="160"
                          TextAlignment="Center" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Grid>
@@ -479,6 +296,6 @@
 
     <!-- 共用狀態列（#177）：兩子頁皆可見；載入/錯誤訊息不因切到內容頁而被遮 -->
     <TextBlock x:Name="StatusText" Grid.Row="2" Margin="4,6,4,0" FontSize="12" Foreground="#B0578D" TextWrapping="Wrap"
-               Text="Paste a subtitle-file URL under Acquire, then Load a result."/>
+               Text="Add a video under the Acquire tab: paste its video URL and its subtitle-file URL."/>
   </Grid>
 </UserControl>

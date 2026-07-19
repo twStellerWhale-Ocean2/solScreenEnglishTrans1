@@ -2,6 +2,21 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [3.3.0] - 2026-07-19
+
+影片功能大改（epic #178）增量6′〔輸入 pivot〕：【獲得】頁改為**單一輸入框**——貼「具體影片網址＋字幕檔網址」即建立字幕；砍不穩的 finder／結果表。
+
+### 變更
+- **【獲得】改為單一輸入框**：貼含**具體 YouTube 影片網址＋字幕檔網址**之自然語言文字（可含中文標籤如「影片：」「字幕：」，或 markdown 連結），程式抽出兩個網址即走建立字幕管線、加入【內容】頁。取代原「兩欄直接輸入 ＋ 由字幕檔網址 finder ＋ 結果表格」三件套，介面大幅簡化。
+- **要求具體 URL、不做關鍵字搜尋**：影片＝首個可解析出 YouTube ID 之網址、字幕＝首個非 YouTube 之網址；缺任一即當場回報所缺、不動作、不花費。**刻意不再以 AI 關鍵字查找**——前版 AI 自動配片不穩、常「找到卻 0 結果」或鬼打牆，改由使用者直接給定可靠配對（USR 決策）。
+- **保留跑前費用確認**：抽到兩網址後走與增量5′ 相同之建立管線（取字幕檔→整理說話人＋台詞→Whisper 取時間→逐句對齊），**跑前確認估算費用**；已存字幕免重花。
+- **啟動即顯示主視窗於【影片】頁**（USR 回饋）：原常駐最小化易誤以為程式沒開，改啟動即開窗定位影片頁。
+
+### 內部
+- 新增 `VideoCapturePage.ExtractUrls`（純函式、`internal` 可測）：由自由文字抽 http(s) 網址，取 RFC3986 URL 字元集（自然停在 CJK、不把中文說明黏入網址）、去尾標點、去 markdown 連結尾之孤立 `)`（維基式含配對 `(` 者不動）。挑選規則（影片＝有 ID 者、字幕＝無 ID 者）沿用 `ExtractVideoId`。
+- **砍 finder／結果表**：移除 `VideoCapturePage` 之搜尋結果 `DataGrid`（縮圖/推薦分/三態徽章/逐列 Load）與其驅動碼（`DoTranscriptSearch`／`PopulateResults`／內嵌探測／網路字幕欄／`SearchRow` view-model 等），連帶移除已無用之注入（`ITranscriptVideoFinder`／`IVideoSearcher`／`IWebTranscriptProbe`／`ISubtitleFetcher`）；建構子由 9 參縮為 5 參。
+- 單元測試 674 綠（+10 `ExtractUrls` 情境：使用者實際貼法、markdown＋utm、維基括號、CJK 邊界、只給其一）。
+
 ## [3.2.0] - 2026-07-18
 
 影片功能大改（epic #178）增量5′〔字幕主線 pivot〕：字幕來源改為**字幕檔（含說話人）＋Whisper 聲音對齊**，完全移除 yt-dlp auto/manual 抓字幕（#186）。

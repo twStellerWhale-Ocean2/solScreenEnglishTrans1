@@ -128,17 +128,12 @@ public partial class App : System.Windows.Application
         _dictionaryWindow.Page.ManualQueryRequested += text => _ = ManualLookupAsync(text); // 頂部手動輸入查詢
         _dictionaryWindow.Page.HistoryRequested += RefreshDictionaryHistory; // 下拉開啟→以查詢歷史填入
 
-        // 影片擷取分頁（#139，spec#2）：yt-dlp 取字幕 → WebView2 導引播放到句暫停 → 暫停句點字沿用既有查詢、加入既有筆記
-        // #180 清理：僅保留「由逐字稿」獲得路（DoTranscriptSearch）；已移除依台詞 AI 推斷與 Auto 重分句兩條說話人來源服務。
-        // OpenAiWebSpeakerEnricher 仍以 IWebTranscriptProbe（webProbe）角色注入：搜尋結果表格「網路字幕」欄按需查（#177，只跑 find 一步）。
-        var webProbe = new OpenAiWebSpeakerEnricher("gpt-4.1", "gpt-4o-mini", _config.TimeoutSec);
-        _videoPage = new VideoCapturePage(new YtDlpSubtitleFetcher(), _videoStore,
-            _themeStore, // 影片清單＋加入時記錄使用中主題（增量4）＋依 theme 篩選（B）＋搜尋關鍵字預填（#171）
-            webProbe,      // #177：網路字幕可用性探測（IWebTranscriptProbe）
-            new YtDlpVideoSearcher(), // 依關鍵字搜尋 YouTube（#171）
+        // 影片擷取分頁（#139，spec#2）：獲得（增量6′：單一輸入框貼影片＋字幕檔網址）→ 取字幕檔＋Whisper 對齊建立字幕 → WebView2 導引播放到句暫停 → 暫停句點字沿用既有查詢、加入既有筆記。
+        // 增量6′「輸入 pivot」：砍 finder／結果表後，已無 finder（ITranscriptVideoFinder）／關鍵字搜尋（IVideoSearcher）／內嵌探測（ISubtitleFetcher）／網路字幕欄（IWebTranscriptProbe）之注入。
+        _videoPage = new VideoCapturePage(_videoStore,
+            _themeStore, // 影片清單＋加入時記錄使用中主題（增量4）＋依 theme 篩選（B）
             new SubtitleStore(), // 字幕存檔：重開/重選同片還原、免重抓、保留說話人與 YAML 編修（#174）
             new WhisperTranscriber("whisper-1", _config.TimeoutSec), // #187：抓聲音以 Whisper 取時間軸（載入時建立字幕、按鈕重轉；跑前確認費用）
-            new OpenAiTranscriptVideoFinder("gpt-4.1", _config.TimeoutSec), // #189 獲得頁「由逐字稿找影片」：web_search（gpt-4.1）找有逐字稿之影片
             new OpenAiTranscriptAligner("gpt-4.1-mini", "gpt-4o-mini", _config.TimeoutSec)); // epic #178 增量5′：字幕檔整理（說話人＋台詞）＋逐句對齊 Whisper 聲音時間軸
         _videoPage.WordLookupRequested += LookupWordFromVideo;
         _videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
