@@ -86,13 +86,14 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _cueClickTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(GetDoubleClickTime()) };
         _cueClickTimer.Tick += (_, _) => { _cueClickTimer.Stop(); if (_cueClickWasSelected) { _ = TogglePlayPauseAsync(); } }; // 單擊逾時未等到雙擊：已選中之句→播/暫停切換；未選中者僅選取（不動作）
 
-        // 獲得（epic #178 增量6′「輸入 pivot」）：單一輸入框貼「影片網址＋字幕檔網址」→抽兩網址、走載入管線建立字幕（跑前確認費用）。多行框故 Ctrl+Enter 送出；空框顯範例佔位。
+        // 獲得（epic #178 增量6′「輸入 pivot」）：單一輸入框貼「影片網址＋字幕檔網址」→抽兩網址、走載入管線建立字幕（跑前確認費用）。空框顯範例佔位。
         AcqBuildBtn.Click += (_, _) => DoAcquireBuild();
         AcqInputBox.TextChanged += (_, _) => AcqPlaceholder.Visibility =
             string.IsNullOrEmpty(AcqInputBox.Text) ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        // 送出鍵（USR 回饋「按 Enter 沒反應」）：**Enter 直接送出**（符合舊單行框習慣；貼上是 Ctrl+V、不觸發 Enter，故不會誤送）；**Shift+Enter 才插入換行**。Ctrl+Enter 亦送出（Ctrl 不帶 Shift）。
         AcqInputBox.KeyDown += (_, e) =>
         {
-            if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control) { DoAcquireBuild(); e.Handled = true; }
+            if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) == 0) { DoAcquireBuild(); e.Handled = true; }
         };
         // 右側子頁籤（#177 版面重整）：搜尋下載 / 播放學習，以可見性切換（WebView2 不被卸載重建）
         SubTabSearch.Checked += (_, _) => ShowSubTab(showSearch: true);

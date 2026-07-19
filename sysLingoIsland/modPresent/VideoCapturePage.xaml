@@ -67,7 +67,7 @@
           <Grid>
             <TextBox x:Name="AcqInputBox" MinHeight="128" MaxHeight="240" AcceptsReturn="True" TextWrapping="Wrap"
                      VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" Padding="8" FontSize="12.5"
-                     Background="#66FFFFFF" ToolTip="Paste a YouTube video URL and a subtitle-file URL (both required); Ctrl+Enter to add"/>
+                     Background="#66FFFFFF" ToolTip="Paste a YouTube video URL and a subtitle-file URL (both required), then press Enter or click Add video"/>
             <TextBlock x:Name="AcqPlaceholder" IsHitTestVisible="False" Foreground="#B692A6" FontSize="12"
                        Margin="11,9,10,10" VerticalAlignment="Top" TextWrapping="Wrap">
               <Run Text="Paste the video and subtitle links, for example:"/><LineBreak/>
