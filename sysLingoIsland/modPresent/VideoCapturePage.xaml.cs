@@ -50,9 +50,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private bool _populatingModes;     // 填模式下拉/勾選面板期間抑制 SelectionChanged／勾選事件
 
     // 說話人顯示模式與等待模式（#189-checklist USR）：篩選/顯示三態＋等待兩態；對象取自共用之勾選面板 _speakerChecks
-    private enum FilterMode { None, ShowSelected, ColorSelected }
+    private enum FilterMode { ShowAll, ShowSelected, BoldSelected }
     private enum PauseMode { Off, Selected }
-    private FilterMode _filterMode = FilterMode.None;
+    private FilterMode _filterMode = FilterMode.ShowAll;
     private PauseMode _pauseMode = PauseMode.Selected;   // 預設依勾選等待（Everyone 全勾→等同原「逐句停」行為）
     // 勾選面板（Everyone＋各原子說話人＋(no speaker)）：字幕篩選/顯示與影片等待共用同一份勾選
     private readonly System.Collections.ObjectModel.ObservableCollection<SpeakerCheck> _speakerChecks = new();
@@ -73,6 +73,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 
     /// <summary>加入我的筆記（目前句原文；App 重譯後入既有 NotesStore）。</summary>
     public event Action<string>? AddToNotesRequested;
+
+    /// <summary>把某說話人所有台詞**原文**批次收藏至指定資料夾（#189-checklist USR；免 AI 翻譯）：參數＝(資料夾名, 台詞原文清單依 cue 序)。App 端寫入 NotesStore、toast 回報。</summary>
+    public event Action<string, IReadOnlyList<string>>? AddSpeakerNotesRequested;
 
     public VideoCapturePage(VideoStore videoStore, ThemeStore themes, SubtitleStore subtitles, ITranscriptAligner aligner)
     {
@@ -99,7 +102,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         // 右側子頁籤（#177 版面重整）：搜尋下載 / 播放學習，以可見性切換（WebView2 不被卸載重建）
         SubTabSearch.Checked += (_, _) => ShowSubTab(showSearch: true);
         SubTabPlay.Checked += (_, _) => ShowSubTab(showSearch: false);
-        ReplayBtn.Click += (_, _) => _ = ReplayCurrentAsync();
+        ReplayBtn.Click += (_, _) => _ = SkipPrevAsync();   // USR：Replay 改 Previous（上一句）
         ResumeBtn.Click += (_, _) => _ = ResumeAsync();
         NextBtn.Click += (_, _) => _ = SkipNextAsync();
         AddNoteBtn.Click += (_, _) => AddCurrent();
@@ -120,6 +123,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         EditYamlBtn.Click += (_, _) => EnterYamlEdit();
         OffsetApplyBtn.Click += (_, _) => ApplyOffset();                                                          // 增量6′-B：整份字幕時間偏移校正
         OffsetBox.PreviewKeyDown += (_, e) => { if (e.Key == Key.Enter) { ApplyOffset(); e.Handled = true; } };   // Enter 即套用偏移
+        OffsetMinusBtn.Click += (_, _) => NudgeOffset(-1);   // USR：Shift 左側 −／＋ 即時 ∓1 秒微調
+        OffsetPlusBtn.Click += (_, _) => NudgeOffset(1);
         PauseAtSpeaker.SelectionChanged += (_, _) => { if (!_populatingModes) { ApplyPauseMode(); } };           // 等待模式（不等待／依勾選）（#189-checklist）
         SpeakerChecks.ItemsSource = _speakerChecks;                                                               // 說話人勾選面板（篩選/顯示/等待共用）
         ApplyYamlBtn.Click += (_, _) => _ = ApplyYamlEditAsync();
@@ -176,6 +181,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         {
             PopulateVideoThemeFilter(); // 切回本頁重填篩選（反映主題增刪改，B）
             RefreshVideoList();
+            if (_rows.Count > 0) { RebuildSpeakerColors(); RefreshCueEmphasis(); } // USR：主題色描述於 Themes 頁改後,切回即更新字幕說話人字型色
             if (_guiding && _webReady) { _poll.Start(); }
         }
     }
@@ -970,12 +976,46 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         }
     }
 
-    private async Task ReplayCurrentAsync()
+    /// <summary>勾選面板某列之「加入筆記」鈕（#189-checklist USR）：把該說話人所有台詞原文，收藏至〔影片-說話人〕資料夾（免 AI）。全選列不觸發。</summary>
+    private void OnAddSpeakerNotesClick(object sender, System.Windows.RoutedEventArgs e)
     {
-        if (_shownCue < 0 || _shownCue >= _cues.Count || !_webReady) return;
-        if (_cues[_shownCue].StartSec is not double sec) return; // #184：未定時句無已知時間可跳，安全略過
-        _lastPausedIndex = _shownCue - 1; // 允許重播後於本句結束再暫停
-        await SeekAsync(sec);
+        if ((sender as System.Windows.FrameworkElement)?.DataContext is not SpeakerCheck sc || sc.IsEveryone) { return; }
+        var label = sc.IsNoSpeaker ? "unknown" : sc.Name;              // 未標示列→資料夾名以 unknown 表示
+        var lines = CuesForSpeaker(sc).ToList();
+        if (lines.Count == 0) { SetStatus($"No lines found for “{label}”."); return; }
+        AddSpeakerNotesRequested?.Invoke(SpeakerNotesFolder(label), lines); // App 端去重→費用確認→逐句翻譯→toast 回報
+    }
+
+    /// <summary>某說話人之所有台詞原文（依 cue 時間序）：未標示列＝空說話人之句；具名列＝其名在合唸句拆出之任一名字中（沿用 SplitSpeakers）。空白句略過。</summary>
+    private IEnumerable<string> CuesForSpeaker(SpeakerCheck sc)
+    {
+        foreach (var c in _cues)
+        {
+            var match = sc.IsNoSpeaker
+                ? string.IsNullOrEmpty(c.Speaker)
+                : !string.IsNullOrEmpty(c.Speaker) && PauseDecider.SplitSpeakers(c.Speaker).Any(a => string.Equals(a, sc.Name, StringComparison.OrdinalIgnoreCase));
+            if (match && !string.IsNullOrWhiteSpace(c.Text)) { yield return c.Text; }
+        }
+    }
+
+    /// <summary>〔影片-說話人〕筆記資料夾名（#189-checklist USR）：取影片標題主段（去「| 系列/平台」後綴）＋說話人;標題過長截斷、空退回影片 id。</summary>
+    private string SpeakerNotesFolder(string speaker)
+    {
+        var title = (CurrentVideoTitle() ?? "").Split('|')[0].Trim();
+        if (title.Length == 0) { title = _currentVideoId ?? "video"; }
+        if (title.Length > 40) { title = title[..40].Trim(); }
+        return $"{title} - {speaker}";
+    }
+
+    /// <summary>Previous（USR：原 Replay 改此）：跳到**上一句**起點並自該處播放（鏡像 <see cref="SkipNextAsync"/>）；已在首句則忽略。</summary>
+    private async Task SkipPrevAsync()
+    {
+        if (_cues.Count == 0 || !_webReady) return;
+        var prev = _shownCue - 1;
+        if (prev < 0) return;
+        _lastPausedIndex = prev - 1;
+        ShowCue(prev);
+        if (_cues[prev].StartSec is double sec) await SeekAsync(sec); // #184：未定時句仍顯示，但無法 seek 定位
     }
 
     private async Task ResumeAsync()
@@ -1058,6 +1098,8 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         var on = baseEnabled && _cues.Any(c => c.StartSec.HasValue);
         OffsetBox.IsEnabled = on;
         OffsetApplyBtn.IsEnabled = on;
+        OffsetMinusBtn.IsEnabled = on;   // USR：±鈕與偏移框同步啟用
+        OffsetPlusBtn.IsEnabled = on;
     }
 
     /// <summary>清空字幕與清單、關工具列（載入新片／取消時）。編修中則先退出編修 UI。</summary>
@@ -1073,11 +1115,12 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         foreach (var sc in _speakerChecks) sc.PropertyChanged -= OnSpeakerCheckPropChanged;
         _speakerChecks.Clear(); _everyoneCheck = null; _noSpeakerCheck = null; _checkedNames.Clear();
         _populatingModes = false;
-        _filterMode = FilterMode.None; _pauseMode = PauseMode.Selected;
+        _filterMode = FilterMode.ShowAll; _pauseMode = PauseMode.Selected;
         SyncModeSelectors();
         SetSpeakerControlsEnabled(false);
         EditYamlBtn.IsEnabled = false;
         OffsetBox.IsEnabled = false; OffsetApplyBtn.IsEnabled = false;    // 增量6′-B：清空時停用時間偏移列
+        OffsetMinusBtn.IsEnabled = false; OffsetPlusBtn.IsEnabled = false;
     }
 
     // ---- 說話人勾選面板（#189-checklist USR）：Everyone＋各原子說話人（合唸句拆開去重）＋(no speaker)；篩選/顯示/等待共用 ----
@@ -1118,7 +1161,13 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         RebuildCheckedNames();
         RebuildSpeakerColors();
 
-        SpeakerCheck AddCheck(SpeakerCheck sc) { sc.PropertyChanged += OnSpeakerCheckPropChanged; _speakerChecks.Add(sc); return sc; }
+        SpeakerCheck AddCheck(SpeakerCheck sc)
+        {
+            sc.RowStripe = _speakerChecks.Count % 2 == 0 ? RowStripeEven : RowStripeOdd; // 斑馬紋（USR）：依加入序奇偶
+            sc.PropertyChanged += OnSpeakerCheckPropChanged;
+            _speakerChecks.Add(sc);
+            return sc;
+        }
     }
 
     /// <summary>勾選變更：Everyone↔各列連動；重算已勾快取；暫停自目前時間重算；刷新篩選檢視與強調（粗體+顏色）。</summary>
@@ -1163,21 +1212,62 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     {
         if (string.IsNullOrEmpty(cueSpeaker)) return null;
         foreach (var a in PauseDecider.SplitSpeakers(cueSpeaker))
-            if (_checkedNames.Contains(a) && _speakerColorHex.TryGetValue(a, out var hex)) return hex;
+            if (_speakerColorHex.TryGetValue(a, out var hex)) return hex; // 顏色常設（不限勾選，USR）
         return null;
     }
 
-    /// <summary>依現用主題之 ColorRules 色盤，自動輪派給各原子說話人（USR：自動配色）。主題無定義顏色→留空→僅粗體、不上色。</summary>
+    /// <summary>
+    /// 依現用主題各色**描述**建每原子說話人之字型顏色（USR 修：以「主題某色描述是否包含該說話人名（不分大小寫）」為配對依據，取代原輪派——
+    /// 太寬鬆之問題根治）。命中之色（粉彩）加深提飽和為白底可讀之鮮明字色（<see cref="VividFontHex"/>）。無主題或無命中→不上色（預設深色）。
+    /// </summary>
     private void RebuildSpeakerColors()
     {
         _speakerColorHex = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        var theme = CurrentTheme();
-        var hexes = theme?.ColorRules is { Count: > 0 } rules
-            ? NoteColors.Palette.Where(p => rules.TryGetValue(p.Name, out var d) && !string.IsNullOrWhiteSpace(d)).Select(p => p.Hex).ToList()
-            : new List<string>();
-        if (hexes.Count == 0) return; // 主題無配色→只粗體
-        var atoms = _speakerChecks.Where(sc => !sc.IsEveryone && !sc.IsNoSpeaker).Select(sc => sc.Name).ToList();
-        for (var i = 0; i < atoms.Count; i++) _speakerColorHex[atoms[i]] = hexes[i % hexes.Count];
+        if (CurrentTheme()?.ColorRules is not { Count: > 0 } rules) { return; }
+        foreach (var sc in _speakerChecks)
+        {
+            if (sc.IsEveryone || sc.IsNoSpeaker) { continue; }
+            foreach (var (name, hex) in NoteColors.Palette) // 依盤序,取第一個描述含此說話人名之色
+            {
+                if (rules.TryGetValue(name, out var desc) && !string.IsNullOrWhiteSpace(desc)
+                    && desc.Contains(sc.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    _speakerColorHex[sc.Name] = VividFontHex(hex);
+                    break;
+                }
+            }
+        }
+    }
+
+    /// <summary>把粉彩色 hex 轉為白底可讀之鮮明字型色（提飽和、壓亮度；#189-checklist USR：顏色用於字型色）。灰階色（近零飽和）維持深灰。</summary>
+    private static string VividFontHex(string pastelHex)
+    {
+        var c = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(pastelHex);
+        RgbToHsl(c.R, c.G, c.B, out var h, out var s, out var l);
+        s = Math.Min(1.0, Math.Max(s, 0.60)); // 提飽和（粉彩本低飽和）
+        l = 0.42;                              // 壓亮度→白底對比足
+        HslToRgb(h, s, l, out var r, out var g, out var b);
+        return $"#{r:X2}{g:X2}{b:X2}";
+    }
+
+    private static void RgbToHsl(byte R, byte G, byte B, out double h, out double s, out double l)
+    {
+        double r = R / 255.0, g = G / 255.0, b = B / 255.0;
+        double max = Math.Max(r, Math.Max(g, b)), min = Math.Min(r, Math.Min(g, b)), d = max - min;
+        l = (max + min) / 2.0;
+        if (d == 0) { h = 0; s = 0; return; }
+        s = l > 0.5 ? d / (2.0 - max - min) : d / (max + min);
+        h = max == r ? (g - b) / d + (g < b ? 6 : 0) : max == g ? (b - r) / d + 2 : (r - g) / d + 4;
+        h *= 60;
+    }
+
+    private static void HslToRgb(double h, double s, double l, out byte R, out byte G, out byte B)
+    {
+        double c = (1 - Math.Abs(2 * l - 1)) * s, x = c * (1 - Math.Abs((h / 60.0) % 2 - 1)), m = l - c / 2;
+        double r = 0, g = 0, b = 0;
+        if (h < 60) { r = c; g = x; } else if (h < 120) { r = x; g = c; } else if (h < 180) { g = c; b = x; }
+        else if (h < 240) { g = x; b = c; } else if (h < 300) { r = x; b = c; } else { r = c; b = x; }
+        R = (byte)Math.Round((r + m) * 255); G = (byte)Math.Round((g + m) * 255); B = (byte)Math.Round((b + m) * 255);
     }
 
     /// <summary>目前內容頁所選之主題（供自動配色取 ColorRules）；未指派→null。</summary>
@@ -1187,21 +1277,21 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         return id is null ? null : ThemeStore.Find(_themes.Load(), id);
     }
 
-    /// <summary>刷新每列強調（粗體+顏色）：僅「粗體+顏色」模式且該句說話人被勾選時，套主題色背景＋台詞加粗；其餘還原正常。</summary>
+    /// <summary>刷新每列字型顏色（常設，依說話人＝主題描述配對之鮮明色）＋粗體（僅「只加粗勾選」模式且該句說話人被勾選）。USR：顏色常設、用於字型色、非底色。</summary>
     private void RefreshCueEmphasis()
     {
-        var color = _filterMode == FilterMode.ColorSelected;
+        var boldMode = _filterMode == FilterMode.BoldSelected;
         foreach (var row in _rows)
         {
-            var on = color && SpeakerChecked(row.Cue.Speaker);
-            row.SetEmphasis(on, on ? ColorForSpeaker(row.Cue.Speaker) : null);
+            var bold = boldMode && SpeakerChecked(row.Cue.Speaker);
+            row.SetEmphasis(ColorForSpeaker(row.Cue.Speaker), bold);
         }
     }
 
     /// <summary>重整清單檢視（套 CueRowFilter）。</summary>
     private void RefreshFilterView() => _cueView?.Refresh();
 
-    /// <summary>清單篩選：僅「只顯示勾選者」模式才隱藏未勾之句；「無篩選」「粗體+顏色」皆全顯示。</summary>
+    /// <summary>清單篩選：僅「只顯示勾選者」模式才隱藏未勾之句；「全部顯示」「只加粗勾選」皆全顯示。</summary>
     private bool CueRowFilter(object o)
     {
         if (o is not CueRow row) return true;
@@ -1209,10 +1299,10 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         return SpeakerChecked(row.Cue.Speaker);
     }
 
-    /// <summary>顯示模式下拉改變（0 無篩選／1 只顯示勾選／2 粗體+顏色）→重整檢視與強調。</summary>
+    /// <summary>顯示模式下拉改變（0 全部顯示／1 只顯示勾選／2 只加粗勾選）→重整檢視與強調（字型色常設不受此影響）。</summary>
     private void ApplyFilterMode()
     {
-        _filterMode = SpeakerFilter.SelectedIndex switch { 1 => FilterMode.ShowSelected, 2 => FilterMode.ColorSelected, _ => FilterMode.None };
+        _filterMode = SpeakerFilter.SelectedIndex switch { 1 => FilterMode.ShowSelected, 2 => FilterMode.BoldSelected, _ => FilterMode.ShowAll };
         RefreshFilterView();
         RefreshCueEmphasis();
     }
@@ -1228,7 +1318,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     private void SyncModeSelectors()
     {
         _populatingModes = true;
-        SpeakerFilter.SelectedIndex = _filterMode switch { FilterMode.ShowSelected => 1, FilterMode.ColorSelected => 2, _ => 0 };
+        SpeakerFilter.SelectedIndex = _filterMode switch { FilterMode.ShowSelected => 1, FilterMode.BoldSelected => 2, _ => 0 };
         PauseAtSpeaker.SelectedIndex = _pauseMode == PauseMode.Selected ? 1 : 0;
         _populatingModes = false;
     }
@@ -1259,27 +1349,47 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     /// </summary>
     private void ApplyOffset()
     {
-        if (_cues.Count == 0 || _yamlEditing || _loading || _currentVideoId is null) { return; }
         var secs = ParseOffsetSeconds(OffsetBox.Text);
         if (secs is null) { SetStatus("Enter a time offset (MM:SS or seconds). Positive = subtitles later, negative = earlier — e.g. 00:03 or -00:05."); return; }
         if (secs.Value == 0) { SetStatus("Offset is 0:00 — no change."); return; }
-        if (!_cues.Any(c => c.StartSec.HasValue)) { SetStatus("These subtitles have no timing to shift."); return; }
+        if (ShiftAllBy(secs.Value)) { OffsetBox.Text = "00:00"; } // 歸零供下次再微調（框輸入路徑才歸零；±鈕不動框）
+    }
 
+    /// <summary>±鈕（USR：Shift 左側增減鈕）：只**改偏移欄位值** ∓1 秒（正負格式 MM:SS），按 Shift 才套用——不即時平移。</summary>
+    private void NudgeOffset(double deltaSeconds)
+    {
+        if (!OffsetBox.IsEnabled) { return; }
+        var cur = ParseOffsetSeconds(OffsetBox.Text) ?? 0;
+        OffsetBox.Text = FormatOffset(cur + deltaSeconds);
+    }
+
+    /// <summary>秒→帶正負號 <c>MM:SS</c> 偏移字串（<see cref="NudgeOffset"/> 用；四捨五入至整秒）。</summary>
+    private static string FormatOffset(double secs)
+    {
+        var a = (int)Math.Round(Math.Abs(secs));
+        return $"{(secs < 0 ? "-" : "")}{a / 60:00}:{a % 60:00}";
+    }
+
+    /// <summary>整份字幕時間平移 <paramref name="secs"/> 秒、存回、重整清單與播放判定（沙漏游標；首次前備份原始時間檔）。無字幕/編修中/無已定時句→提示不動、回 false。</summary>
+    private bool ShiftAllBy(double secs)
+    {
+        if (_cues.Count == 0 || _yamlEditing || _loading || _currentVideoId is null) { return false; }
+        if (!_cues.Any(c => c.StartSec.HasValue)) { SetStatus("These subtitles have no timing to shift."); return false; }
         // 逐句改時間＋存檔＋重繪需一兩秒→沙漏游標,免使用者混亂（USR）。首次偏移前保留原始時間檔（資料夾同時留原始與校正後兩檔，USR）。
         System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
         try
         {
             _subs.BackupOriginalOnce(_currentVideoId, CurrentVideoTitle());
-            var shifted = ShiftCues(_cues, secs.Value); // 直接加：正＝延後、負＝提前（USR 修正：與原先相反）
-            _lastPausedIndex = -1;                       // 時間全平移→暫停判定自目前時間重新起算
+            var shifted = ShiftCues(_cues, secs); // 直接加：正＝延後、負＝提前
+            _lastPausedIndex = -1;                // 時間全平移→暫停判定自目前時間重新起算
             SetCues(shifted);
             _subs.Save(_currentVideoId, CurrentVideoTitle(), isAutoGenerated: false, shifted); // 存回校正後（#174）
             if (_rows.Count > 0) { ShowCue(0); }
         }
         finally { System.Windows.Input.Mouse.OverrideCursor = null; }
-        OffsetBox.Text = "00:00";                        // 歸零供下次再微調
-        var dir = secs.Value < 0 ? "earlier" : "later";
-        SetStatus($"Shifted all subtitles {Math.Abs(secs.Value):0.##}s {dir}. Adjust again if needed.");
+        var dir = secs < 0 ? "earlier" : "later";
+        SetStatus($"Shifted all subtitles {Math.Abs(secs):0.##}s {dir}. Adjust again if needed.");
+        return true;
     }
 
     /// <summary>把每句開始時間平移 <paramref name="deltaSeconds"/> 秒（純函式，internal 供單元測試）：已定時句 <c>+delta</c>（不低於 0）、未定時句（null）保持 null；斷句/說話人不動。</summary>
@@ -1327,7 +1437,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         YamlEditor.Visibility = System.Windows.Visibility.Visible;
         SetSpeakerControlsEnabled(false);
         EditYamlBtn.IsEnabled = false;
-        OffsetBox.IsEnabled = false; OffsetApplyBtn.IsEnabled = false; // 增量6′-B：YAML 編修期間停用時間偏移
+        OffsetBox.IsEnabled = false; OffsetApplyBtn.IsEnabled = false; OffsetMinusBtn.IsEnabled = false; OffsetPlusBtn.IsEnabled = false; // 增量6′-B：YAML 編修期間停用時間偏移
         SetStatus("Editing subtitle as YAML — merge/split lines and set speakers, then Apply.");
     }
 
@@ -1398,16 +1508,16 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         /// <summary>台詞文字（清單以正常字重 Run 呈現）。</summary>
         public string Text => Cue.Text;
 
-        // 粗體+顏色強調（#189-checklist）：僅「粗體+顏色」模式且本句說話人被勾選時，背景上主題色、台詞加粗；預設透明/正常＝與原外觀一致。
-        private System.Windows.Media.Brush _rowBg = System.Windows.Media.Brushes.Transparent;
-        public System.Windows.Media.Brush RowBackground { get => _rowBg; private set { if (!ReferenceEquals(_rowBg, value)) { _rowBg = value; Raise(nameof(RowBackground)); } } }
+        // 字型顏色（常設，依說話人＝主題描述配對之鮮明色）＋粗體（僅「只加粗勾選」模式且本句說話人被勾選）。USR：顏色用於字型色、非底色。
+        private System.Windows.Media.Brush _speakerBrush = DefaultCueBrush;
+        public System.Windows.Media.Brush SpeakerBrush { get => _speakerBrush; private set { if (!ReferenceEquals(_speakerBrush, value)) { _speakerBrush = value; Raise(nameof(SpeakerBrush)); } } }
         private System.Windows.FontWeight _lineWeight = System.Windows.FontWeights.Normal;
         public System.Windows.FontWeight LineWeight { get => _lineWeight; private set { if (_lineWeight != value) { _lineWeight = value; Raise(nameof(LineWeight)); } } }
-        /// <summary>設定本列強調：on＝該句被勾選且處於粗體+顏色模式；hex 非 null 時上主題背景色（否則只加粗、不上色，＝主題無配色時之退回）。</summary>
-        public void SetEmphasis(bool on, string? hex)
+        /// <summary>設定本列字型色（hex 非 null＝該說話人有主題配對色;否則預設深色）＋是否加粗（只加粗勾選模式）。</summary>
+        public void SetEmphasis(string? hex, bool bold)
         {
-            RowBackground = on && hex is not null ? BrushOfHex(hex) : System.Windows.Media.Brushes.Transparent;
-            LineWeight = on ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
+            SpeakerBrush = hex is not null ? BrushOfHex(hex) : DefaultCueBrush;
+            LineWeight = bold ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
         }
 
         /// <summary>就地更新說話人（#189 右鍵指定）：換 Cue 並通知 SpeakerLabel 變更，使清單該列即時更新、免重建（不跳捲軸）。</summary>
@@ -1419,7 +1529,13 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         private void Raise(string n) => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(n));
     }
 
-    // 主題色 hex → 凍結筆刷（快取；色盤固定、跨列共用免重建）。供 CueRow 強調背景。
+    /// <summary>字幕清單預設字型色（無主題配對之說話人）：近黑深灰，與原清單外觀一致。</summary>
+    private static readonly System.Windows.Media.Brush DefaultCueBrush = MakeFrozen(0x2A, 0x2A, 0x2A);
+    /// <summary>說話人勾選面板斑馬紋（USR）：偶列透明、奇列極淺粉，助辨識列尾圖示對應之名字。</summary>
+    private static readonly System.Windows.Media.Brush RowStripeEven = System.Windows.Media.Brushes.Transparent;
+    private static readonly System.Windows.Media.Brush RowStripeOdd = MakeFrozen(0xFA, 0xE8, 0xEF);
+
+    // 主題色 hex → 凍結筆刷（快取；色盤固定、跨列共用免重建）。供 CueRow 字型色。
     private static readonly Dictionary<string, System.Windows.Media.Brush> HexBrushCache = new(StringComparer.OrdinalIgnoreCase);
     private static System.Windows.Media.Brush BrushOfHex(string hex)
     {
@@ -1439,6 +1555,10 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         public bool IsEveryone { get; }
         public bool IsNoSpeaker { get; }
         public System.Windows.FontWeight Weight => IsEveryone ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
+        /// <summary>「加入筆記」鈕僅具體說話人列顯示（全選列＝(all speakers) 不顯，避免一鍵灌入全部台詞）。</summary>
+        public System.Windows.Visibility AddNotesVisibility => IsEveryone ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+        /// <summary>斑馬紋列底色（USR：全白難分辨列尾圖示對應哪個名字）——建構時依索引指派奇偶色。</summary>
+        public System.Windows.Media.Brush RowStripe { get; set; } = System.Windows.Media.Brushes.Transparent;
         private bool _checked = true;
         public bool IsChecked { get => _checked; set { if (_checked != value) { _checked = value; PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsChecked))); } } }
     }

@@ -134,6 +134,43 @@ public sealed class NotesStore
         return res;
     }
 
+    /// <summary>
+    /// 批次把多筆**原文**加入指定頂層資料夾（epic #178 增量6′-D：某說話人台詞一鍵收藏、免 AI 翻譯）：
+    /// 逐筆建僅含原文之 <see cref="NoteEntry"/>（音標／翻譯空）、跨全樹去重、**依傳入順序附加**（保 cue 時間序）、一次存檔。
+    /// <paramref name="folderName"/> 空則退回預設夾；找不到同名頂層夾則建立。回 (已加, 略過＝空白或已存在)。
+    /// </summary>
+    public (int Added, int Skipped) AddManyRawToNamedFolderAndSave(IEnumerable<string> originals, string? folderName, string? colorHex, DateTimeOffset now)
+    {
+        var d = LoadEnsured();
+        var folder = EnsureTopFolderByName(d, string.IsNullOrWhiteSpace(folderName) ? DefaultFolderName : folderName!);
+        int added = 0, skipped = 0;
+        foreach (var raw in originals)
+        {
+            var text = (raw ?? "").Trim();
+            if (text.Length == 0 || Contains(d, NoteEntry.KeyOf(text))) { skipped++; continue; } // 空白或跨全樹已存在→略過
+            folder.Entries.Add(NoteEntry.From(new QueryResult(text, "", ""), now) with { Color = colorHex ?? "" }); // 附加（依 cue 序，非插頂）
+            added++;
+        }
+        if (added > 0) { Save(d); }
+        return (added, skipped);
+    }
+
+    /// <summary>濾出**尚未收錄**（跨全樹去重、原文正規化）之原文清單（epic #178 增量6′-D：批次翻譯前先去重，免對已在筆記者重複付費）：保原順序、去批次內重複、去空白。</summary>
+    public List<string> NewOriginals(IEnumerable<string> originals)
+    {
+        var d = LoadEnsured();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var result = new List<string>();
+        foreach (var raw in originals)
+        {
+            var text = (raw ?? "").Trim();
+            if (text.Length == 0) { continue; }
+            var key = NoteEntry.KeyOf(text);
+            if (seen.Add(key) && !Contains(d, key)) { result.Add(text); } // 批次內未見過 且 樹中未有
+        }
+        return result;
+    }
+
     // ---- 純函式（樹感知，可單元測試） ----
 
     /// <summary>樹的前序走訪（含所有子資料夾）。</summary>
