@@ -6,7 +6,7 @@ namespace LingoIsland.Video;
 /// <summary>
 /// 字幕主線之 AI 對齊實作（[modVideoCapture模組]，epic #178 增量5′）：以 OpenAI Responses API（<b>不上網</b>）完成
 /// (1) <see cref="ParseTranscriptAsync"/> 把字幕檔原文整理成逐句（說話人＋台詞）；(2) <see cref="AlignAsync"/> 逐塊把台詞對齊到 Whisper 聲音時間軸取時間。
-/// 沿用 <see cref="OpenAiWebSpeakerEnricher"/> 之 find→align 骨架（strict json_schema、逐塊等長、混模型記帳），但**語意反轉**：align 回「每句時間」而非說話人。
+/// 採 find→align 骨架（strict json_schema、逐塊等長、混模型記帳），但**語意反轉**：align 回「每句時間」而非說話人。
 /// parse 用能穩健擷取之模型（gpt-4.1-mini）、align 用便宜模型（gpt-4o-mini）；純提示組建／回應解析在 <see cref="TranscriptAlign"/> 可單元測試。
 /// 讀 <c>OPENAI_API_KEY</c>；無金鑰／HTTP 非 2xx／逾時／解析失敗一律擲 <see cref="SpeakerEnrichException"/>；使用者取消傳遞。
 /// </summary>

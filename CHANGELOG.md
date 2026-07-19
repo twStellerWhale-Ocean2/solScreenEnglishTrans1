@@ -15,7 +15,8 @@
 ### 內部
 - 新增 `VideoCapturePage.ExtractUrls`（純函式、`internal` 可測）：由自由文字抽 http(s) 網址，取 RFC3986 URL 字元集（自然停在 CJK、不把中文說明黏入網址）、去尾標點、去 markdown 連結尾之孤立 `)`（維基式含配對 `(` 者不動）。挑選規則（影片＝有 ID 者、字幕＝無 ID 者）沿用 `ExtractVideoId`。
 - **砍 finder／結果表**：移除 `VideoCapturePage` 之搜尋結果 `DataGrid`（縮圖/推薦分/三態徽章/逐列 Load）與其驅動碼（`DoTranscriptSearch`／`PopulateResults`／內嵌探測／網路字幕欄／`SearchRow` view-model 等），連帶移除已無用之注入（`ITranscriptVideoFinder`／`IVideoSearcher`／`IWebTranscriptProbe`／`ISubtitleFetcher`）；建構子由 9 參縮為 5 參。
-- 單元測試 674 綠（+10 `ExtractUrls` 情境：使用者實際貼法、markdown＋utm、維基括號、CJK 邊界、只給其一）。
+- **砍 finder／結果表（後端收尾）**：上述注入移除後，`sysLingoIsland/modVideoCapture/` 下已無 live 參照之後端服務類一併刪除——`OpenAiTranscriptVideoFinder`＋`ITranscriptVideoFinder`＋`TranscriptVideoFind`（由字幕檔配影片 web_search finder）、`YtDlpVideoSearcher`＋`IVideoSearcher`（關鍵字搜 YouTube）、`OpenAiWebSpeakerEnricher`＋`IWebTranscriptProbe`（結果表「網路字幕」欄探測）、`YtDlpSubtitleFetcher`（結果表「內嵌字幕」欄探測）、`VideoSearchFilter`（結果長度過濾），及其專屬測試。字幕主線仍共用之 `SpeakerUsage`／`SpeakerEnrichException`（原置 `ISpeakerEnricher.cs`）、`SubtitleException`（原置 `ISubtitleFetcher.cs`）保留並抽出為 `SpeakerAiTypes.cs`／`SubtitleException.cs`；`SpeakerInference`／`TranscriptAlign`／`OpenAiTranscriptAligner` 之失效 `<see cref>` 註記一併修整。
+- 單元測試 585 綠（本增量 UI 層 +10 `ExtractUrls` 情境：使用者實際貼法、markdown＋utm、維基括號、CJK 邊界、只給其一；後端收尾移除孤立服務類之專屬測試 -89）。
 
 ## [3.2.0] - 2026-07-18
 

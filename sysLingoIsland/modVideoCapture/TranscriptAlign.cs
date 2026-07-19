@@ -12,7 +12,7 @@ namespace LingoIsland.Video;
 /// </summary>
 public static class TranscriptAlign
 {
-    /// <summary>對齊分塊大小（每塊台詞句數）：沿用說話人對齊之量級（<see cref="OpenAiWebSpeakerEnricher"/> ChunkSize），逐塊小而準、輸出長度可控。</summary>
+    /// <summary>對齊分塊大小（每塊台詞句數）：逐塊小而準、輸出長度可控。</summary>
     public const int ChunkSize = 40;
 
     private static readonly Regex Parenthetical = new(@"[\(\[][^\)\]]*[\)\]]", RegexOptions.Compiled); // 一組 (...) 或 [...] 舞台指示／音效
