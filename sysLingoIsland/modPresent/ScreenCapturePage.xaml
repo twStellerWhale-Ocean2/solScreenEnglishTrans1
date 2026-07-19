@@ -8,15 +8,15 @@
       <RowDefinition Height="*"/>
     </Grid.RowDefinitions>
 
-    <!-- 子頁籤：獲得 / 內容 -->
+    <!-- 子頁籤：內容 / 獲得（USR：先內容再獲得） -->
     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-      <RadioButton x:Name="ShotTabAcquire" Style="{StaticResource SubTab}" GroupName="ShotTab" IsChecked="True" Content="獲得"/>
-      <RadioButton x:Name="ShotTabContent" Style="{StaticResource SubTab}" GroupName="ShotTab" Content="內容"/>
+      <RadioButton x:Name="ShotTabContent" Style="{StaticResource SubTab}" GroupName="ShotTab" IsChecked="True" Content="內容"/>
+      <RadioButton x:Name="ShotTabAcquire" Style="{StaticResource SubTab}" GroupName="ShotTab" Content="獲得"/>
     </StackPanel>
 
     <Grid Grid.Row="1">
       <!-- 【獲得】擷取控制（按鈕＋快速鍵設定） -->
-      <Border x:Name="ShotAcquirePane" Style="{StaticResource Card}" Padding="12" VerticalAlignment="Top">
+      <Border x:Name="ShotAcquirePane" Style="{StaticResource Card}" Padding="12" VerticalAlignment="Top" Visibility="Collapsed">
         <StackPanel>
           <TextBlock Text="Screen capture" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}" Margin="0,0,0,8"/>
           <WrapPanel Orientation="Horizontal">
@@ -34,7 +34,7 @@
       </Border>
 
       <!-- 【內容】左＝截圖清單（Clear all＋theme 篩選；右鍵/Delete 刪）｜右＝放大預覽 -->
-      <Grid x:Name="ShotContentPane" Visibility="Collapsed">
+      <Grid x:Name="ShotContentPane">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="260" MinWidth="200"/>
           <ColumnDefinition Width="Auto"/>

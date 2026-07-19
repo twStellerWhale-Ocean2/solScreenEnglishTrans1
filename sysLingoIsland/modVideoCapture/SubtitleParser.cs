@@ -74,6 +74,69 @@ public static class SubtitleParser
     }
 
     /// <summary>
+    /// 依開始時間**穩定排序**,使 cue 序單調遞增（epic #178 增量6′-B「時間 pivot」修）：字幕檔／逐字稿頁常見場景倒敘、
+    /// 片尾曲另計時等,致解析出的句序時間**不遞增**——如 fandom transcript 實測出現 875→730、1350→1262 之回退段。
+    /// <see cref="PauseDecider"/>（<c>NextPause</c>／<c>CueAt</c>）明文要求 cues 依 <see cref="SubtitleCue.StartSec"/> 遞增;違反時
+    /// 「指定說話人暫停」會在回退段整批句被瞬間掃過（不逐句停）——USR 回報「選 Ryder 但沒每次停」即此。
+    /// 未定時句（<c>StartSec==null</c>）以「前一已定時句之時間」為鍵、隨其相鄰（不因無時間飄到頭尾）;OrderBy 為穩定排序,同鍵保留原順序。
+    /// 純函式、對已遞增輸入為 idempotent、供單元測試。
+    /// </summary>
+    public static IReadOnlyList<SubtitleCue> NormalizeOrder(IReadOnlyList<SubtitleCue> cues)
+    {
+        if (cues is null || cues.Count < 2) return cues ?? new List<SubtitleCue>();
+        var keyed = new (SubtitleCue Cue, double Key, int Orig)[cues.Count];
+        var carry = 0.0; // 未定時句承接前一已定時句時間→排序時黏在其後,不因無時間被推到頭/尾
+        for (var i = 0; i < cues.Count; i++)
+        {
+            if (cues[i].StartSec is double s) carry = s;
+            keyed[i] = (cues[i], carry, i);
+        }
+        // OrderBy 穩定:同鍵（同秒、或承接同一時間之未定時句）保留原始相對順序;ThenBy(Orig) 明示化、防未來不穩定實作。
+        return keyed.OrderBy(k => k.Key).ThenBy(k => k.Orig).Select(k => k.Cue).ToList();
+    }
+
+    /// <summary>
+    /// 補抽「<c>NAME: 台詞</c>」行首前綴之說話人（epic #178 增量6′-B「時間 pivot」定案——字幕檔自帶時間＋說話人、直接載入）：
+    /// 除 VTT <c>&lt;v Name&gt;</c> 外,字幕檔常以行首「<c>Ryder: …</c>」「<c>CAP'N TURBOT: …</c>」標說話人。
+    /// 僅在該句**尚無說話人**（未由 <c>&lt;v&gt;</c> 取得）時套用;名字須**大寫開頭、≤3 詞、≤24 字、不含逗號等句子標點**,避免把「Well: …」誤判成說話人。純函式、internal 供單元測試。
+    /// </summary>
+    internal static IReadOnlyList<SubtitleCue> ExtractInlineSpeakers(IReadOnlyList<SubtitleCue> cues)
+    {
+        // 名字後容忍冒號前空白（表格逐字稿常「Speaker : 台詞」）。\s* 在冒號前。
+        var re = new Regex(@"^(?<who>\p{Lu}[\p{L}\p{M}0-9'.\- ]{0,22}[\p{L}0-9.])\s*:\s+(?<line>\S.*)$", RegexOptions.Compiled);
+        var result = new List<SubtitleCue>(cues.Count);
+        foreach (var c in cues)
+        {
+            if (!string.IsNullOrWhiteSpace(c.Speaker)) { result.Add(c); continue; } // 已由 <v> 取得說話人→不動
+            var m = re.Match(c.Text);
+            result.Add(m.Success && CountWords(m.Groups["who"].Value) <= 3
+                ? c with { Speaker = m.Groups["who"].Value.Trim(), Text = m.Groups["line"].Value.Trim() }
+                : c);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// 解析「時間戳＋說話人」逐字稿頁（epic #178 增量6′-B「時間 pivot」定案；如 fandom transcript：HTML 表格,每列 <c>HH:MM:SS</c> ＋ <c>Speaker:</c> ＋ 台詞）:
+    /// 去 HTML 標籤→純文字→解實體→以每個 <c>HH:MM:SS</c> 為一句起點,擷取其後至下一時間戳之文字（說話人由 <see cref="ExtractInlineSpeakers"/> 補抽）。
+    /// 非 VTT/SRT 之「-->」箭頭格式,故 <see cref="Parse"/> 讀不到時間時由呼叫端 fallback 用此。末句常吞入頁尾雜訊→以長度上限截斷保底。純函式、internal 供單元測試。
+    /// </summary>
+    internal static IReadOnlyList<SubtitleCue> ParseTimedTranscript(string? content)
+    {
+        var cues = new List<SubtitleCue>();
+        if (string.IsNullOrWhiteSpace(content)) return cues;
+        var text = System.Net.WebUtility.HtmlDecode(Tag.Replace(content, " "));
+        foreach (Match m in Regex.Matches(text, @"(?<t>\d{1,2}:\d{2}:\d{2})(?<body>.*?)(?=\d{1,2}:\d{2}:\d{2}|$)", RegexOptions.Singleline))
+        {
+            var body = Ws.Replace(m.Groups["body"].Value, " ").Trim();
+            if (body.Length == 0) continue;
+            if (body.Length > 300) { body = body[..300].Trim(); } // 末句常吞入頁尾雜訊（無下一時間戳收界）→截斷保底,使用者可 Edit YAML 修
+            cues.Add(new SubtitleCue(body, ParseTime(m.Groups["t"].Value)));
+        }
+        return cues;
+    }
+
+    /// <summary>
     /// 解析 YouTube <c>json3</c> 字幕（[techItem字幕擷取]，spec#2）為含結束時間之 <see cref="TimedCue"/>（供 <see cref="CoalesceCues"/> 之間隔判斷）。
     /// json3 為<b>事件級</b>結構（非 VTT 之逐字滾動渲染），自動字幕改抓此格式即乾淨、無滾動重複：
     /// 每個 <c>event</c>（含 <c>segs[].utf8</c> 與 <c>tStartMs</c>／<c>dDurationMs</c>）→ 一句 cue。

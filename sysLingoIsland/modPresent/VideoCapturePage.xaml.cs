@@ -11,10 +11,10 @@ using LingoIsland.Query;
 namespace LingoIsland.Present;
 
 /// <summary>
-/// 影片擷取分頁（[modVideoCapture模組]／[techApp桌面查詢工具] 擷取來源頁，spec#2）：【獲得】單一輸入框貼影片網址＋字幕檔網址（epic #178 增量6′「輸入 pivot」）→
-/// 取字幕檔（<see cref="TranscriptFetch"/>）整理說話人＋台詞、Whisper 轉錄實際語音、<see cref="ITranscriptAligner"/> 逐句對齊建立字幕→
+/// 影片擷取分頁（[modVideoCapture模組]／[techApp桌面查詢工具] 擷取來源頁，spec#2）：【獲得】單一輸入框貼影片網址＋字幕檔網址（epic #178 增量6′）→
+/// 取字幕檔（<see cref="TranscriptFetch"/>）以 <see cref="SubtitleParser"/> 直接解析出**自帶之時間＋說話人**（增量6′-B「時間 pivot」定案：不對齊、不 Whisper——那些會把時間弄亂序）→摘要確認→載入→
 /// WebView2 內嵌 YouTube IFrame Player API 導引播放、<see cref="PauseDecider"/> 到句暫停顯字幕→暫停句逐字可點（<see cref="WordLookupRequested"/>，沿用既有查詢）→
-/// 加入既有筆記（<see cref="AddToNotesRequested"/>）。與螢幕擷取並列之可插拔擷取來源、下游完全共用。
+/// 加入既有筆記（<see cref="AddToNotesRequested"/>）。時間偏移量供整體微調。與螢幕擷取並列之可插拔擷取來源、下游完全共用。
 /// </summary>
 public partial class VideoCapturePage : System.Windows.Controls.UserControl
 {
@@ -22,11 +22,10 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private readonly ThemeStore _themes;                           // 使用中主題（加入影片時記錄跨媒體歸屬）＋依 theme 篩選（B）＋內容區塊所屬主題指派（#173）
     private bool _populatingVideoFilter;                           // 重填篩選下拉期間抑制 SelectionChanged→重整
     private bool _populatingVideoPicker;                           // 重填「所屬主題」下拉期間抑制 SelectionChanged→重指派（#173）
-    private readonly IAudioTranscriber _transcriber;               // Whisper 音訊轉錄（#187）：抓真實聲音重轉字幕、修時間漂移；會用 API＋下載音訊、按鈕觸發、跑前確認費用
-    private readonly ITranscriptAligner _aligner;                   // 字幕主線 pivot（epic #178 增量5′）：字幕檔整理（說話人＋台詞）＋對齊 Whisper 聲音時間軸取時間；會用 API、載入首次觸發、跑前確認費用
     private readonly SubtitleStore _subs;                          // 字幕存檔：免重抓、保留說話人/YAML 編修（#174）
+    private readonly ITranscriptAligner _aligner;                  // 直接抽取（epic #178 增量6′-B「時間 pivot」）：免費解析讀不到時間之網頁,以 AI 逐句抽「時間＋說話人＋台詞」（時間照網頁原樣抄、非估算/對齊,故不亂序）；會用 API、跑前確認費用
+    private readonly Func<ISpeechService?> _speechProvider;         // 字幕帶播音（USR：影片下方字幕唸英文句）——委派取現行語音服務（設定換聲後仍取到新實例）
     private readonly VideoSubtitleStatusStore _statusStore = new();  // 字幕狀態快取（#188→增量6′）：獲得框存入字幕檔網址＋載入來源，載入未快取時取用建立字幕
-    private readonly AiSpendLedger _spendLedger = new();             // AI 花費帳本（#189）：每次 AI 動作跑前顯示本日/本小時累計、事後記帳
     private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private string? _currentVideoId;                               // 目前載入影片之 YouTube ID（字幕存檔鍵，#174）
     private readonly DispatcherTimer _poll;
@@ -47,20 +46,25 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     // 說話人字幕（epic #145 增量5）：CueList 綁 CueRow view-model（保留原始 _cues index，篩選/顯示不動播放 index）
     private List<CueRow> _rows = new();
     private System.ComponentModel.ICollectionView? _cueView; // _rows 之預設檢視，套說話人篩選
-    private string? _speakerFilter;    // null＝全部；否則特定說話人名
-    private bool _filterNoSpeaker;     // true＝僅顯示未標示說話人之句
-    private bool _refreshingCues;      // 重建/篩選/程式化選取期間，抑制 SelectionChanged→跳播
     private bool _yamlEditing;         // 整檔 YAML 編修模式中
-    private bool _transcribing;        // Whisper 轉錄中（防重入、按鈕停用）（#187）
-    private bool _row3Applied;         // #189：Row3（🎙Voice 精修時間）是否已套用
-    private const string VoiceLabel = "\U0001F399 Voice";    // 🎙
     private string? _currentTitle;     // 目前影片標題（起播後取得，供 AI 推斷輔助判斷角色）（增量6）
-    private string? _pauseSpeaker;     // 指定說話人才暫停（增量7）；null＝全部說話人皆暫停
-    private bool _pauseNoSpeaker;      // #189：只在未標示（unknown）之句暫停（Pause-at 選 (no speaker)）
-    private bool _populatingPauseAt;   // 重填 Pause-at 下拉期間抑制 SelectionChanged
-    private const string AllSpeakers = "All speakers";
+    private bool _populatingModes;     // 填模式下拉/勾選面板期間抑制 SelectionChanged／勾選事件
+
+    // 說話人顯示模式與等待模式（#189-checklist USR）：篩選/顯示三態＋等待兩態；對象取自共用之勾選面板 _speakerChecks
+    private enum FilterMode { ShowAll, ShowSelected, BoldSelected }
+    private enum PauseMode { Off, Selected }
+    private FilterMode _filterMode = FilterMode.ShowAll;
+    private PauseMode _pauseMode = PauseMode.Selected;   // 預設依勾選等待（Everyone 全勾→等同原「逐句停」行為）
+    // 勾選面板（Everyone＋各原子說話人＋(no speaker)）：字幕篩選/顯示與影片等待共用同一份勾選
+    private readonly System.Collections.ObjectModel.ObservableCollection<SpeakerCheck> _speakerChecks = new();
+    private SpeakerCheck? _everyoneCheck;                // Everyone 列（全選/全清；亦為「等同全部」判準）
+    private SpeakerCheck? _noSpeakerCheck;               // (no speaker) 列（未標示句）；無未標示句時不建
+    private bool _syncingChecks;                         // Everyone↔各列連動時抑制遞迴
+    private readonly HashSet<string> _checkedNames = new(StringComparer.OrdinalIgnoreCase); // 已勾之原子說話人（快取，供每句比對）
+    private Dictionary<string, string> _speakerColorHex = new(StringComparer.OrdinalIgnoreCase); // 原子說話人→主題色 hex（無主題色則空）
+
     private const string NoSpeaker = "(no speaker)";
-    private const string EveryoneSpeaker = "Everyone"; // Pause-at 之「全部」選項（增量7）
+    private const string EveryoneSpeaker = "(all speakers)"; // 全選列（括號式，避與逐字稿真有「Everyone」說話人撞名；#189-checklist）
 
     private const string HostName = "lingoisland.player"; // WebView2 虛擬主機：以真實 https origin 供 player.html（避 YouTube Error 150/153 之 null/opaque-origin 內嵌拒絕）
     private static readonly string PlayerCacheBust = Guid.NewGuid().ToString("N"); // 每次啟動唯一：WebView2 依 URL 快取 player.html，同名檔會餵**舊 JS**（改動/更新後不生效）——故 player.html 帶此唯一碼為檔名，保證載當前版本
@@ -71,16 +75,19 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     /// <summary>加入我的筆記（目前句原文；App 重譯後入既有 NotesStore）。</summary>
     public event Action<string>? AddToNotesRequested;
 
-    public VideoCapturePage(VideoStore videoStore, ThemeStore themes,
-                            SubtitleStore subtitles, IAudioTranscriber transcriber,
-                            ITranscriptAligner aligner)
+    /// <summary>把某說話人所有台詞**原文**批次收藏至指定資料夾（#189-checklist USR；免 AI 翻譯）：參數＝(資料夾名, 台詞原文清單依 cue 序)。App 端寫入 NotesStore、toast 回報。</summary>
+    public event Action<string, IReadOnlyList<string>>? AddSpeakerNotesRequested;
+
+    public VideoCapturePage(VideoStore videoStore, ThemeStore themes, SubtitleStore subtitles, ITranscriptAligner aligner,
+        Func<ISpeechService?> speechProvider)
     {
         InitializeComponent();
         _videoStore = videoStore;
         _themes = themes;
-        _transcriber = transcriber;
-        _aligner = aligner;
         _subs = subtitles;
+        _aligner = aligner;
+        _speechProvider = speechProvider;
+        SpeakBandBtn.Click += (_, _) => SpeakCurrentLine(); // 字幕帶播音（USR）
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _poll.Tick += OnPoll;
         _cueClickTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(GetDoubleClickTime()) };
@@ -99,7 +106,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         // 右側子頁籤（#177 版面重整）：搜尋下載 / 播放學習，以可見性切換（WebView2 不被卸載重建）
         SubTabSearch.Checked += (_, _) => ShowSubTab(showSearch: true);
         SubTabPlay.Checked += (_, _) => ShowSubTab(showSearch: false);
-        ReplayBtn.Click += (_, _) => _ = ReplayCurrentAsync();
+        ReplayBtn.Click += (_, _) => _ = SkipPrevAsync();   // USR：Replay 改 Previous（上一句）
         ResumeBtn.Click += (_, _) => _ = ResumeAsync();
         NextBtn.Click += (_, _) => _ = SkipNextAsync();
         AddNoteBtn.Click += (_, _) => AddCurrent();
@@ -115,11 +122,15 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         // 右鍵選單（#189）：Copy line＋快速指定/修正說話人（依游標下之列動態填入）
         CueList.ContextMenu = new System.Windows.Controls.ContextMenu();
         CueList.ContextMenuOpening += OnCueContextMenuOpening;
-        // 說話人篩選＋來源疊加＋整檔 YAML 編修（epic #145 增量5／6）
-        SpeakerFilter.SelectionChanged += (_, _) => ApplySpeakerFilter();
+        // 說話人顯示模式（無篩選／只顯示勾選／粗體+顏色）＋整檔 YAML 編修（epic #145 增量5／6；#189-checklist）
+        SpeakerFilter.SelectionChanged += (_, _) => { if (!_populatingModes) { ApplyFilterMode(); } };
         EditYamlBtn.Click += (_, _) => EnterYamlEdit();
-        TranscribeBtn.Click += (_, _) => Transcribe(); // #187：Whisper 抓聲音重轉字幕（跑前確認估算費用）
-        PauseAtSpeaker.SelectionChanged += (_, _) => { if (!_populatingPauseAt) { ApplyPauseAtSpeaker(); } }; // 指定說話人才暫停（增量7）
+        OffsetApplyBtn.Click += (_, _) => ApplyOffset();                                                          // 增量6′-B：整份字幕時間偏移校正
+        OffsetBox.PreviewKeyDown += (_, e) => { if (e.Key == Key.Enter) { ApplyOffset(); e.Handled = true; } };   // Enter 即套用偏移
+        OffsetMinusBtn.Click += (_, _) => NudgeOffset(-1);   // USR：Shift 左側 −／＋ 即時 ∓1 秒微調
+        OffsetPlusBtn.Click += (_, _) => NudgeOffset(1);
+        PauseAtSpeaker.SelectionChanged += (_, _) => { if (!_populatingModes) { ApplyPauseMode(); } };           // 等待模式（不等待／依勾選）（#189-checklist）
+        SpeakerChecks.ItemsSource = _speakerChecks;                                                               // 說話人勾選面板（篩選/顯示/等待共用）
         ApplyYamlBtn.Click += (_, _) => _ = ApplyYamlEditAsync();
         CancelYamlBtn.Click += (_, _) => CancelYamlEdit();
         Loaded += async (_, _) => await EnsureWebAsync();
@@ -174,6 +185,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         {
             PopulateVideoThemeFilter(); // 切回本頁重填篩選（反映主題增刪改，B）
             RefreshVideoList();
+            if (_rows.Count > 0) { RefreshSpeakerColoring(); } // USR：主題色描述於 Themes 頁改後,切回即更新字幕說話人字型色（含字幕帶）
             if (_guiding && _webReady) { _poll.Start(); }
         }
     }
@@ -231,27 +243,33 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private async Task LoadVideoAsync(string id, bool addToStore, string? listItemId = null)
     {
         var cached = _subs.TryLoad(id); // #174：已存字幕優先（免重建、保留說話人/YAML 編修）
-        string? transcriptUrl = null;
+        IReadOnlyList<SubtitleCue>? fresh = null;
         if (cached is null)
         {
-            // 未存＝首次載入：需以「字幕檔＋Whisper 對齊」建立（會花費）。先在**拆除目前畫面前**取字幕檔網址並確認費用——使用者取消則保留目前影片。
-            transcriptUrl = _statusStore.Get(id)?.TranscriptUrl;
-            if (string.IsNullOrWhiteSpace(transcriptUrl))
+            // 未存＝首次載入（epic #178 增量6′-B 定案）：取字幕檔→解析（**字幕檔自帶時間＋說話人,不對齊/不 Whisper/不抓 YouTube 字幕**）→摘要確認。
+            // 全在**拆除目前畫面前**做（免費、即時）；使用者取消、或字幕檔無時間碼→保留目前影片。
+            var subtitleUrl = _statusStore.Get(id)?.TranscriptUrl;
+            if (string.IsNullOrWhiteSpace(subtitleUrl))
             {
-                SetStatus("This video has no matched subtitle file yet — paste its subtitle-file URL above and Find to match it, then Load.");
+                SetStatus("This video has no subtitle-file URL yet — add it under the Acquire tab.");
                 if (listItemId is not null) { RefreshVideoList(); } // 審查修：還原清單選取到實際目前影片（提前 return 不錯位到未載入之片）
                 return;
             }
-            if (!ConfirmBuildRun()) // 取消＝不花費、不拆除目前畫面
+            fresh = await FetchParseSubtitleAsync(subtitleUrl); // 內部設狀態；null＝取檔/解析失敗或無時間碼→中止
+            if (fresh is null)
             {
-                if (listItemId is not null) { RefreshVideoList(); } // 審查修：取消建立→還原清單選取
+                if (listItemId is not null) { RefreshVideoList(); }
+                return;
+            }
+            if (!ConfirmLoadSummary(fresh)) // 顯示摘要（句數/說話人/時長）供一眼確認對得上；取消＝不載入、不拆除目前畫面
+            {
+                if (listItemId is not null) { RefreshVideoList(); }
                 return;
             }
         }
 
         _loadCts?.Cancel();
         _loadCts = new CancellationTokenSource();
-        var ct = _loadCts.Token;
 
         // 審查修：**確認會實際載入後**才推進清單選取/主題選擇器（清單點選路徑）——否則上方提前 return 會使選取錯位、播放仍舊片。
         if (listItemId is not null) { _currentVideoItemId = listItemId; UpdateVideoThemePicker(); }
@@ -263,7 +281,6 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _currentVideoId = id;  // 字幕存檔鍵（#174）
         SetWatchUrl(id);       // #177：內容區塊顯示可點超連結網址
         SetVideoTitle(_videoStore.Load().Items.FirstOrDefault(i => i.VideoId == id)?.Title ?? id); // #187：先用清單標題/id，起播後以實名更新
-        SubTabPlay.IsChecked = true; // #177：載入即切到「播放學習」子頁（WebView2 於此顯示、字幕在此學習）
         ClearCues();
         SubtitleBand.Inlines.Clear();
         SetControls(false);
@@ -276,18 +293,12 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                 SetStatus("Loading saved subtitles…");
                 cues = cached.Cues;
             }
-            else // 首次：字幕檔＋Whisper 對齊管線（模態顯進度、費用）
+            else // 首次：已於上方取檔＋解析＋摘要確認（fresh 必非空且含時間碼）→直接存檔載入
             {
-                cues = BuildCuesViaPipeline(id, transcriptUrl!, ct) ?? Array.Empty<SubtitleCue>();
-                if (cues.Count == 0)
-                {
-                    SetStatus("Subtitles weren't built (canceled, too long, or failed) — Load again to retry."); // 審查修：中性訊息，取消/截斷/失敗共用（對話框已關、不指其看詳情）
-                    return; // finally 仍 SetLoading(false)
-                }
-                _subs.Save(id, CurrentVideoTitle(), isAutoGenerated: false, cues); // 存建立結果（#174；增量5′ 已無 Auto/Manual 之分）
+                cues = SubtitleParser.NormalizeOrder(fresh!); // 依時間排序後再存（增量6′-B 修）：磁碟 yaml 亦單調,不留回退段
+                _subs.Save(id, CurrentVideoTitle(), isAutoGenerated: false, cues); // 存解析結果（#174；自帶時間＋說話人）
             }
             SetCues(cues);
-            UpdateSourceLabel(); // 顯示本片字幕來源（增量5′：字幕檔＋Whisper 對齊，純顯示）
             await EnsureWebAsync();
             if (_webReady)
             {
@@ -316,82 +327,91 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     }
 
     /// <summary>
-    /// 字幕主線建立管線（epic #178 增量5′，模態顯進度＋費用）：取字幕檔內容 → 去 HTML → AI 整理成逐句（說話人＋台詞）→ Whisper 轉錄影片音訊取時間軸 →
-    /// AI 逐句對齊到聲音時間 → 組裝帶說話人＋時間之 cue（對不上者時間未知）。回建立之 cue；空/失敗/取消回 null（呼叫端據此中止載入）。費用：AI token 由視窗顯示、Whisper 依實際音長以訊息呈現，皆記帳。
+    /// 取字幕檔並解析為逐句 cue（epic #178 增量6′-B「時間 pivot」定案）：字幕檔**自帶時間＋說話人,直接用**——不對齊、不 Whisper、不亂序。
+    /// (1) **免費解析**：curl 取檔（繞 Cloudflare）→ <see cref="SubtitleParser.Parse"/>（VTT/SRT 箭頭）→ <see cref="SubtitleParser.ParseTimedTranscript"/>（fandom 式 HH:MM:SS 逐字稿）→ <see cref="SubtitleParser.ExtractInlineSpeakers"/>（NAME: 前綴）。多數常見來源即此免費路徑。
+    /// (2) 版面五花八門、免費解析抽不到時間 → 跑前確認費用後,以 AI **直接抽取**（<see cref="ITranscriptAligner.ExtractTimedCuesAsync"/>；照網頁自己的時間戳、非猜/對齊,故不亂序）。取檔/解析失敗/取消/仍無時間→設狀態、回 null。
     /// </summary>
-    private IReadOnlyList<SubtitleCue>? BuildCuesViaPipeline(string id, string transcriptUrl, CancellationToken outerCt)
+    private async Task<IReadOnlyList<SubtitleCue>?> FetchParseSubtitleAsync(string subtitleUrl)
     {
-        IReadOnlyList<SubtitleCue>? built = null;
-        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Build subtitles (subtitle file + Whisper)",
-            async (report, winCt) =>
+        string raw;
+        try
+        {
+            SetStatus("Reading the subtitle file…");
+            raw = await TranscriptFetch.FetchAsync(subtitleUrl, CancellationToken.None);
+        }
+        catch (OperationCanceledException) { SetStatus("Canceled."); return null; }
+        catch (SubtitleException ex) { SetStatus(ex.Message); return null; }
+        catch (Exception ex) { SetStatus("Couldn't read the subtitle file: " + ex.Message); return null; }
+
+        // (1) 免費解析：VTT/SRT（「-->」箭頭）→ fandom 式「HH:MM:SS 說話人： 台詞」→ 補抽 NAME: 說話人。抽到時間就直接用（免費、即時）。
+        var parsed = SubtitleParser.Parse(raw);
+        if (!parsed.Any(c => c.StartSec.HasValue)) { parsed = SubtitleParser.ParseTimedTranscript(raw); }
+        var det = SubtitleParser.ExtractInlineSpeakers(parsed);
+        if (det.Any(c => c.StartSec.HasValue)) { return det; }
+
+        // (2) 免費解析讀不到時間（五花八門的版面）→ 請 AI 讀整頁抽取（照網頁自己的時間戳,非猜/對齊）。花費、跑前確認。
+        if (!ConfirmAiExtract()) { SetStatus("Kept the current video — AI extraction canceled."); return null; }
+        IReadOnlyList<SubtitleCue>? aiCues = null;
+        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Extract subtitles with AI",
+            async (report, ct) =>
             {
-                using var linked = CancellationTokenSource.CreateLinkedTokenSource(outerCt, winCt);
-                var ct = linked.Token;
                 var progress = new System.Progress<string>(s => report(s));
-                var usages = new List<AiActionWindow.AiUsage>();
-
-                report("Reading the subtitle file…");
-                var raw = await TranscriptFetch.FetchAsync(transcriptUrl, ct);
-                var text = TranscriptAlign.StripToPlainText(raw);
-
-                // 審查修：**逐段即時記帳**——每個付費階段一完成就記，任一後段失敗/取消仍記下已實際發生之花費（不使後續確認框累計低估）。
-                var parsed = await _aligner.ParseTranscriptAsync(text, progress, ct);
-                usages.AddRange(TranscriptCost(parsed.Usages));
-                _spendLedger.Record(SumUsd(parsed.Usages), DateTimeOffset.Now);
-                if (parsed.Truncated) // 審查修：字幕檔過長、AI 整理輸出被截斷——明確告知（非靜默回空、非誤指 URL）；已記 parse 費用
+                var res = await _aligner.ExtractTimedCuesAsync(TranscriptAlign.StripToPlainText(raw), progress, ct);
+                if (res.Truncated)
                 {
-                    report("This subtitle file is too long to organize in one pass — use a shorter transcript, then Load again.");
-                    return usages; // built 留 null → 中止
+                    report("This page is too long to extract in one pass — try a shorter transcript page.");
+                    return TranscriptCost(res.Usages);
                 }
-                if (parsed.Lines.Count == 0)
+                var extracted = SubtitleParser.ExtractInlineSpeakers(res.Cues);
+                if (!extracted.Any(c => c.StartSec.HasValue))
                 {
-                    report("No dialogue could be organized from that subtitle file — check the subtitle-file URL points to a real transcript.");
-                    return usages;
+                    report("The AI didn't find timestamps on this page — check the URL is a timed transcript.");
+                    return TranscriptCost(res.Usages);
                 }
-
-                report($"Transcribing audio for timing (Whisper)… ({parsed.Lines.Count} lines to align)");
-                var asr = await _transcriber.TranscribeAsync(id, progress, ct);
-                var whisperUsd = AiCost.EstimateWhisperUsd(asr.AudioSeconds);
-                _spendLedger.Record(whisperUsd, DateTimeOffset.Now); // Whisper 成功即記（每分鐘制、依實際音長）
-
-                var aligned = await _aligner.AlignAsync(parsed.Lines, asr.Cues, progress, ct);
-                usages.AddRange(TranscriptCost(aligned.Usages));
-                _spendLedger.Record(SumUsd(aligned.Usages), DateTimeOffset.Now);
-
-                built = TranscriptAlign.Assemble(parsed.Lines, aligned.StartSecs);
-                var alignedCount = built.Count(c => c.StartSec.HasValue);
-                report($"Done — {built.Count} line(s) with speakers; {alignedCount} aligned to the audio timeline.");
-                report($"實際 Whisper 費用 ≈ 約 NT${AiCost.ToTwd(whisperUsd):0.##}（{asr.AudioSeconds / 60.0:0.#} 分鐘音訊；估算，以 OpenAI 現價為準）");
-                return usages; // AI token 費用由視窗呈現；Whisper 費用以上方訊息行呈現
+                aiCues = extracted;
+                report($"Extracted {extracted.Count} line(s); {extracted.Count(c => c.StartSec.HasValue)} timed.");
+                return TranscriptCost(res.Usages);
             },
             autoCloseOnSuccess: false, showCost: true);
-        return built;
+        if (aiCues is null) { SetStatus("Couldn't extract timed subtitles from that page — see the dialog."); return null; }
+        return aiCues;
     }
 
-    /// <summary>字幕建立跑前確認（增量5′）：顯示流程與粗估費用＋本日/本小時累計（本 app 記帳）；按 OK 才建立、取消回 false＝不花費。實際音長未知，費用以範圍概估、完成後顯示實際。</summary>
-    private bool ConfirmBuildRun()
+    /// <summary>
+    /// 載入前摘要確認（epic #178 增量6′-B）：顯示解析出的句數／已定時句數／時長跨度／說話人清單,供使用者**一眼確認「這份字幕對得上這支影片」**;按 OK 才載入。
+    /// 無 AI、無費用——「內容是否對得上」以人眼看摘要取代 AI 猜（AI 猜正是一直出包處）。無說話人則於摘要標明（仍可載入、只是不能指定說話人暫停）。
+    /// </summary>
+    private bool ConfirmLoadSummary(IReadOnlyList<SubtitleCue> cues)
     {
-        var now = DateTimeOffset.Now;
+        var timed = cues.Count(c => c.StartSec.HasValue);
+        var speakers = cues.Select(c => c.Speaker).Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var lastSec = cues.Where(c => c.StartSec.HasValue).Max(c => c.StartSec!.Value);
+        var speakerLine = speakers.Count > 0
+            ? $"說話人（{speakers.Count}）：{string.Join("、", speakers.Take(8))}{(speakers.Count > 8 ? "…" : "")}"
+            : "⚠ 這份字幕沒有說話人標記（仍可載入,但無法指定說話人暫停）";
         var msg =
-            "為這支影片建立字幕：讀取字幕檔（含說話人）→ 以 Whisper 轉錄實際語音取得時間軸 → AI 逐句對齊。\n\n" +
-            $"估算費用：約 NT$5 起（20–30 分鐘一集；Whisper 每分鐘約 US${AiCost.WhisperUsdPerMinute:0.###}＋AI 解析／對齊，影片越長越多）\n" +
-            $"今日已花：約 NT${AiCost.ToTwd(_spendLedger.SpentToday(now)):0.##}　·　本小時：約 NT${AiCost.ToTwd(_spendLedger.SpentThisHour(now)):0.##}（本 app 記帳、非帳戶餘額）\n\n" +
-            "帳戶餘額請於 platform.openai.com/usage 查看。完成後顯示實際費用。\n\n" +
-            "要開始建立嗎？";
-        return System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this), msg, "Build subtitles (subtitle file + Whisper)",
+            $"字幕檔解析結果：\n\n{cues.Count} 句 · {timed} 句有時間 · 涵蓋 0:00–{FormatPos(lastSec)}\n{speakerLine}\n\n" +
+            "確認這份字幕對得上這支影片,載入嗎？（載入免費；時間可到內容頁用偏移量微調）";
+        return System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this), msg, "Load subtitles",
             System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.OK;
     }
 
-    /// <summary>合計一組 AI 用量之估算 USD（未列價之模型以 0 計）。</summary>
-    private static double SumUsd(IReadOnlyList<SpeakerUsage> usages)
-        => usages.Sum(u => AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0);
+    /// <summary>把 <see cref="SpeakerUsage"/> 轉為對話視窗費用顯示用之 <see cref="AiActionWindow.AiUsage"/> 清單（AI 抽取路徑之費用呈現）。</summary>
+    private static List<AiActionWindow.AiUsage> TranscriptCost(IReadOnlyList<SpeakerUsage> usages)
+        => usages.Select(u => new AiActionWindow.AiUsage(u.InputTokens, u.OutputTokens, u.Model, u.WebSearch)).ToList();
 
-    // ---- Row1：初始資料來源（Auto／Manual 互斥切換，#189）----
-
-    /// <summary>更新字幕來源文字（增量5′）：**純顯示**——來源固定＝字幕檔（含說話人）＋Whisper 聲音對齊（已無 Auto/Manual 之分）；未載入＝空。</summary>
-    private void UpdateSourceLabel()
+    /// <summary>AI 直接抽取跑前確認（epic #178 增量6′-B）：僅免費解析讀不到時間之網頁才需 AI；顯示流程與粗估費用,按 OK 才花費。強調時間照網頁原樣抄、非估算/對齊（故不亂序）。</summary>
+    private bool ConfirmAiExtract()
     {
-        BaseSourceText.Text = _cues.Count == 0 ? "" : "Subtitle file + Whisper timing";
+        var msg =
+            "這個字幕頁不是標準字幕檔格式,免費解析讀不到時間。要用 AI 讀整頁、逐句抽出「時間＋說話人＋台詞」嗎？\n" +
+            "（AI 只照抄網頁上原有的時間戳,不推算、不對齊——所以不會亂序。）\n\n" +
+            "估算費用：約 NT$1–3 一頁（僅一次；之後同片載入免費）。使用你的 OpenAI 金鑰。\n" +
+            "帳戶餘額請於 platform.openai.com/usage 查看。\n\n" +
+            "要用 AI 抽取嗎？";
+        return System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this), msg, "Extract subtitles with AI",
+            System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.OK;
     }
 
     // ---- 影片清單（epic #145 增量4） ----
@@ -468,6 +488,15 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         var name = id is null ? null : ThemeStore.Find(_themes.Load(), id)?.Name;
         _videoStore.UpdateTheme(_currentVideoItemId, id, name);
         RefreshVideoList(); // 反映清單主題名／篩選（目前片仍以 _currentVideoItemId 選中或落選）
+        RefreshSpeakerColoring();  // 改指派主題→重算說話人字型色（清單＋字幕帶，#189-checklist）
+    }
+
+    /// <summary>重算說話人字型色並套用到清單與字幕帶（USR：字幕字型色跟主題連動）——主題改指派/切回本頁時呼叫。</summary>
+    private void RefreshSpeakerColoring()
+    {
+        RebuildSpeakerColors();
+        RefreshCueEmphasis();
+        if (_shownCue >= 0 && _shownCue < _cues.Count) { RenderClickable(_cues[_shownCue]); } // 字幕帶亦即時更新
     }
 
     private System.Windows.Controls.StackPanel VideoItemView(VideoItem it)
@@ -542,6 +571,16 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             SetStatus("Add a subtitle-file URL too — a transcript page that names the speakers (for example a fandom transcript).");
             return;
         }
+        // 已有此片紀錄→先問覆寫重置或取消（增量6′-B）：覆寫＝清掉已存字幕強制重建；取消＝保留現有、不動作、不花費。
+        if (_subs.TryLoad(id) is not null)
+        {
+            var overwrite = System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this),
+                "這支影片已有字幕紀錄。要覆寫、重新建立嗎？（會重新花費建立；取消則保留現有紀錄）",
+                "Video already added",
+                System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question);
+            if (overwrite != System.Windows.MessageBoxResult.OK) { SetStatus("Kept the existing subtitles for this video."); return; }
+            _subs.Remove(id); // 清已存字幕→LoadVideoAsync 走未快取（重建）
+        }
         // 記字幕檔網址到該片：LoadVideoAsync 未快取時即取此建立字幕（快取還原與載入來源一致）。
         _statusStore.SaveWeb(id, found: true, source: "Direct input", transcriptUrl: subtitleUrl);
         _ = LoadVideoAsync(id, addToStore: true); // 未快取→確認費用→建立管線；成功加入影片清單並切到內容頁
@@ -562,9 +601,6 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         return list;
     }
 
-    /// <summary>把 <see cref="SpeakerUsage"/> 轉為對話視窗費用顯示用之 <see cref="AiActionWindow.AiUsage"/> 清單。</summary>
-    private static List<AiActionWindow.AiUsage> TranscriptCost(IReadOnlyList<SpeakerUsage> usages)
-        => usages.Select(u => new AiActionWindow.AiUsage(u.InputTokens, u.OutputTokens, u.Model, u.WebSearch)).ToList();
 
     /// <summary>表格點連結→於系統預設瀏覽器開 YouTube 原頁（沿用 AboutPage 開連結作法）。</summary>
     private void OnOpenExternalLink(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
@@ -602,7 +638,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         var it = (VideoList.SelectedItem as System.Windows.Controls.ListBoxItem)?.Tag as VideoItem;
         if (it is null || it.Id == _currentVideoItemId) return; // 無選取或已是目前載入 → 不重載
         // 審查修：_currentVideoItemId／主題選擇器改於 LoadVideoAsync **確認會實際載入後**才推進——
-        // 否則未建片若於 ConfirmBuildRun 取消／無字幕檔而提前 return，選取會錯位到新片、播放仍舊片。
+        // 否則未載入若於摘要確認取消／無字幕檔網址而提前 return，選取會錯位到新片、播放仍舊片。
         _ = LoadVideoAsync(it.VideoId, addToStore: false, listItemId: it.Id); // 已在清單、不重加
     }
 
@@ -732,17 +768,25 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
             if (!_playbackStarted) // 播放器就緒（#186：不自動播放）→ 顯首句、啟用控制、提示按 Continue 開始
             {
                 _playbackStarted = true;
+                SubTabPlay.IsChecked = true;        // #178 增量6′-B USR：確認播放器就緒（載入成功）才切到內容頁——不先跳
                 _ = UpdateCurrentVideoTitleAsync(); // epic #145 增量4：就緒後自播放器取標題回寫影片清單
                 ShowCue(0);                         // 顯示第一句＋啟用控制鈕（不自動播放）
                 SetStatus($"{_cues.Count} lines loaded — press ▶ Continue to play (pauses at each line), or double-click a line to jump there (paused).");
             }
 
-            var pause = PauseDecider.NextPause(t, _cues, _lastPausedIndex, pauseSpeaker: _pauseSpeaker, pauseNoSpeaker: _pauseNoSpeaker); // 指定說話人（或未標示者）才暫停（增量7／#189）
-            if (pause >= 0)
+            // 播放時字幕清單跟隨（#178 增量6′-B USR）：當前句隨播放時間前進即高亮＋捲動＋更新字幕帶（不只在暫停點）。
+            var cur = PauseDecider.CueAt(t, _cues);
+            if (cur >= 0 && cur != _shownCue) { ShowCue(cur); }
+
+            if (PauseTargets() is { } pt) // 等待模式＝依勾選（#189-checklist）：不等待模式回 null→只跟隨、不暫停
             {
-                _lastPausedIndex = pause;
-                try { await Web.ExecuteScriptAsync("window.li_pause&&window.li_pause()"); } catch { /* 盡力暫停 */ }
-                ShowCue(pause);
+                var pause = PauseDecider.NextPause(t, _cues, _lastPausedIndex, pauseSpeakers: pt.Targets, pauseNoSpeaker: pt.NoSpeaker); // 勾選之說話人（含未標示）才暫停；Everyone 全勾→逐句停
+                if (pause >= 0)
+                {
+                    _lastPausedIndex = pause;
+                    try { await Web.ExecuteScriptAsync("window.li_pause&&window.li_pause()"); } catch { /* 盡力暫停 */ }
+                    ShowCue(pause);
+                }
             }
         }
         catch { /* 輪詢盡力，橋接偶發例外不致命 */ }
@@ -755,12 +799,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         _shownCue = i;
         SetControls(true); // 控制鈕於首次顯示字幕（自動暫停或點清單跳播）後才生效，避免暫停前空點無反應
         var row = _rows[i]; // _rows 依原始順序建立，Index 與 _cues 對齊
-        if (!ReferenceEquals(CueList.SelectedItem, row))
-        {
-            _refreshingCues = true;      // 程式化選取，勿觸發 JumpToSelected 跳播
-            CueList.SelectedItem = row;
-            _refreshingCues = false;
-        }
+        if (!ReferenceEquals(CueList.SelectedItem, row)) { CueList.SelectedItem = row; } // 程式化選取；CueList 無 SelectionChanged 處理器（跳播走滑鼠事件），不需抑制旗標
         CueList.ScrollIntoView(row);     // 若當前句被說話人篩選濾掉則不捲動（正常，字幕帶仍顯示）
         RenderClickable(_cues[i]);
     }
@@ -866,8 +905,9 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         row.UpdateSpeaker(clean);                                                   // 就地通知 UI（該列 SpeakerLabel 更新）
         if (_currentVideoId is not null) { _subs.Save(_currentVideoId, CurrentVideoTitle(), isAutoGenerated: false, list); } // 存回（#174；增量5′ 已無 Auto/Manual 之分）
         if (_shownCue == i) { RenderClickable(_cues[i]); }                          // 當前句→重繪字幕帶（含新說話人前綴）
-        PopulateSpeakerFilter();                                                    // 新說話人可能出現/消失→同步下拉
-        PopulatePauseAtSpeaker();
+        PopulateSpeakerChecks();                                                    // 新說話人可能出現/消失→重建勾選面板（保留原勾選）＋同步配色
+        RefreshFilterView();                                                        // 篩選/顯示依新說話人重整
+        RefreshCueEmphasis();
         SetStatus(clean is null ? $"Cleared speaker on line {i + 1}." : $"Set line {i + 1} speaker to “{clean}”.");
     }
 
@@ -911,11 +951,14 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     private void RenderClickable(SubtitleCue cue)
     {
         SubtitleBand.Inlines.Clear();
-        // 固定格式「說話人：內容」（#189）：說話人一律前置、粗體、非可點；未知標 unknown（不再有無說話人就不顯示的混亂）
+        // 字型色跟主題連動（USR）：該句說話人於主題有配對色→用該色;否則預設筆記色 #3A2C33。整句（說話人＋台詞）同色。
+        var hex = ColorForSpeaker(cue.Speaker);
+        var brush = hex is not null ? BrushOfHex(hex) : EntryTextBrush;
+        // 固定格式「說話人：內容」（#189）：說話人一律前置、粗體、非可點；未知標 unknown
         SubtitleBand.Inlines.Add(new Run(SpeakerLabelOf(cue.Speaker))
         {
-            FontWeight = System.Windows.FontWeights.Bold, // 說話人名稱標粗體（#字幕說話人標粗體）
-            Foreground = EntryTextBrush,                  // 與筆記條目同色
+            FontWeight = System.Windows.FontWeights.Bold,
+            Foreground = brush,
         });
         foreach (var tok in EnglishWordTokenizer.Tokenize(cue.Text))
         {
@@ -924,7 +967,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
                 var word = tok.Text;
                 var link = new Hyperlink(new Run(word))
                 {
-                    Foreground = EntryTextBrush, // 字幕顏色比照筆記條目 #3A2C33（可點仍以游標手勢示意）
+                    Foreground = brush, // 字型色依說話人主題色（可點仍以游標手勢示意）
                     Cursor = System.Windows.Input.Cursors.Hand,
                     TextDecorations = null,
                 };
@@ -933,7 +976,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
             }
             else
             {
-                SubtitleBand.Inlines.Add(new Run(tok.Text));
+                SubtitleBand.Inlines.Add(new Run(tok.Text) { Foreground = brush });
             }
         }
     }
@@ -947,12 +990,46 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         }
     }
 
-    private async Task ReplayCurrentAsync()
+    /// <summary>勾選面板某列之「加入筆記」鈕（#189-checklist USR）：把該說話人所有台詞原文，收藏至〔影片-說話人〕資料夾（免 AI）。全選列不觸發。</summary>
+    private void OnAddSpeakerNotesClick(object sender, System.Windows.RoutedEventArgs e)
     {
-        if (_shownCue < 0 || _shownCue >= _cues.Count || !_webReady) return;
-        if (_cues[_shownCue].StartSec is not double sec) return; // #184：未定時句無已知時間可跳，安全略過
-        _lastPausedIndex = _shownCue - 1; // 允許重播後於本句結束再暫停
-        await SeekAsync(sec);
+        if ((sender as System.Windows.FrameworkElement)?.DataContext is not SpeakerCheck sc || sc.IsEveryone) { return; }
+        var label = sc.IsNoSpeaker ? "unknown" : sc.Name;              // 未標示列→資料夾名以 unknown 表示
+        var lines = CuesForSpeaker(sc).ToList();
+        if (lines.Count == 0) { SetStatus($"No lines found for “{label}”."); return; }
+        AddSpeakerNotesRequested?.Invoke(SpeakerNotesFolder(label), lines); // App 端去重→費用確認→逐句翻譯→toast 回報
+    }
+
+    /// <summary>某說話人之所有台詞原文（依 cue 時間序）：未標示列＝空說話人之句；具名列＝其名在合唸句拆出之任一名字中（沿用 SplitSpeakers）。空白句略過。</summary>
+    private IEnumerable<string> CuesForSpeaker(SpeakerCheck sc)
+    {
+        foreach (var c in _cues)
+        {
+            var match = sc.IsNoSpeaker
+                ? string.IsNullOrEmpty(c.Speaker)
+                : !string.IsNullOrEmpty(c.Speaker) && PauseDecider.SplitSpeakers(c.Speaker).Any(a => string.Equals(a, sc.Name, StringComparison.OrdinalIgnoreCase));
+            if (match && !string.IsNullOrWhiteSpace(c.Text)) { yield return c.Text; }
+        }
+    }
+
+    /// <summary>〔影片-說話人〕筆記資料夾名（#189-checklist USR）：取影片標題主段（去「| 系列/平台」後綴）＋說話人;標題過長截斷、空退回影片 id。</summary>
+    private string SpeakerNotesFolder(string speaker)
+    {
+        var title = (CurrentVideoTitle() ?? "").Split('|')[0].Trim();
+        if (title.Length == 0) { title = _currentVideoId ?? "video"; }
+        if (title.Length > 40) { title = title[..40].Trim(); }
+        return $"{title} - {speaker}";
+    }
+
+    /// <summary>Previous（USR：原 Replay 改此）：跳到**上一句**起點並自該處播放（鏡像 <see cref="SkipNextAsync"/>）；已在首句則忽略。</summary>
+    private async Task SkipPrevAsync()
+    {
+        if (_cues.Count == 0 || !_webReady) return;
+        var prev = _shownCue - 1;
+        if (prev < 0) return;
+        _lastPausedIndex = prev - 1;
+        ShowCue(prev);
+        if (_cues[prev].StartSec is double sec) await SeekAsync(sec); // #184：未定時句仍顯示，但無法 seek 定位
     }
 
     private async Task ResumeAsync()
@@ -1011,29 +1088,32 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     /// <summary>設定目前字幕：建 CueRow（保留原始 index）、綁 CueList＋套說話人篩選檢視、重填說話人下拉、啟用工具列。</summary>
     private void SetCues(IReadOnlyList<SubtitleCue> cues)
     {
-        _cues = cues;
+        // 依開始時間穩定排序（增量6′-B 修）:PauseDecider／CueAt 要求 cues 遞增,而逐字稿頁常見場景倒敘/片尾曲致時間回退
+        // （USR「選 Ryder 沒每次停」病根）。載入、時間偏移、YAML 編修**三條安裝路徑皆經此**→單點保證單調。對已遞增輸入 idempotent。
+        _cues = SubtitleParser.NormalizeOrder(cues);
         _rows = new List<CueRow>(_cues.Count);
         for (var i = 0; i < _cues.Count; i++) _rows.Add(new CueRow(i, _cues[i]));
         CueList.ItemsSource = _rows;
         _cueView = System.Windows.Data.CollectionViewSource.GetDefaultView(_rows);
-        _speakerFilter = null; _filterNoSpeaker = false; // 新字幕一律不篩選（與下拉重置 All 一致）——修 YAML 套用後殘留舊篩選（此路徑未經 ClearCues 重置）
         _cueView.Filter = CueRowFilter;
-        PopulateSpeakerFilter();
-        PopulatePauseAtSpeaker(); // 指定說話人才暫停（增量7）
+        PopulateSpeakerChecks();   // 重建說話人勾選面板（保留原勾選）＋同步主題配色
+        SyncModeSelectors();       // 下拉選取反映目前模式
+        RefreshFilterView();       // 依模式套篩選
+        RefreshCueEmphasis();      // 依模式套粗體+顏色
         var has = _cues.Count > 0;
-        SpeakerFilter.IsEnabled = has;
+        SetSpeakerControlsEnabled(has);
         EditYamlBtn.IsEnabled = has;
-        SyncTranscribeEnabled(has); // #187 有字幕載入；增量5′：已帶說話人則停用（見方法）
+        SyncOffsetEnabled(has); // #187 有字幕載入；增量5′：已帶說話人則停用（見方法）
     }
 
-    /// <summary>同步 🎙Voice（Whisper 重轉）啟用（增量5′ 審查修）：字幕**已帶說話人**時停用——純 Whisper 重轉無說話人、會覆蓋抹除說話人（pivot 差異化），不容此 footgun；僅無說話人之字幕可重轉取時間。附說明 ToolTip。</summary>
-    private void SyncTranscribeEnabled(bool baseEnabled)
+    /// <summary>同步時間偏移列（增量6′-B「時間 pivot」）：有字幕且**至少一句已定時**才可校正——全未定時（無對齊）則平移無意義、停用。</summary>
+    private void SyncOffsetEnabled(bool baseEnabled)
     {
-        var hasSpeaker = _cues.Any(c => !string.IsNullOrEmpty(c.Speaker));
-        TranscribeBtn.IsEnabled = baseEnabled && !hasSpeaker;
-        TranscribeBtn.ToolTip = hasSpeaker
-            ? "Disabled: this subtitle already carries speakers from the subtitle file — re-transcribing with Whisper would drop them."
-            : null;
+        var on = baseEnabled && _cues.Any(c => c.StartSec.HasValue);
+        OffsetBox.IsEnabled = on;
+        OffsetApplyBtn.IsEnabled = on;
+        OffsetMinusBtn.IsEnabled = on;   // USR：±鈕與偏移框同步啟用
+        OffsetPlusBtn.IsEnabled = on;
     }
 
     /// <summary>清空字幕與清單、關工具列（載入新片／取消時）。編修中則先退出編修 UI。</summary>
@@ -1044,167 +1124,291 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         _rows = new List<CueRow>();
         CueList.ItemsSource = null;
         _cueView = null;
-        _refreshingCues = true;
-        SpeakerFilter.Items.Clear();
-        _refreshingCues = false;
-        _speakerFilter = null; _filterNoSpeaker = false;
-        _pauseSpeaker = null;
-        _pauseNoSpeaker = false; // #189
-        _populatingPauseAt = true; PauseAtSpeaker.Items.Clear(); _populatingPauseAt = false;
-        SpeakerFilter.IsEnabled = false;
+        // 清空勾選面板（解除訂閱免殘留）＋回預設模式（無篩選／依勾選等待）
+        _populatingModes = true;
+        foreach (var sc in _speakerChecks) sc.PropertyChanged -= OnSpeakerCheckPropChanged;
+        _speakerChecks.Clear(); _everyoneCheck = null; _noSpeakerCheck = null; _checkedNames.Clear();
+        _populatingModes = false;
+        _filterMode = FilterMode.ShowAll; _pauseMode = PauseMode.Selected;
+        SyncModeSelectors();
+        SetSpeakerControlsEnabled(false);
         EditYamlBtn.IsEnabled = false;
-        TranscribeBtn.IsEnabled = false; // #187
-        BaseSourceText.Text = "";                                         // #189：清來源文字（載入完成後再顯）
-        ResetRefineApplied();                                             // #189：新載入→管線重置（Row2/Row3 未套用）
-        PauseAtSpeaker.IsEnabled = false;
+        OffsetBox.IsEnabled = false; OffsetApplyBtn.IsEnabled = false;    // 增量6′-B：清空時停用時間偏移列
+        OffsetMinusBtn.IsEnabled = false; OffsetPlusBtn.IsEnabled = false;
     }
 
-    /// <summary>重填說話人下拉：All＋各具名說話人（去重排序）；有具名又有未標示句時另加「(no speaker)」。預設選 All。</summary>
-    private void PopulateSpeakerFilter()
+    // ---- 說話人勾選面板（#189-checklist USR）：Everyone＋各原子說話人（合唸句拆開去重）＋(no speaker)；篩選/顯示/等待共用 ----
+
+    /// <summary>
+    /// 重建說話人勾選面板：Everyone＋各**原子**說話人（把「Ryder and Marshall」拆成 Ryder／Marshall 去重排序）＋（有未標示句時）「(no speaker)」。
+    /// 保留原勾選狀態（依名字；新名預設勾）；首次全勾。同步 _checkedNames 快取與主題自動配色。清單/顯示/等待統一由呼叫端刷新。
+    /// </summary>
+    private void PopulateSpeakerChecks()
     {
-        _refreshingCues = true;
-        SpeakerFilter.Items.Clear();
-        SpeakerFilter.Items.Add(AllSpeakers);
-        var names = _cues.Where(c => !string.IsNullOrEmpty(c.Speaker))
-                         .Select(c => c.Speaker!)
+        // 保留原勾選（依名字；重建後同名沿用、新增預設勾）
+        var prevChecked = _speakerChecks.Count > 0
+            ? new HashSet<string>(_speakerChecks.Where(s => s.IsChecked).Select(s => s.Name), StringComparer.OrdinalIgnoreCase)
+            : null;
+        bool WasChecked(string name) => prevChecked is null || prevChecked.Contains(name);
+
+        _populatingModes = true;
+        foreach (var sc in _speakerChecks) sc.PropertyChanged -= OnSpeakerCheckPropChanged;
+        _speakerChecks.Clear();
+        _everyoneCheck = null; _noSpeakerCheck = null;
+
+        var atoms = _cues.Where(c => !string.IsNullOrEmpty(c.Speaker))
+                         .SelectMany(c => PauseDecider.SplitSpeakers(c.Speaker))     // 合唸句拆為個別名字
                          .Distinct(StringComparer.OrdinalIgnoreCase)
                          .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
                          .ToList();
-        foreach (var n in names) SpeakerFilter.Items.Add(n);
-        if (names.Count > 0 && _cues.Any(c => string.IsNullOrEmpty(c.Speaker)))
-            SpeakerFilter.Items.Add(NoSpeaker);
-        _speakerFilter = null; _filterNoSpeaker = false;
-        SpeakerFilter.SelectedIndex = 0; // All
-        _refreshingCues = false;
+        var hasNoSpeaker = _cues.Any(c => string.IsNullOrEmpty(c.Speaker));
+
+        if (atoms.Count > 0 || hasNoSpeaker)
+        {
+            _everyoneCheck = AddCheck(new SpeakerCheck(EveryoneSpeaker, isEveryone: true));
+            foreach (var a in atoms) AddCheck(new SpeakerCheck(a) { IsChecked = WasChecked(a) });
+            if (hasNoSpeaker) _noSpeakerCheck = AddCheck(new SpeakerCheck(NoSpeaker, isNoSpeaker: true) { IsChecked = WasChecked(NoSpeaker) });
+            _everyoneCheck.IsChecked = _speakerChecks.Where(x => !x.IsEveryone).All(x => x.IsChecked); // 全勾才勾 Everyone
+        }
+        _populatingModes = false;
+
+        RebuildCheckedNames();
+        RebuildSpeakerColors();
+
+        SpeakerCheck AddCheck(SpeakerCheck sc)
+        {
+            sc.RowStripe = _speakerChecks.Count % 2 == 0 ? RowStripeEven : RowStripeOdd; // 斑馬紋（USR）：依加入序奇偶
+            sc.PropertyChanged += OnSpeakerCheckPropChanged;
+            _speakerChecks.Add(sc);
+            return sc;
+        }
     }
 
-    /// <summary>下拉改變→更新篩選條件、重整檢視（僅影響顯示，不動 _cues／播放 index）。</summary>
-    private void ApplySpeakerFilter()
+    /// <summary>勾選變更：Everyone↔各列連動；重算已勾快取；暫停自目前時間重算；刷新篩選檢視與強調（粗體+顏色）。</summary>
+    private void OnSpeakerCheckPropChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (_refreshingCues) return;
-        var sel = SpeakerFilter.SelectedItem as string;
-        _filterNoSpeaker = sel == NoSpeaker;
-        _speakerFilter = (sel is null || sel == AllSpeakers || sel == NoSpeaker) ? null : sel;
-        _refreshingCues = true;   // Refresh 濾掉當前選取項時會清選取觸發 SelectionChanged——抑制其誤觸跳播
-        _cueView?.Refresh();
-        _refreshingCues = false;
+        if (_populatingModes || _syncingChecks || sender is not SpeakerCheck sc) return;
+        _syncingChecks = true;
+        if (sc.IsEveryone)
+        {
+            foreach (var other in _speakerChecks) if (!other.IsEveryone) other.IsChecked = sc.IsChecked; // 全選/全清
+        }
+        else if (_everyoneCheck is not null)
+        {
+            _everyoneCheck.IsChecked = _speakerChecks.Where(x => !x.IsEveryone).All(x => x.IsChecked);    // 全部個別勾→Everyone 勾
+        }
+        _syncingChecks = false;
+
+        RebuildCheckedNames();
+        _lastPausedIndex = -1;      // 勾選變→暫停判定自目前時間重算
+        RefreshFilterView();
+        RefreshCueEmphasis();
     }
 
-    private bool CueRowFilter(object o)
+    /// <summary>依勾選面板重算「已勾原子說話人」快取（供每句比對，免每次掃 ObservableCollection）。</summary>
+    private void RebuildCheckedNames()
     {
-        if (o is not CueRow row) return true;
-        if (_filterNoSpeaker) return string.IsNullOrEmpty(row.Cue.Speaker);
-        if (_speakerFilter is null) return true;
-        return string.Equals(row.Cue.Speaker, _speakerFilter, StringComparison.OrdinalIgnoreCase);
+        _checkedNames.Clear();
+        foreach (var sc in _speakerChecks)
+            if (sc.IsChecked && !sc.IsEveryone && !sc.IsNoSpeaker) _checkedNames.Add(sc.Name);
     }
 
-    // ---- 指定說話人才暫停（增量7）：Everyone＋各具名說話人；選定後導引播放只在該說話人之句到句暫停 ----
-
-    /// <summary>重填 Pause-at 下拉：Everyone＋各具名說話人（去重排序）＋（有具名又有未標示句時）「(no speaker)」；保留選取（原選項已無則回 Everyone）；無具名說話人則停用。</summary>
-    private void PopulatePauseAtSpeaker()
+    /// <summary>某句之說話人是否被勾選（未標示句看 (no speaker) 勾選；具名句看其拆出之任一原子名是否在已勾集合）。</summary>
+    private bool SpeakerChecked(string? cueSpeaker)
     {
-        _populatingPauseAt = true;
-        // 以目前選項文字保留（含 (no speaker)）；下拉尚未建時由狀態反推
-        var prevSel = PauseAtSpeaker.SelectedItem as string ?? (_pauseNoSpeaker ? NoSpeaker : _pauseSpeaker) ?? EveryoneSpeaker;
-        PauseAtSpeaker.Items.Clear();
-        PauseAtSpeaker.Items.Add(EveryoneSpeaker);
-        var names = _cues.Where(c => !string.IsNullOrEmpty(c.Speaker)).Select(c => c.Speaker!)
-                         .Distinct(StringComparer.OrdinalIgnoreCase)
-                         .OrderBy(s => s, StringComparer.OrdinalIgnoreCase).ToList();
-        foreach (var n in names) PauseAtSpeaker.Items.Add(n);
-        // #189：有具名又有未標示句時，另加「只在未標示（unknown）之句暫停」選項
-        if (names.Count > 0 && _cues.Any(c => string.IsNullOrEmpty(c.Speaker))) { PauseAtSpeaker.Items.Add(NoSpeaker); }
-        var idx = PauseAtSpeaker.Items.IndexOf(prevSel);
-        PauseAtSpeaker.SelectedIndex = idx >= 0 ? idx : 0;
-        ApplyPauseAtSelection(PauseAtSpeaker.SelectedItem as string); // 依還原後之選項設定 _pauseSpeaker／_pauseNoSpeaker
-        PauseAtSpeaker.IsEnabled = names.Count > 0; // 有具名說話人才有意義
-        _populatingPauseAt = false;
+        if (string.IsNullOrEmpty(cueSpeaker)) return _noSpeakerCheck?.IsChecked == true;
+        foreach (var a in PauseDecider.SplitSpeakers(cueSpeaker)) if (_checkedNames.Contains(a)) return true;
+        return false;
     }
 
-    /// <summary>下拉改變→設定暫停對象（Everyone＝全部；具名＝該說話人；(no speaker)＝只在未標示之句暫停）。</summary>
-    private void ApplyPauseAtSpeaker() => ApplyPauseAtSelection(PauseAtSpeaker.SelectedItem as string);
-
-    /// <summary>依 Pause-at 選項字串設定 _pauseSpeaker／_pauseNoSpeaker（#189）。</summary>
-    private void ApplyPauseAtSelection(string? sel)
+    /// <summary>粗體+顏色模式下某句之背景色 hex（該句第一個「已勾且有配色」之原子說話人色）；無則 null（只粗體、不上色）。</summary>
+    private string? ColorForSpeaker(string? cueSpeaker)
     {
-        _pauseNoSpeaker = sel == NoSpeaker;
-        _pauseSpeaker = (sel is null || sel == EveryoneSpeaker || sel == NoSpeaker) ? null : sel;
-    }
-
-    /// <summary>依已套用狀態更新 Row3（🎙 Voice）按鈕外觀（#189）：已套用者前置 ✓ 表「保持按下」。</summary>
-    private void UpdateRefineButtons()
-    {
-        TranscribeBtn.Content = (_row3Applied ? "✓ " : "") + VoiceLabel;
-    }
-
-    /// <summary>重置 Row3 已套用狀態（#189）：換基底來源／載入新片時，管線自 Row1 重起。</summary>
-    private void ResetRefineApplied()
-    {
-        _row3Applied = false;
-        UpdateRefineButtons();
+        if (string.IsNullOrEmpty(cueSpeaker)) return null;
+        foreach (var a in PauseDecider.SplitSpeakers(cueSpeaker))
+            if (_speakerColorHex.TryGetValue(a, out var hex)) return hex; // 顏色常設（不限勾選，USR）
+        return null;
     }
 
     /// <summary>
-    /// Whisper 音訊轉錄（#187）：抓真實聲音重新轉錄字幕、修正 YouTube 自動字幕時間漂移，使到句暫停對齊實際發音。
-    /// **會用金鑰＋下載音訊**——跑前先確認估算音訊時長、估算台幣費用與帳戶餘額說明（餘額無法以 API 金鑰讀取），
-    /// 使用者取消則不花費；確認才於 <see cref="AiActionWindow"/> 執行。成功以轉錄結果取代字幕、存回字幕存檔（#174）並附**實際**費用。
-    /// 期間停用四顆字幕來源鈕；模態阻擋主視窗故不併發換片（仍留 stale guard 保險）。
+    /// 依現用主題 12 色之**描述**建每原子說話人之字型顏色（#189-checklist USR）：以「主題某色描述是否包含該說話人名（不分大小寫）」為配對依據;
+    /// 命中即**直接用該色 hex** 當字型色（12 色已高飽和、白底可讀，使用者可自訂）。無主題或無命中→不上色（預設深色）。
     /// </summary>
-    private void Transcribe()
+    private void RebuildSpeakerColors()
     {
-        if (_cues.Count == 0 || _yamlEditing || _transcribing || _loading || _currentVideoId is null) { return; }
-
-        // 跑前確認（#187：跑前顯示餘額及估算台幣費用）：以目前字幕末句時間估音訊長度→估台幣；餘額無法以 API 金鑰讀取故明示改查 usage 頁。使用者取消不花費。
-        var estSec = EstimateAudioSeconds();
-        var estTwd = AiCost.ToTwd(AiCost.EstimateWhisperUsd(estSec));
-        var confirm = System.Windows.MessageBox.Show(
-            System.Windows.Window.GetWindow(this),
-            "以 OpenAI Whisper 重新轉錄此影片的實際語音，修正字幕時間軸（使到句暫停更準）。\n\n" +
-            $"估算音訊長度：約 {estSec / 60.0:0.#} 分鐘\n" +
-            $"估算費用：約 NT${estTwd:0.##}（Whisper 每分鐘約 US${AiCost.WhisperUsdPerMinute:0.###}；匯率約 US$1≈NT${AiCost.UsdToTwd:0}）\n" +
-            $"今日已花：約 NT${AiCost.ToTwd(_spendLedger.SpentToday(DateTimeOffset.Now)):0.##}　·　本小時：約 NT${AiCost.ToTwd(_spendLedger.SpentThisHour(DateTimeOffset.Now)):0.##}（本 app 記帳）\n\n" +
-            "帳戶餘額無法以 API 金鑰自動讀取，請於 platform.openai.com/usage 查看。\n" +
-            "實際費用依真實音訊長度計算，完成後顯示。\n\n" +
-            "要開始轉錄嗎？",
-            "Re-transcribe audio (Whisper)",
-            System.Windows.MessageBoxButton.OKCancel,
-            System.Windows.MessageBoxImage.Question);
-        if (confirm != System.Windows.MessageBoxResult.OK) { return; }
-
-        _transcribing = true;
-        EditYamlBtn.IsEnabled = false;
-        TranscribeBtn.IsEnabled = false;
-        var target = _cues;                 // stale guard 基準
-        var videoId = _currentVideoId;      // 以已解析 YouTube ID 抓音訊（與字幕擷取一致，yt-dlp 接受裸 id）
-        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Re-transcribe audio (Whisper)",
-            async (report, ct) =>
+        _speakerColorHex = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var theme = CurrentTheme();
+        if (theme is null) { return; }
+        LingoIsland.Query.ThemeColors.Ensure(theme);
+        foreach (var sc in _speakerChecks)
+        {
+            if (sc.IsEveryone || sc.IsNoSpeaker) { continue; }
+            foreach (var col in theme.Colors) // 依槽序,取第一個描述含此說話人名之色
             {
-                var progress = new System.Progress<string>(s => report(s)); // 下載／逐塊轉錄進度→對話視窗（減少等待焦慮）
-                var result = await _transcriber.TranscribeAsync(videoId!, progress, ct);
-                if (!ReferenceEquals(_cues, target)) { report("Subtitle changed meanwhile — result discarded."); return null; }
-                _lastPausedIndex = -1;          // 時間軸全換→暫停判定自目前時間重新起算
-                SetCues(result.Cues);
-                if (_currentVideoId is not null) { _subs.Save(_currentVideoId, CurrentVideoTitle(), isAutoGenerated: false, result.Cues); } // 存轉錄結果（#174；增量5′ 已無 Auto/Manual 之分）
-                _row3Applied = true;            // #189：標記 Row3（Voice 精修時間）已套用
-                if (_rows.Count > 0) { ShowCue(0); }
-                var twd = AiCost.ToTwd(AiCost.EstimateWhisperUsd(result.AudioSeconds));
-                _spendLedger.Record(AiCost.EstimateWhisperUsd(result.AudioSeconds), DateTimeOffset.Now); // #189：實際花費記帳
-                report($"Done — {result.Cues.Count} line(s) transcribed from audio.");
-                report($"實際 Whisper 費用 ≈ 約 NT${twd:0.##}（{result.AudioSeconds / 60.0:0.#} 分鐘音訊；估算，以 OpenAI 現價為準）");
-                SetStatus($"Re-transcribed {result.Cues.Count} line(s) from audio — timing now follows the real speech.");
-                return null; // 費用非 token 制，改由上方訊息行呈現實際台幣費用；不回 AiUsage
-            },
-            autoCloseOnSuccess: false, showCost: false); // 費用自算並以訊息呈現，故關閉視窗內建 token 費用列
-        _transcribing = false;
-        var enable = _cues.Count > 0 && !_yamlEditing && !_loading;
-        EditYamlBtn.IsEnabled = enable;
-        SyncTranscribeEnabled(enable); // 增量5′：已帶說話人則停用
-        UpdateSourceLabel(); // #189：恢復 Row1 狀態
-        UpdateRefineButtons();            // #189：反映 Row3 已套用（✓）
+                if (!string.IsNullOrWhiteSpace(col.Description) && !string.IsNullOrWhiteSpace(col.Hex)
+                    && col.Description.Contains(sc.Name, StringComparison.OrdinalIgnoreCase))
+                {
+                    _speakerColorHex[sc.Name] = col.Hex.Trim();
+                    break;
+                }
+            }
+        }
     }
 
-    /// <summary>估算目前影片音訊秒數（Whisper 跑前費用估算用）：以目前字幕**最後一個有值**之開始時間為估（字幕大致涵蓋全片）；無字幕／皆未定時回 0。#184：容忍未定時句。實際時長於轉錄時由 ffprobe 取得。</summary>
-    private double EstimateAudioSeconds() => _cues.LastOrDefault(c => c.StartSec.HasValue)?.StartSec ?? 0;
+    /// <summary>目前內容頁所選之主題（供自動配色取 Colors）；未指派→null。</summary>
+    private LingoIsland.Query.ThemeItem? CurrentTheme()
+    {
+        var id = ThemeFilter.PickedThemeId(VideoThemePicker);
+        return id is null ? null : ThemeStore.Find(_themes.Load(), id);
+    }
+
+    /// <summary>刷新每列字型顏色（常設，依說話人＝主題描述配對之鮮明色）＋粗體（僅「只加粗勾選」模式且該句說話人被勾選）。USR：顏色常設、用於字型色、非底色。</summary>
+    private void RefreshCueEmphasis()
+    {
+        var boldMode = _filterMode == FilterMode.BoldSelected;
+        foreach (var row in _rows)
+        {
+            var bold = boldMode && SpeakerChecked(row.Cue.Speaker);
+            row.SetEmphasis(ColorForSpeaker(row.Cue.Speaker), bold);
+        }
+    }
+
+    /// <summary>重整清單檢視（套 CueRowFilter）。</summary>
+    private void RefreshFilterView() => _cueView?.Refresh();
+
+    /// <summary>清單篩選：僅「只顯示勾選者」模式才隱藏未勾之句；「全部顯示」「只加粗勾選」皆全顯示。</summary>
+    private bool CueRowFilter(object o)
+    {
+        if (o is not CueRow row) return true;
+        if (_filterMode != FilterMode.ShowSelected) return true;
+        return SpeakerChecked(row.Cue.Speaker);
+    }
+
+    /// <summary>顯示模式下拉改變（0 全部顯示／1 只顯示勾選／2 只加粗勾選）→重整檢視與強調（字型色常設不受此影響）。</summary>
+    private void ApplyFilterMode()
+    {
+        _filterMode = SpeakerFilter.SelectedIndex switch { 1 => FilterMode.ShowSelected, 2 => FilterMode.BoldSelected, _ => FilterMode.ShowAll };
+        RefreshFilterView();
+        RefreshCueEmphasis();
+    }
+
+    /// <summary>等待模式下拉改變（0 不等待／1 依勾選等待）→暫停自目前時間重算。</summary>
+    private void ApplyPauseMode()
+    {
+        _pauseMode = PauseAtSpeaker.SelectedIndex == 1 ? PauseMode.Selected : PauseMode.Off;
+        _lastPausedIndex = -1;
+    }
+
+    /// <summary>把下拉選取同步為目前模式（不觸發套用）。</summary>
+    private void SyncModeSelectors()
+    {
+        _populatingModes = true;
+        SpeakerFilter.SelectedIndex = _filterMode switch { FilterMode.ShowSelected => 1, FilterMode.BoldSelected => 2, _ => 0 };
+        PauseAtSpeaker.SelectedIndex = _pauseMode == PauseMode.Selected ? 1 : 0;
+        _populatingModes = false;
+    }
+
+    /// <summary>啟/停用說話人相關控制（顯示模式下拉＋等待模式下拉＋勾選面板）。</summary>
+    private void SetSpeakerControlsEnabled(bool on)
+    {
+        SpeakerFilter.IsEnabled = on;
+        PauseAtSpeaker.IsEnabled = on;
+        SpeakerChecks.IsEnabled = on;
+    }
+
+    /// <summary>
+    /// 等待對象（#189-checklist）：不等待模式→null（OnPoll 不暫停）；Everyone 全勾→(null,false)＝非指定（句末停、原逐句學習行為）；
+    /// 否則→(已勾原子集合, 是否含未標示)＝指定對象（於該句起點停；空集合→無人符合→不停）。
+    /// </summary>
+    private (IReadOnlyCollection<string>? Targets, bool NoSpeaker)? PauseTargets()
+    {
+        if (_pauseMode == PauseMode.Off) return null;
+        if (_everyoneCheck?.IsChecked == true) return (null, false);
+        return (_checkedNames, _noSpeakerCheck?.IsChecked == true);
+    }
+
+    /// <summary>
+    /// 套用時間偏移（epic #178 增量6′-B「時間 pivot」）：把偏移框之 <c>MM:SS</c>（可負）整體平移全部字幕時間、存回字幕存檔、重整清單與播放判定。
+    /// 慣例：**字幕快→輸負**（如 <c>-00:05</c> 使字幕延後 5 秒對上發音）、**慢→輸正**——即 <c>新時間 = 原時間 − 輸入值</c>（見 <see cref="ShiftCues"/>）。
+    /// 空框／0／格式錯→狀態列提示、不動；無已定時句→無可平移、忽略。套用後框歸零供下次再微調。純平移、不改斷句/說話人。
+    /// </summary>
+    private void ApplyOffset()
+    {
+        var secs = ParseOffsetSeconds(OffsetBox.Text);
+        if (secs is null) { SetStatus("Enter a time offset (MM:SS or seconds). Positive = subtitles later, negative = earlier — e.g. 00:03 or -00:05."); return; }
+        if (secs.Value == 0) { SetStatus("Offset is 0:00 — no change."); return; }
+        if (ShiftAllBy(secs.Value)) { OffsetBox.Text = "00:00"; } // 歸零供下次再微調（框輸入路徑才歸零；±鈕不動框）
+    }
+
+    /// <summary>±鈕（USR：Shift 左側增減鈕）：只**改偏移欄位值** ∓1 秒（正負格式 MM:SS），按 Shift 才套用——不即時平移。</summary>
+    private void NudgeOffset(double deltaSeconds)
+    {
+        if (!OffsetBox.IsEnabled) { return; }
+        var cur = ParseOffsetSeconds(OffsetBox.Text) ?? 0;
+        OffsetBox.Text = FormatOffset(cur + deltaSeconds);
+    }
+
+    /// <summary>秒→帶正負號 <c>MM:SS</c> 偏移字串（<see cref="NudgeOffset"/> 用；四捨五入至整秒）。</summary>
+    private static string FormatOffset(double secs)
+    {
+        var a = (int)Math.Round(Math.Abs(secs));
+        return $"{(secs < 0 ? "-" : "")}{a / 60:00}:{a % 60:00}";
+    }
+
+    /// <summary>整份字幕時間平移 <paramref name="secs"/> 秒、存回、重整清單與播放判定（沙漏游標；首次前備份原始時間檔）。無字幕/編修中/無已定時句→提示不動、回 false。</summary>
+    private bool ShiftAllBy(double secs)
+    {
+        if (_cues.Count == 0 || _yamlEditing || _loading || _currentVideoId is null) { return false; }
+        if (!_cues.Any(c => c.StartSec.HasValue)) { SetStatus("These subtitles have no timing to shift."); return false; }
+        // 逐句改時間＋存檔＋重繪需一兩秒→沙漏游標,免使用者混亂（USR）。首次偏移前保留原始時間檔（資料夾同時留原始與校正後兩檔，USR）。
+        System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+        try
+        {
+            _subs.BackupOriginalOnce(_currentVideoId, CurrentVideoTitle());
+            var shifted = ShiftCues(_cues, secs); // 直接加：正＝延後、負＝提前
+            _lastPausedIndex = -1;                // 時間全平移→暫停判定自目前時間重新起算
+            SetCues(shifted);
+            _subs.Save(_currentVideoId, CurrentVideoTitle(), isAutoGenerated: false, shifted); // 存回校正後（#174）
+            if (_rows.Count > 0) { ShowCue(0); }
+        }
+        finally { System.Windows.Input.Mouse.OverrideCursor = null; }
+        var dir = secs < 0 ? "earlier" : "later";
+        SetStatus($"Shifted all subtitles {Math.Abs(secs):0.##}s {dir}. Adjust again if needed.");
+        return true;
+    }
+
+    /// <summary>把每句開始時間平移 <paramref name="deltaSeconds"/> 秒（純函式，internal 供單元測試）：已定時句 <c>+delta</c>（不低於 0）、未定時句（null）保持 null；斷句/說話人不動。</summary>
+    internal static IReadOnlyList<SubtitleCue> ShiftCues(IReadOnlyList<SubtitleCue> cues, double deltaSeconds)
+        => cues.Select(c => c.StartSec is double s
+                ? c with { StartSec = Math.Round(Math.Max(0, s + deltaSeconds), 3) }
+                : c).ToList();
+
+    /// <summary>
+    /// 解析時間偏移輸入為秒（純函式，internal 供單元測試）：接受 <c>MM:SS</c>／<c>SS</c>、可帶前導 <c>-</c>／<c>+</c>；
+    /// 例 <c>-00:05</c>→-5、<c>1:30</c>→90、<c>-7</c>→-7、<c>00:00</c>→0。空白／格式錯／負號非於最前／逾 <c>MM:SS</c>→null（呼叫端提示）。
+    /// </summary>
+    internal static double? ParseOffsetSeconds(string? text)
+    {
+        var t = (text ?? "").Trim();
+        if (t.Length == 0) { return null; }
+        var sign = 1.0;
+        if (t[0] == '-') { sign = -1.0; t = t[1..].Trim(); }
+        else if (t[0] == '+') { t = t[1..].Trim(); }
+        if (t.Length == 0) { return null; }
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var parts = t.Split(':');
+        if (parts.Length == 1)
+        {
+            return double.TryParse(parts[0], System.Globalization.NumberStyles.Float, inv, out var only) && only >= 0 ? sign * only : null;
+        }
+        if (parts.Length == 2)
+        {
+            if (!int.TryParse(parts[0], System.Globalization.NumberStyles.Integer, inv, out var mm) || mm < 0) { return null; }
+            if (!double.TryParse(parts[1], System.Globalization.NumberStyles.Float, inv, out var ss) || ss < 0) { return null; }
+            return sign * (mm * 60 + ss);
+        }
+        return null; // HH:MM:SS 以上不支援（偏移一般 < 1 分）
+    }
 
     /// <summary>進入整檔 YAML 編修：序列化目前字幕入編輯框、停導引＋暫停播放、切換清單→編輯面板。</summary>
     private void EnterYamlEdit()
@@ -1214,11 +1418,11 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         if (_webReady) { try { _ = Web.ExecuteScriptAsync("window.li_pause&&window.li_pause()"); } catch { /* 盡力暫停 */ } }
         YamlBox.Text = SubtitleYaml.Serialize(_cues);
         _yamlEditing = true;
-        CueList.Visibility = System.Windows.Visibility.Collapsed;
+        CuePanel.Visibility = System.Windows.Visibility.Collapsed;   // 連同說話人勾選面板一併隱藏（#189-checklist）
         YamlEditor.Visibility = System.Windows.Visibility.Visible;
-        SpeakerFilter.IsEnabled = false;
+        SetSpeakerControlsEnabled(false);
         EditYamlBtn.IsEnabled = false;
-        TranscribeBtn.IsEnabled = false; // #187：YAML 編修期間停用重轉
+        OffsetBox.IsEnabled = false; OffsetApplyBtn.IsEnabled = false; OffsetMinusBtn.IsEnabled = false; OffsetPlusBtn.IsEnabled = false; // 增量6′-B：YAML 編修期間停用時間偏移
         SetStatus("Editing subtitle as YAML — merge/split lines and set speakers, then Apply.");
     }
 
@@ -1250,9 +1454,9 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         if (!_yamlEditing) return;
         ExitYamlEditUi();
         var has = _cues.Count > 0;
-        SpeakerFilter.IsEnabled = has;
+        SetSpeakerControlsEnabled(has);
         EditYamlBtn.IsEnabled = has;
-        SyncTranscribeEnabled(has); // #187；增量5′：已帶說話人則停用
+        SyncOffsetEnabled(has); // #187；增量5′：已帶說話人則停用
         if (_webReady && IsVisible && has) { _guiding = true; _poll.Start(); }
     }
 
@@ -1260,7 +1464,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     {
         _yamlEditing = false;
         YamlEditor.Visibility = System.Windows.Visibility.Collapsed;
-        CueList.Visibility = System.Windows.Visibility.Visible;
+        CuePanel.Visibility = System.Windows.Visibility.Visible;   // 還原清單＋說話人勾選面板（#189-checklist）
     }
 
     /// <summary>目前播放秒數（橋接失敗／未起播回 0）。</summary>
@@ -1288,12 +1492,60 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         public string SpeakerLabel => SpeakerLabelOf(Cue.Speaker);
         /// <summary>台詞文字（清單以正常字重 Run 呈現）。</summary>
         public string Text => Cue.Text;
+
+        // 字型顏色（常設，依說話人＝主題描述配對之鮮明色）＋粗體（僅「只加粗勾選」模式且本句說話人被勾選）。USR：顏色用於字型色、非底色。
+        private System.Windows.Media.Brush _speakerBrush = DefaultCueBrush;
+        public System.Windows.Media.Brush SpeakerBrush { get => _speakerBrush; private set { if (!ReferenceEquals(_speakerBrush, value)) { _speakerBrush = value; Raise(nameof(SpeakerBrush)); } } }
+        private System.Windows.FontWeight _lineWeight = System.Windows.FontWeights.Normal;
+        public System.Windows.FontWeight LineWeight { get => _lineWeight; private set { if (_lineWeight != value) { _lineWeight = value; Raise(nameof(LineWeight)); } } }
+        /// <summary>設定本列字型色（hex 非 null＝該說話人有主題配對色;否則預設深色）＋是否加粗（只加粗勾選模式）。</summary>
+        public void SetEmphasis(string? hex, bool bold)
+        {
+            SpeakerBrush = hex is not null ? BrushOfHex(hex) : DefaultCueBrush;
+            LineWeight = bold ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
+        }
+
         /// <summary>就地更新說話人（#189 右鍵指定）：換 Cue 並通知 SpeakerLabel 變更，使清單該列即時更新、免重建（不跳捲軸）。</summary>
         public void UpdateSpeaker(string? speaker)
         {
             Cue = Cue with { Speaker = speaker };
             PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(SpeakerLabel)));
         }
+        private void Raise(string n) => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(n));
+    }
+
+    /// <summary>字幕清單預設字型色（無主題配對之說話人）：近黑深灰，與原清單外觀一致。</summary>
+    private static readonly System.Windows.Media.Brush DefaultCueBrush = MakeFrozen(0x2A, 0x2A, 0x2A);
+    /// <summary>說話人勾選面板斑馬紋（USR）：偶列透明、奇列極淺粉，助辨識列尾圖示對應之名字。</summary>
+    private static readonly System.Windows.Media.Brush RowStripeEven = System.Windows.Media.Brushes.Transparent;
+    private static readonly System.Windows.Media.Brush RowStripeOdd = MakeFrozen(0xFA, 0xE8, 0xEF);
+
+    // 主題色 hex → 凍結筆刷（快取；色盤固定、跨列共用免重建）。供 CueRow 字型色。
+    private static readonly Dictionary<string, System.Windows.Media.Brush> HexBrushCache = new(StringComparer.OrdinalIgnoreCase);
+    private static System.Windows.Media.Brush BrushOfHex(string hex)
+    {
+        if (HexBrushCache.TryGetValue(hex, out var b)) return b;
+        var color = (System.Windows.Media.Color)System.Windows.Media.ColorConverter.ConvertFromString(hex);
+        var br = new System.Windows.Media.SolidColorBrush(color); br.Freeze();
+        HexBrushCache[hex] = br;
+        return br;
+    }
+
+    /// <summary>說話人勾選面板一列（#189-checklist）：名字＋是否 Everyone／(no speaker)＋勾選態（TwoWay 綁 CheckBox）。Everyone 列加粗以區別。</summary>
+    private sealed class SpeakerCheck : System.ComponentModel.INotifyPropertyChanged
+    {
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
+        public SpeakerCheck(string name, bool isEveryone = false, bool isNoSpeaker = false) { Name = name; IsEveryone = isEveryone; IsNoSpeaker = isNoSpeaker; }
+        public string Name { get; }
+        public bool IsEveryone { get; }
+        public bool IsNoSpeaker { get; }
+        public System.Windows.FontWeight Weight => IsEveryone ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
+        /// <summary>「加入筆記」鈕僅具體說話人列顯示（全選列＝(all speakers) 不顯，避免一鍵灌入全部台詞）。</summary>
+        public System.Windows.Visibility AddNotesVisibility => IsEveryone ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
+        /// <summary>斑馬紋列底色（USR：全白難分辨列尾圖示對應哪個名字）——建構時依索引指派奇偶色。</summary>
+        public System.Windows.Media.Brush RowStripe { get; set; } = System.Windows.Media.Brushes.Transparent;
+        private bool _checked = true;
+        public bool IsChecked { get => _checked; set { if (_checked != value) { _checked = value; PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsChecked))); } } }
     }
 
     /// <summary>取目前載入影片之所屬主題名（供 AI 字幕分析輔助）；無載入或未指派主題→null。</summary>
@@ -1361,5 +1613,14 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         ResumeBtn.IsEnabled = enabled;
         NextBtn.IsEnabled = enabled;
         AddNoteBtn.IsEnabled = enabled;
+        SpeakBandBtn.IsEnabled = enabled; // 字幕帶播音（USR）
+    }
+
+    /// <summary>字幕帶播音（USR：影片下方字幕唸英文句）：以現行語音服務念當前句英文（en-US）；未就緒/無句則忽略。</summary>
+    private void SpeakCurrentLine()
+    {
+        if (_shownCue < 0 || _shownCue >= _cues.Count) { return; }
+        var text = _cues[_shownCue].Text;
+        if (!string.IsNullOrWhiteSpace(text)) { _speechProvider()?.Speak(text, "en-US"); }
     }
 }

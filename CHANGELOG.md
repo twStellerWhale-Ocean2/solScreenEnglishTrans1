@@ -2,6 +2,38 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [3.4.0] - 2026-07-20
+
+影片功能大改（epic #178）增量6′收官〔說話人操作面板＋主題 12 色可編輯色盤〕：字幕清單下方新增可拖拉之**說話人勾選面板**（篩選／暫停／字型色共用單一勾選），主題色改為 **12 色可編輯色盤**（字型色＋AI 記事底色雙軌）。
+
+### 新增
+- **說話人勾選面板**：字幕清單下方可上下拖拉之區塊，列出 `(全部)`＋各具名說話人＋`(無說話人)`（複選、斑馬紋列）。此面板為**篩選、暫停、字型上色三者共用之單一勾選來源**。
+- **字幕帶播音鈕**：影片下方當前句字幕帶新增喇叭鈕，以離線 SAPI 朗讀當前英文句（免金鑰、零費用）。
+- **每說話人「加入筆記」**：面板每列尾附筆記圖示，一鍵把該說話人**全部台詞**收進 `[影片-說話人]` 資料夾；批次加入前**提醒費用**並以進度視窗逐句 AI 翻譯。
+- **時間偏移量增減鈕**：Shift 左側加 `＋`／`－` 鈕，就地增減偏移欄數值（按 Shift 才套用）。
+
+### 變更
+- **字幕篩選改三態**（下拉，讀勾選面板）：顯示全部／只顯示勾選／勾選者粗體＋上色。
+- **到句暫停改兩態**（下拉，讀勾選面板）：不暫停／在勾選之說話人暫停；勾 `(全部)` 等同每句暫停。
+- **說話人字型色改為常設**（非篩選態）：以**使用中主題之 12 色描述是否含該說話人名（不分大小寫）**判定、套為**字型顏色**（非底色）；主題切換即重算。
+- **主題色改為 12 色可編輯色盤**（六邊形 6 角＋6 邊）：點色票即改色（`ColorDialog`）、移除舊色名綁定；每槽＝hex＋描述，**描述雙軌用途**——影片頁說話人字型色＋AI 記事自動配色（AI 依描述回符合之 hex→筆記底色，自動調淡）。
+- **AI 記事配色改回 hex**：查詢配色注入由「盤上色名」改為**十六進位色碼**（限使用中主題 12 色），筆記底色以 `ColorMath.LightenForBackground` 由飽和字型色自動轉為淡底色（同一色雙軌：字型用原色、底色用調淡）。
+- **重播鈕改「Previous」**：由重播當前句改為**跳上一句**。
+- **主題管理頁版面精修**：圖片區塊移至最上、移除已無用的 Search keywords 欄；切至主題頁預設選中**使用中**主題（非第一項）。
+- **影片頁 Theme 下拉移入控制列**（Previous 之前，節省上方空間）；【擷取】【影片】子頁籤序改**內容→獲得**、預設【內容】。
+- **筆記資料夾長名自動折行**、圖示／計數**頂部對齊**。
+
+### 修正
+- **「選某說話人沒每次停」**：字幕載入改 `SubtitleParser.NormalizeOrder`（依開始時間穩定排序、未定時句 carry-forward），修正非單調 cue 序致 `PauseDecider` 略過應停句。
+
+### 內部
+- `ThemeStore`：`ThemeItem.Colors`（`List<ThemeColor>{Hex,Description}`）取代舊 `ColorRules` 字典；`ThemeColors.Ensure` 一次性遷移（舊色名→hex＋保留描述）並補足六邊形 12 槽預設；`BuildColorRulesText` 改輸出 `#hex = "描述"`。舊 `ColorRules`／`Keywords` 欄保留僅供相容（不再讀寫）。
+- 新增 `ColorMath`（純函式）：`TryParseHex`／`RgbToHsl`／`HslToRgb`／`LightenForBackground`（S≤0.55、L≈0.90）。
+- `QueryService`：移除 `ColorNames`；配色提示改要求回 hex、`Parse` 之底色走 `ColorMath.LightenForBackground`。
+- `PauseDecider`：新增 `SplitSpeakers`（連接詞拆聯合說話人）、`PauseMatchesSet`、`NextPause(..., pauseSpeakers)`（複選集合暫停）；保留舊 `PauseMatches` 相容。
+- `SubtitleParser.NormalizeOrder`（穩定排序＋未定時句 carry-forward）；`VideoCapturePage` 新增 `SpeakerCheck` VM、勾選面板、`FilterMode`／`PauseMode`、常設字型色（`RebuildSpeakerColors`）、偏移增減、Previous、字幕帶 TTS（注入 `Func<ISpeechService?>`）。
+- 單元測試 648 綠（新增 `ColorMathTests`／`InlineSpeakerTests`〔NormalizeOrder〕／`PauseDeciderTests`〔拆聯合／集合暫停〕／`NotesStoreTests`〔批次〕／`SubtitleOffsetTests`／`TranscriptAlignTests` 情境；`ThemeStoreTests`／`QueryService*Tests` 改 hex）。
+
 ## [3.3.0] - 2026-07-19
 
 影片功能大改（epic #178）增量6′〔輸入 pivot〕：【獲得】頁改為**單一輸入框**——貼「具體影片網址＋字幕檔網址」即建立字幕；砍不穩的 finder／結果表。

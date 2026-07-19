@@ -151,14 +151,15 @@ public partial class NotesPage : UserControl
         RenderFolder();
     }
 
-    private TreeViewItem MakeItem(NoteFolder f)
+    private TreeViewItem MakeItem(NoteFolder f, int depth = 0)
     {
         var item = new TreeViewItem
         {
-            Header = MakeHeader(f),
+            Header = MakeHeader(f, depth),
             Tag = f,
             IsExpanded = true,
             AllowDrop = true,
+            HorizontalContentAlignment = System.Windows.HorizontalAlignment.Stretch, // USR：列內容拉伸至欄寬，使長名可折行
         };
         item.PreviewMouseLeftButtonDown += OnItemMouseDown;
         item.PreviewMouseRightButtonDown += (s, _) => ((TreeViewItem)s).IsSelected = true; // 右鍵先選取（檔案總管慣例）
@@ -180,33 +181,62 @@ public partial class NotesPage : UserControl
         item.ContextMenu = MakeMenu(item, f);
         foreach (var sub in f.Folders)
         {
-            item.Items.Add(MakeItem(sub));
+            item.Items.Add(MakeItem(sub, depth + 1));
         }
         return item;
     }
 
-    private StackPanel MakeHeader(NoteFolder f)
+    private StackPanel MakeHeader(NoteFolder f, int depth)
     {
+        // 水平 StackPanel（USR：長名自動折行且圖示/筆數**頂部對齊**（對到第一行））：名稱綁最大寬強制折行，icon/count VAlign=Center 對到第一行。
         var sp = new StackPanel { Orientation = Orientation.Horizontal };
+
         sp.Children.Add(new TextBlock
         {
-            Text = "", // Segoe MDL2 Assets：FolderHorizontal（檔案總管閉合資料夾）
+            Text = "", // Segoe MDL2 Assets：FolderHorizontal
             FontFamily = new FontFamily("Segoe MDL2 Assets"),
             FontSize = 13,
             Foreground = Brush("#C77D9A"),
-            VerticalAlignment = VerticalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Top,
             Margin = new Thickness(0, 0, 5, 0),
         });
-        sp.Children.Add(new TextBlock { Text = f.Name, FontSize = 13, VerticalAlignment = VerticalAlignment.Center });
+
+        var name = new TextBlock
+        {
+            Text = f.Name,
+            FontSize = 13,
+            VerticalAlignment = VerticalAlignment.Top,
+            TextWrapping = TextWrapping.Wrap,
+        };
+        // WPF TreeViewItem 預設標頭欄 Auto 寬（不約束）→ 名稱不折只截。綁最大寬＝樹寬 −（圖示+筆數+縮排+捲軸+邊距）強制折行；depth 補每層縮排。
+        name.SetBinding(TextBlock.MaxWidthProperty, new System.Windows.Data.Binding("ActualWidth")
+        {
+            Source = FolderTree,
+            Converter = NameWidthConv,
+            ConverterParameter = 70.0 + depth * 19.0,
+        });
+        sp.Children.Add(name);
+
         sp.Children.Add(new TextBlock
         {
             Text = "　" + f.Entries.Count,
             FontSize = 11.5,
             Foreground = Brush("#8A5A6D"),
-            VerticalAlignment = VerticalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(4, 0, 0, 0),
         });
         return sp;
     }
+
+    /// <summary>資料夾名折行寬度換算（USR）：樹寬 − ConverterParameter（圖示+筆數+縮排+捲軸+邊距）；下限 48。</summary>
+    private sealed class WidthMinusConverter : System.Windows.Data.IValueConverter
+    {
+        public object Convert(object value, System.Type t, object parameter, System.Globalization.CultureInfo c)
+            => System.Math.Max(48.0, (value is double w ? w : 200.0) - (parameter is double p ? p : 70.0));
+        public object ConvertBack(object value, System.Type t, object parameter, System.Globalization.CultureInfo c)
+            => throw new System.NotSupportedException();
+    }
+    private static readonly WidthMinusConverter NameWidthConv = new();
 
     private ContextMenu MakeMenu(TreeViewItem item, NoteFolder f)
     {

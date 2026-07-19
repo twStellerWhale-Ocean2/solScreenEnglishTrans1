@@ -59,7 +59,7 @@ public class QueryServicePromptTests
         Assert.Contains("配色規則", p);
         Assert.Contains("戰士的台詞用粉紅", p);
         Assert.Contains("color", p);           // 要求 color 欄
-        Assert.Contains("Pink", p);            // 可選色名清單（盤上英文色名）
+        Assert.Contains("色碼", p);             // #189-checklist：改要求回十六進位色碼（非固定色名）
         Assert.Contains("空字串", p);           // 無規則適用回空
         Assert.StartsWith(QueryService.BuildPrompt(""), p); // 基礎提示仍在前
     }

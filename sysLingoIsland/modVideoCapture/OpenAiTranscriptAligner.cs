@@ -82,6 +82,26 @@ public sealed class OpenAiTranscriptAligner : ITranscriptAligner
         return new TranscriptAlignResult(startSecs, usages);
     }
 
+    public async Task<SubtitleExtractResult> ExtractTimedCuesAsync(
+        string rawTranscript, IProgress<string>? progress = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(rawTranscript))
+        {
+            return new SubtitleExtractResult(Array.Empty<SubtitleCue>(), Array.Empty<SpeakerUsage>());
+        }
+        var key = RequireKey();
+        progress?.Report("AI is reading the page and extracting the subtitle…");
+        var (json, usage) = await CallAsync(key, BuildExtractRequest(rawTranscript), ct);
+        var usages = new[] { usage with { Model = _parseModel, WebSearch = false } };
+        // 頁面過長→輸出被上限截斷（status=incomplete）→ 結果不可靠,回 Truncated 讓呼叫端仍記費用、給明確錯誤（同 ParseTranscriptAsync）。
+        var truncated = TranscriptAlign.IsTruncated(json);
+        var cues = truncated ? Array.Empty<SubtitleCue>() : TranscriptAlign.ParseExtractedCues(json);
+        progress?.Report(truncated
+            ? "This page is too long to extract in one pass."
+            : $"Extracted {cues.Count} line(s) from the page.");
+        return new SubtitleExtractResult(cues, usages, truncated);
+    }
+
     private static string RequireKey()
     {
         var key = Environment.GetEnvironmentVariable("OPENAI_API_KEY");
@@ -152,6 +172,47 @@ public sealed class OpenAiTranscriptAligner : ITranscriptAligner
                         ["refs"] = new { type = "array", items = new { type = "integer" }, minItems = chunk.Count, maxItems = chunk.Count },
                     },
                     required = new[] { "refs" },
+                    additionalProperties = false,
+                },
+            },
+        },
+    };
+
+    private object BuildExtractRequest(string transcriptText) => new
+    {
+        model = _parseModel, // 無 tools：不上網,只讀給定網頁純文字、逐句抽時間＋說話人＋台詞
+        input = TranscriptAlign.BuildExtractPrompt(transcriptText),
+        max_output_tokens = 32000, // 整頁逐句較長；放寬上限（仍過長→status=incomplete,由 IsTruncated 偵測給明確錯誤）
+        text = new
+        {
+            format = new
+            {
+                type = "json_schema",
+                name = "extracted_cues",
+                strict = true,
+                schema = new
+                {
+                    type = "object",
+                    properties = new Dictionary<string, object>
+                    {
+                        ["cues"] = new
+                        {
+                            type = "array",
+                            items = new
+                            {
+                                type = "object",
+                                properties = new Dictionary<string, object>
+                                {
+                                    ["time"] = new { type = "string" },
+                                    ["speaker"] = new { type = "string" },
+                                    ["text"] = new { type = "string" },
+                                },
+                                required = new[] { "time", "speaker", "text" },
+                                additionalProperties = false,
+                            },
+                        },
+                    },
+                    required = new[] { "cues" },
                     additionalProperties = false,
                 },
             },

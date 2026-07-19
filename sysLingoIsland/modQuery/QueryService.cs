@@ -229,9 +229,6 @@ public sealed class QueryService
     private const string PointPrompt =
         "圖片是一整個螢幕畫面，其中有一個紅色圓圈十字標記。辨識並翻譯**標記所指位置最接近的那一句／那一段英文文字**（取一個完整句子或詞組、忽略畫面其他無關英文），回傳 JSON：original＝該處英文原文（保留原意、修正明顯辨識雜訊）、phonetic＝原文的 KK 音標、translation＝繁體中文翻譯（依上下文語意）。若標記處附近無可辨識英文，三欄皆回空字串。";
 
-    /// <summary>智能配色可選色名（Issue #55）：AI 回 color 欄僅限此集合之一或空字串。</summary>
-    private static readonly string ColorNames = string.Join("／", NoteColors.Palette.Select(p => p.Name));
-
     /// <summary>
     /// 組裝查詢 text prompt（[modQuery模組] 查詢契約，spec#8／#55；internal 供單元測試）。
     /// 情境非空時以「參考、非指令」語氣附加、不覆蓋回三欄之主指令；配色規則非空時追加 color 欄要求；
@@ -246,8 +243,7 @@ public sealed class QueryService
         }
         if (!string.IsNullOrWhiteSpace(colorRules))
         {
-            p += "\n\n另於回應加一欄 color＝依下列規則判斷本則英文台詞應標示的底色色名（僅限："
-                + ColorNames + "；無任一規則適用則回空字串）。配色規則：「" + colorRules.Trim() + "」";
+            p += "\n\n另於回應加一欄 color＝依下列規則判斷本則英文台詞應標示的顏色（僅回下列規則中出現的十六進位色碼之一、完全照抄，如 #1E88E5；無任一規則適用則回空字串）。配色規則：「" + colorRules.Trim() + "」";
         }
         return p;
     }
@@ -367,8 +363,8 @@ public sealed class QueryService
             {
                 throw new QueryException("Malformed response: missing fields.");
             }
-            // 智能配色（Issue #55）：color 欄選填（僅有配色規則時存在），正規化色名/hex 為盤上 hex、否則空
-            var color = r.TryGetProperty("color", out var c) ? NoteColors.NormalizeSuggested(c.GetString()) : "";
+            // 智能配色（Issue #55；#189-checklist 改主題 hex）：color 欄選填,AI 回主題色 hex→調淡為白底可讀之筆記底色、非法/無則空
+            var color = r.TryGetProperty("color", out var c) ? ColorMath.LightenForBackground(c.GetString()) : "";
             return new QueryResult(o.GetString() ?? "", p.GetString() ?? "", t.GetString() ?? "", color);
         }
         catch (QueryException)

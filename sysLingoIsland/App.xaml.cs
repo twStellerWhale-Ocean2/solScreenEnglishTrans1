@@ -133,10 +133,12 @@ public partial class App : System.Windows.Application
         _videoPage = new VideoCapturePage(_videoStore,
             _themeStore, // 影片清單＋加入時記錄使用中主題（增量4）＋依 theme 篩選（B）
             new SubtitleStore(), // 字幕存檔：重開/重選同片還原、免重抓、保留說話人與 YAML 編修（#174）
-            new WhisperTranscriber("whisper-1", _config.TimeoutSec), // #187：抓聲音以 Whisper 取時間軸（載入時建立字幕、按鈕重轉；跑前確認費用）
-            new OpenAiTranscriptAligner("gpt-4.1-mini", "gpt-4o-mini", _config.TimeoutSec)); // epic #178 增量5′：字幕檔整理（說話人＋台詞）＋逐句對齊 Whisper 聲音時間軸
+            // epic #178 增量6′-B「時間 pivot」定案：字幕檔自帶時間＋說話人、免費直接解析載入；版面五花八門、免費解析讀不到時間時,以 AI 直接抽取（照網頁原有時間戳、非對齊/Whisper,故不亂序）。
+            new OpenAiTranscriptAligner("gpt-4.1-mini", "gpt-4o-mini", _config.TimeoutSec),
+            () => _speech); // 字幕帶播音（USR）：委派取現行語音服務
         _videoPage.WordLookupRequested += LookupWordFromVideo;
         _videoPage.AddToNotesRequested += text => _ = AddVideoNoteAsync(text);
+        _videoPage.AddSpeakerNotesRequested += AddSpeakerNotesToFolder; // 某說話人所有台詞原文→〔影片-說話人〕資料夾（免 AI，#189-checklist）
         _videoPage.ApplyThumbSize(_config.SearchThumbHeight); // 搜尋結果縮圖高度自 config 套用（選項頁可調，#複查）
 
         _main = new MainWindow(_themePage, _capturePage, _videoPage, _notesPage, _historyPage, _optionsPage, new AboutPage(_updates));
@@ -345,6 +347,46 @@ public partial class App : System.Windows.Application
             ToastNotifier.Show("Add to notes failed: " + ex.Message);
         }
     }
+
+    /// <summary>
+    /// 某說話人所有台詞批次翻譯後收藏至〔影片-說話人〕資料夾（#189-checklist USR 修：提醒費用＋逐句 AI 翻譯）：
+    /// 先跨全樹去重（免對已收錄者重複付費）→ 費用確認對話框（顯查詢數＝AI 呼叫數）→ 逐句 QueryTextAsync 翻譯、加入、存檔 → 更新筆記頁與下拉、toast 回報。
+    /// </summary>
+    private void AddSpeakerNotesToFolder(string folder, IReadOnlyList<string> lines)
+    {
+        var fresh = _notesStore.NewOriginals(lines); // 先去重,只譯尚未收錄者
+        if (fresh.Count == 0) { ToastNotifier.Show($"All lines already in notes “{folder}”."); return; }
+        var ok = System.Windows.MessageBox.Show(
+            $"Add {fresh.Count} line(s) to “{folder}”?\n\nEach line is translated with one AI query — {fresh.Count} queries total, using your OpenAI key. Continue?",
+            "Add speaker lines to notes", System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question);
+        if (ok != System.Windows.MessageBoxResult.OK) { return; }
+
+        // 進度表單（USR）：AiActionWindow 逐句 report 進度、可 Cancel 中止；同一視窗模態呈現、其訊息迴圈續泵故 async 照跑。
+        var query = new QueryService(_config.Model, _config.TimeoutSec, _config.MaxRetries);
+        int added = 0, failed = 0;
+        AiActionWindow.RunAndShow(_main, $"Adding {fresh.Count} line(s) to “{folder}”", async (report, ct) =>
+        {
+            for (var i = 0; i < fresh.Count; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                report($"Translating {i + 1}/{fresh.Count}: {Ellipsis(fresh[i], 42)}");
+                try
+                {
+                    var r = await query.QueryTextAsync(fresh[i], ct);
+                    if (_notesStore.AddToNamedFolderAndSave(r, folder, NoteDefaults.ColorHex, DateTimeOffset.Now) == NoteAddResult.Added) { added++; }
+                }
+                catch (QueryException) { failed++; }
+            }
+            report($"Done — added {added}" + (failed > 0 ? $", {failed} failed" : ""));
+            return null; // 無 token 用量回傳→不顯費用（前置對話框已提醒）
+        }, autoCloseOnSuccess: false, showCost: false);
+
+        _notesPage?.Reload();
+        _dictionaryWindow?.Page.SetNoteTargets(TopFolderNames(), ActiveThemeName());
+        if (added > 0) { ToastNotifier.Show($"✓ Added {added} translated line(s) to “{folder}”" + (failed > 0 ? $" ({failed} failed)" : "")); }
+    }
+
+    private static string Ellipsis(string s, int max) => s.Length <= max ? s : s[..max].TrimEnd() + "…";
 
     /// <summary>編輯筆記條目原文後重譯（複查回饋）：文字重查→更新該筆三欄（練習分數歸零）、存檔並重載筆記頁。空字串/失敗以 toast。</summary>
     private async Task EditNoteEntryAsync(string id, string text)

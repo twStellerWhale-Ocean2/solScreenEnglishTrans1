@@ -97,6 +97,70 @@ public static class TranscriptAlign
         return !stripped.Any(char.IsLetterOrDigit);
     }
 
+    // ── 直接抽取（增量6′-B「時間 pivot」定案）：AI 讀網頁純文字、逐句抽「時間戳＋說話人＋台詞」（時間照抄、不估算）──
+
+    /// <summary>組「逐句抽取字幕（時間＋說話人＋台詞）」提示（不上網，增量6′-B）：時間戳一律**照網頁原樣抄出、不推算/不編造**；回 <c>{cues:[{time,speaker,text}]}</c>。</summary>
+    public static string BuildExtractPrompt(string transcriptText)
+    {
+        var sb = new StringBuilder();
+        sb.Append("下面是一支英文影片的字幕／逐字稿**網頁純文字**（版面五花八門,可能夾雜導覽、廣告、頁尾、集數資訊等雜訊）。請**逐句抽取字幕**。\n");
+        sb.Append("每句輸出三欄：time＝該句在網頁上標示的**時間戳,原樣照抄**（如「00:00:47」「1:22」；該句若無時間戳就給空字串）；speaker＝說話者角色名（原文標明「角色：台詞」則取,無則空字串）；text＝台詞原文。\n");
+        sb.Append("鐵則：時間戳與台詞**一律照網頁原樣抄出——不要自行推算、估算、換算、調整或編造任何時間**；保持出現順序、不要翻譯改寫；略過導覽/廣告/頁尾/章節標題/集數資訊等非字幕內容。\n");
+        sb.Append("只回傳 JSON：{\"cues\":[{\"time\":\"時間戳或空字串\",\"speaker\":\"角色名或空字串\",\"text\":\"台詞\"}, ...]}。不要輸出任何說明文字。\n\n");
+        sb.Append("網頁內容：\n---\n").Append(transcriptText.Trim()).Append("\n---");
+        return sb.ToString();
+    }
+
+    /// <summary>解析「直接抽取」之 Responses 回應為逐句 <see cref="SubtitleCue"/>（取 output_text 內之 <c>{cues:[{time,speaker,text}]}</c>；容忍圍籬）：時間以 <see cref="ParseFlexibleTime"/> 解析（解不出＝null）；台詞空白之句略過；說話人空白＝未標示（null）。純函式。</summary>
+    public static IReadOnlyList<SubtitleCue> ParseExtractedCues(string responsesApiJson)
+    {
+        var cues = new List<SubtitleCue>();
+        using var doc = JsonDocument.Parse(responsesApiJson);
+        var text = SpeakerInference.ExtractOutputText(doc.RootElement);
+        var json = ExtractJsonObject(text);
+        if (json is null) { return cues; }
+        try
+        {
+            using var inner = JsonDocument.Parse(json);
+            if (inner.RootElement.ValueKind != JsonValueKind.Object
+                || !inner.RootElement.TryGetProperty("cues", out var arr) || arr.ValueKind != JsonValueKind.Array)
+            {
+                return cues;
+            }
+            foreach (var el in arr.EnumerateArray())
+            {
+                if (el.ValueKind != JsonValueKind.Object) { continue; }
+                var lineText = (el.TryGetProperty("text", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null)?.Trim();
+                if (string.IsNullOrEmpty(lineText)) { continue; }
+                var timeStr = el.TryGetProperty("time", out var tm) && tm.ValueKind == JsonValueKind.String ? tm.GetString() : null;
+                var speaker = (el.TryGetProperty("speaker", out var sp) && sp.ValueKind == JsonValueKind.String ? sp.GetString() : null)?.Trim();
+                cues.Add(new SubtitleCue(lineText, ParseFlexibleTime(timeStr), string.IsNullOrEmpty(speaker) ? null : speaker));
+            }
+        }
+        catch (JsonException) { /* malformed → 回已解析部分 */ }
+        return cues;
+    }
+
+    private static readonly Regex ClockRe = new(@"(?<h>\d{1,2}):(?<m>\d{1,2}):(?<s>\d{1,2}(?:\.\d+)?)|(?<m2>\d{1,2}):(?<s2>\d{1,2}(?:\.\d+)?)", RegexOptions.Compiled);
+
+    /// <summary>彈性時間戳解析（純函式，增量6′-B）：<c>H:MM:SS(.mmm)</c>／<c>MM:SS(.mmm)</c>／純秒 → 秒；容忍前後雜字元（取首個時鐘樣式）。空／解不出→null（時間未知）。internal 供單元測試。</summary>
+    public static double? ParseFlexibleTime(string? t)
+    {
+        if (string.IsNullOrWhiteSpace(t)) { return null; }
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        var m = ClockRe.Match(t);
+        if (m.Success)
+        {
+            if (m.Groups["h"].Success)
+            {
+                return int.Parse(m.Groups["h"].Value, inv) * 3600 + int.Parse(m.Groups["m"].Value, inv) * 60
+                    + double.Parse(m.Groups["s"].Value, System.Globalization.NumberStyles.Float, inv);
+            }
+            return int.Parse(m.Groups["m2"].Value, inv) * 60 + double.Parse(m.Groups["s2"].Value, System.Globalization.NumberStyles.Float, inv);
+        }
+        return double.TryParse(t.Trim(), System.Globalization.NumberStyles.Float, inv, out var sec) && sec >= 0 ? sec : (double?)null;
+    }
+
     // ── 第2段：對齊（字幕檔句 ↔ Whisper 聲音時間軸） ────────────────────────────
 
     /// <summary>可用之 Whisper 聲音段（有時間＋非空文字）——對齊之編號基準（純函式）：渲染與「編號→時間」查表用**同一份**，確保編號對應一致。Whisper 段本即全定時非空，此為防呆過濾。</summary>

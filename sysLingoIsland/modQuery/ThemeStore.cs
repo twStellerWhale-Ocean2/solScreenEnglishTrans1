@@ -15,10 +15,57 @@ public sealed class ThemeItem
     public string? Image { get; set; }
     public bool IsActive { get; set; }
     /// <summary>
-    /// 各色配色描述（Issue #69）：色名（<see cref="NoteColors.Palette"/> 名）→ 描述；台詞符合某色描述即標該色、
-    /// 都不符合＝白。取代 #55 之全域單一規則。舊 themes.json／contexts.json 無此鍵 → 反序列化為空、即無配色規則。
+    /// 【已由 <see cref="Colors"/> 取代，僅供相容遷移】各色配色描述（Issue #69）：色名 → 描述。舊 themes.json 之此鍵於
+    /// <see cref="ThemeColors.Ensure"/> 一次性遷移入 <see cref="Colors"/> 後即不再讀寫。
     /// </summary>
     public Dictionary<string, string> ColorRules { get; set; } = new();
+
+    /// <summary>
+    /// 主題 12 色可編輯色盤（#189-checklist USR：六邊形 12 色、可點選改色、無名稱）：每槽＝色票 hex＋描述。
+    /// 描述用途雙軌——影片頁「說話人字型色」（描述含說話人名即用該色）與 AI 記事自動配色（AI 依描述回符合之 hex→筆記底色，調淡）。
+    /// 由 <see cref="ThemeColors.Ensure"/> 確保恆 12 槽（空則自 <see cref="ColorRules"/> 遷移、再補六邊形預設）。
+    /// </summary>
+    public List<ThemeColor> Colors { get; set; } = new();
+}
+
+/// <summary>主題色盤一槽（#189-checklist USR）：可編輯色票 hex＋套用規則描述。</summary>
+public sealed class ThemeColor
+{
+    public string Hex { get; set; } = "";
+    public string Description { get; set; } = "";
+}
+
+/// <summary>主題 12 色色盤預設與正規化（#189-checklist USR：六邊形 6 角＋6 邊共 12 高飽和色，供字型色/記事配色）。</summary>
+public static class ThemeColors
+{
+    public const int Count = 12;
+
+    /// <summary>六邊形 12 色預設（依色相環約 30° 一格、高飽和；白底可讀之字型色）。</summary>
+    public static readonly string[] HexagonDefaults =
+    {
+        "#E53935", "#F4511E", "#FB8C00", "#FDD835", "#C0CA33", "#7CB342",
+        "#43A047", "#00897B", "#00ACC1", "#1E88E5", "#5E35B1", "#D81B60",
+    };
+
+    /// <summary>確保 <paramref name="item"/>.Colors 恆 12 槽：空則自舊 <see cref="ThemeItem.ColorRules"/> 遷移（名→hex＋描述、保留使用者描述），再以六邊形預設補足；逾 12 截斷。純正規化、可單元測試。</summary>
+    public static void Ensure(ThemeItem item)
+    {
+        if (item.Colors.Count == 0 && item.ColorRules.Count > 0)
+        {
+            foreach (var (name, hex) in NoteColors.Palette) // 依盤序遷移有描述之舊色
+            {
+                if (item.ColorRules.TryGetValue(name, out var d) && !string.IsNullOrWhiteSpace(d))
+                {
+                    item.Colors.Add(new ThemeColor { Hex = hex, Description = d.Trim() });
+                }
+            }
+        }
+        while (item.Colors.Count < Count)
+        {
+            item.Colors.Add(new ThemeColor { Hex = HexagonDefaults[item.Colors.Count], Description = "" });
+        }
+        if (item.Colors.Count > Count) { item.Colors.RemoveRange(Count, item.Colors.Count - Count); }
+    }
 }
 
 /// <summary>我的主題根結構：命名主題清單。</summary>
@@ -56,7 +103,9 @@ public sealed class ThemeStore
     {
         try
         {
-            return JsonSerializer.Deserialize<ThemesData>(File.ReadAllText(_path)) ?? new ThemesData();
+            var d = JsonSerializer.Deserialize<ThemesData>(File.ReadAllText(_path)) ?? new ThemesData();
+            foreach (var it in d.Items) { ThemeColors.Ensure(it); } // 每主題補齊 12 色槽（空則自舊 ColorRules 遷移）
+            return d;
         }
         catch
         {
@@ -178,21 +227,20 @@ public sealed class ThemeStore
     public string ActiveColorRules() => BuildColorRulesText(GetActive(Load()));
 
     /// <summary>
-    /// 將某主題之各色描述組為查詢注入文字（Issue #69）：略過空白描述，依盤序輸出「色名＝「描述」」以「；」相連；
-    /// 全空回空字串。純函式、可單元測試。供 <see cref="QueryService"/> 之 colorRules（AI 依此回符合之色名或空）。
+    /// 將某主題之各色描述組為查詢注入文字（Issue #69；#189-checklist 改 hex 為鍵）：略過空白描述，依槽序輸出
+    /// 「<c>#hex＝「描述」</c>」以「；」相連；全空回空字串。純函式、可單元測試。供 <see cref="QueryService"/> 之 colorRules
+    /// （AI 依此回符合之 <b>hex</b>（照抄）或空——取代原回色名，因 12 色可編輯、無固定名）。
     /// </summary>
     public static string BuildColorRulesText(ThemeItem? item)
     {
-        if (item is null || item.ColorRules.Count == 0)
-        {
-            return "";
-        }
+        if (item is null) { return ""; }
+        ThemeColors.Ensure(item);
         var parts = new List<string>();
-        foreach (var (name, _) in NoteColors.Palette) // 依盤序、僅取盤上有效色
+        foreach (var c in item.Colors)
         {
-            if (item.ColorRules.TryGetValue(name, out var desc) && !string.IsNullOrWhiteSpace(desc))
+            if (!string.IsNullOrWhiteSpace(c.Description) && !string.IsNullOrWhiteSpace(c.Hex))
             {
-                parts.Add($"{name} = \"{desc.Trim()}\"");
+                parts.Add($"{c.Hex.Trim()} = \"{c.Description.Trim()}\"");
             }
         }
         return string.Join("; ", parts);

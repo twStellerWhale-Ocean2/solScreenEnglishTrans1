@@ -6,5 +6,5 @@ namespace LingoIsland.Present;
 /// </summary>
 public static class AutoAddSettings
 {
-    public static bool Enabled;
+    public static bool Enabled = true; // 預設開（epic #178 增量6′-B USR：螢幕截圖查詢預設自動加入筆記）
 }

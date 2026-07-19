@@ -48,7 +48,7 @@ public partial class ThemeManagementPage : UserControl
     private ThemesData _data = new();
     private ThemeItem? _selected;
     private byte[]? _pending; // 剛貼上/上傳、尚未儲存之圖片
-    private readonly Dictionary<string, TextBox> _colorBoxes = new(); // 各色描述輸入框（Issue #69）
+    private readonly List<(Border Swatch, TextBox Box)> _colorRows = new(); // 12 色可編輯列（#189-checklist USR）：色票（點擊改色）＋描述框
 
     public ThemeManagementPage(ThemeStore store, Func<byte[], Task<ImageContext>> describeAsync)
     {
@@ -72,48 +72,38 @@ public partial class ThemeManagementPage : UserControl
         ImageDropCard.DragOver += (_, e) => { e.Effects = HasImageFile(e) ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; };
         ImageDropCard.Drop += OnImageDrop;
 
-        BuildColorRuleRows(); // 各色描述輸入列（Issue #69）
+        BuildColorRows(); // 12 色可編輯列（#189-checklist USR）
         Reload();
     }
 
-    // ---- 配色規則各色一格（Issue #69） ----
+    // ---- 主題 12 色可編輯色盤（#189-checklist USR：色票點擊改色＋描述、無名稱） ----
 
-    private void BuildColorRuleRows()
+    private void BuildColorRows()
     {
         ColorRulesPanel.Children.Clear();
-        _colorBoxes.Clear();
-        foreach (var (name, hex) in NoteColors.Palette)
+        _colorRows.Clear();
+        for (var i = 0; i < ThemeColors.Count; i++)
         {
             var grid = new Grid { Margin = new Thickness(0, 0, 0, 4) };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // 色塊
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });   // 色名
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });                     // 色票
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // 描述
 
             var swatch = new Border
             {
-                Width = 16,
-                Height = 16,
-                CornerRadius = new CornerRadius(3),
-                Background = Brush(hex),
+                Width = 22,
+                Height = 22,
+                CornerRadius = new CornerRadius(4),
+                Background = Brush(ThemeColors.HexagonDefaults[i]),
                 BorderBrush = Brush("#D8B4C2"),
                 BorderThickness = new Thickness(1),
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 6, 0),
+                Margin = new Thickness(0, 0, 8, 0),
+                Cursor = System.Windows.Input.Cursors.Hand,
+                ToolTip = "Click to change this colour",
             };
+            swatch.MouseLeftButtonUp += OnSwatchClick; // 點色票→取色器改色
             Grid.SetColumn(swatch, 0);
             grid.Children.Add(swatch);
-
-            var label = new TextBlock
-            {
-                Text = name,
-                FontSize = 12.5,
-                Foreground = Brush("#6D3A4D"),
-                VerticalAlignment = VerticalAlignment.Center,
-                Width = 40,
-                Margin = new Thickness(0, 0, 6, 0),
-            };
-            Grid.SetColumn(label, 1);
-            grid.Children.Add(label);
 
             var box = new TextBox
             {
@@ -121,15 +111,35 @@ public partial class ThemeManagementPage : UserControl
                 Padding = new Thickness(5, 3, 5, 3),
                 VerticalAlignment = VerticalAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
-                ToolTip = $"Describe which lines use “{name}”; leave blank to skip this color",
+                ToolTip = "Describe which speaker(s)/lines use this colour — e.g. a character name; blank = unused.",
             };
-            Grid.SetColumn(box, 2);
+            Grid.SetColumn(box, 1);
             grid.Children.Add(box);
 
-            _colorBoxes[name] = box;
+            _colorRows.Add((swatch, box));
             ColorRulesPanel.Children.Add(grid);
         }
     }
+
+    /// <summary>點色票→系統取色器改該槽顏色（#189-checklist USR「可點選改色」）；按 Save 才寫回主題。</summary>
+    private void OnSwatchClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (sender is not Border sw) { return; }
+        var cur = (sw.Background as SolidColorBrush)?.Color ?? System.Windows.Media.Colors.Gray;
+        using var dlg = new System.Windows.Forms.ColorDialog
+        {
+            Color = System.Drawing.Color.FromArgb(cur.R, cur.G, cur.B),
+            FullOpen = true,
+        };
+        if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+        {
+            sw.Background = new SolidColorBrush(Color.FromRgb(dlg.Color.R, dlg.Color.G, dlg.Color.B));
+        }
+    }
+
+    /// <summary>色票目前色→<c>#RRGGBB</c>（存檔用）。</summary>
+    private static string SwatchHex(Border sw, string fallback)
+        => sw.Background is SolidColorBrush b ? $"#{b.Color.R:X2}{b.Color.G:X2}{b.Color.B:X2}" : fallback;
 
     private static bool HasImageFile(DragEventArgs e) =>
         e.Data.GetDataPresent(DataFormats.FileDrop)
@@ -167,9 +177,15 @@ public partial class ThemeManagementPage : UserControl
         }
     }
 
-    public void Reload()
+    public void Reload() => Reload(preferActive: false);
+
+    /// <summary>
+    /// 重載主題清單。<paramref name="preferActive"/>＝true（切到本頁時，USR）：忽略上次選取、**預設選使用中主題**；
+    /// 否則（頁內操作後）保留原選取。無選取一律退回：使用中→（無使用中則）首則。
+    /// </summary>
+    public void Reload(bool preferActive)
     {
-        var keepId = _selected?.Id;
+        var keepId = preferActive ? null : _selected?.Id;
         _data = _store.Load();
         BuildList();
         if (_data.Items.Count == 0)
@@ -181,7 +197,7 @@ public partial class ThemeManagementPage : UserControl
         }
         EmptyHint.Visibility = Visibility.Collapsed;
         Editor.Visibility = Visibility.Visible;
-        SelectById(keepId ?? _data.Items[0].Id);
+        SelectById(keepId ?? ThemeStore.GetActive(_data)?.Id ?? _data.Items[0].Id);
     }
 
     private void BuildList()
@@ -242,14 +258,16 @@ public partial class ThemeManagementPage : UserControl
             return;
         }
         NameBox.Text = _selected.Name;
-        KeywordsBox.Text = _selected.Keywords;
         DescBox.Text = _selected.Text;
         StatusLine.Text = _selected.IsActive ? "This theme is active." : "";
         ShowPreview(!string.IsNullOrEmpty(_selected.Image) ? LoadImage(_store.ImagePathFor(_selected.Image!)) : null);
-        // 載入各色描述（Issue #69）
-        foreach (var (name, box) in _colorBoxes)
+        // 載入 12 色（色票色＋描述，#189-checklist）
+        ThemeColors.Ensure(_selected);
+        for (var i = 0; i < _colorRows.Count && i < _selected.Colors.Count; i++)
         {
-            box.Text = _selected.ColorRules.TryGetValue(name, out var d) ? d : "";
+            var col = _selected.Colors[i];
+            _colorRows[i].Swatch.Background = Brush(string.IsNullOrWhiteSpace(col.Hex) ? ThemeColors.HexagonDefaults[i] : col.Hex);
+            _colorRows[i].Box.Text = col.Description;
         }
     }
 
@@ -276,22 +294,21 @@ public partial class ThemeManagementPage : UserControl
     {
         if (_selected is null) { return; }
         ThemeStore.Rename(_data, _selected.Id, NameBox.Text);
-        ThemeStore.UpdateKeywords(_data, _selected.Id, KeywordsBox.Text);
         ThemeStore.UpdateText(_data, _selected.Id, DescBox.Text);
         if (_pending is not null)
         {
             _selected.Image = _store.WriteImage(_selected.Id, _pending);
             _pending = null;
         }
-        // 收集各色描述（Issue #69）：空白者不存
-        _selected.ColorRules.Clear();
-        foreach (var (name, box) in _colorBoxes)
+        // 收集 12 色（色票 hex＋描述，#189-checklist）：恆 12 槽、描述空白亦保留（色票仍可能被別處引用）
+        _selected.Colors = new List<ThemeColor>();
+        for (var i = 0; i < _colorRows.Count; i++)
         {
-            var d = box.Text?.Trim() ?? "";
-            if (d.Length > 0)
+            _selected.Colors.Add(new ThemeColor
             {
-                _selected.ColorRules[name] = d;
-            }
+                Hex = SwatchHex(_colorRows[i].Swatch, ThemeColors.HexagonDefaults[i]),
+                Description = _colorRows[i].Box.Text?.Trim() ?? "",
+            });
         }
         _store.Save(_data);
         BuildList();

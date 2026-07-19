@@ -49,7 +49,7 @@ public partial class MainWindow : Window
         // 切至筆記/歷史時於狀態列顯目前檢視條目數，其餘分頁隱藏（#132）。
         TabNotes.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _notes.Reload(); Host.Content = _notes; ShowEntryCount(_notes.CurrentEntryCount); };
         TabHistory.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _history.Reload(); Host.Content = _history; ShowEntryCount(_history.CurrentEntryCount); };
-        TabThemes.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _themes.Reload(); Host.Content = _themes; ShowEntryCount(null); };
+        TabThemes.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } _themes.Reload(preferActive: true); Host.Content = _themes; ShowEntryCount(null); }; // USR：切到本頁預設選使用中主題
         TabCapture.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } Host.Content = _capture; ShowEntryCount(null); };
         TabVideo.Checked += (_, _) => { if (!ConfirmLeaveOptions()) { ReselectOptionsTab(); return; } Host.Content = _video; ShowEntryCount(null); };
         TabOptions.Checked += (_, _) => { Host.Content = _options; ShowEntryCount(null); };

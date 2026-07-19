@@ -47,7 +47,9 @@
       <Button x:Name="NewFolderBtn" Grid.Row="0" Content="＋ New Folder" Style="{StaticResource GhostButton}"
               HorizontalAlignment="Left" Padding="10,4" Margin="0,0,0,6"/>
       <Border Grid.Row="1" Style="{StaticResource Card}">
-        <TreeView x:Name="FolderTree" BorderThickness="0" Background="Transparent" AllowDrop="True" Margin="2"/>
+        <!-- USR：長資料夾名自動分行——停用水平捲軸使列寬受欄寬約束（配合 MakeItem 列拉伸＋名稱 TextWrapping） -->
+        <TreeView x:Name="FolderTree" BorderThickness="0" Background="Transparent" AllowDrop="True" Margin="2"
+                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
       </Border>
     </Grid>
 

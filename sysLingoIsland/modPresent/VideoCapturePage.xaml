@@ -44,17 +44,17 @@
       <RowDefinition Height="Auto"/>
     </Grid.RowDefinitions>
 
-    <!-- 子頁籤：獲得 / 內容（可見性切換，非 TabControl，避免切頁卸載重建 WebView2 播放器、中斷播放） -->
+    <!-- 子頁籤：內容 / 獲得（USR：先內容再獲得；可見性切換，非 TabControl，避免切頁卸載重建 WebView2 播放器、中斷播放） -->
     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-      <RadioButton x:Name="SubTabSearch" Style="{StaticResource SubTab}" GroupName="VideoSubTab" IsChecked="True" Content="獲得"/>
-      <RadioButton x:Name="SubTabPlay" Style="{StaticResource SubTab}" GroupName="VideoSubTab" Content="內容"/>
+      <RadioButton x:Name="SubTabPlay" Style="{StaticResource SubTab}" GroupName="VideoSubTab" IsChecked="True" Content="內容"/>
+      <RadioButton x:Name="SubTabSearch" Style="{StaticResource SubTab}" GroupName="VideoSubTab" Content="獲得"/>
     </StackPanel>
 
     <!-- body：兩 pane 疊放同格，靠可見性切換 -->
     <Grid Grid.Row="1">
 
       <!-- 【獲得】關鍵字搜尋＋結果表格＋網址載入 -->
-      <Border x:Name="SearchPane" Style="{StaticResource Card}" Padding="12" VerticalAlignment="Top">
+      <Border x:Name="SearchPane" Style="{StaticResource Card}" Padding="12" VerticalAlignment="Top" Visibility="Collapsed">
         <StackPanel>
           <TextBlock Text="Add a video" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}" Margin="0,0,0,6"/>
 
@@ -90,7 +90,7 @@
       </Border>
 
       <!-- 【內容】左＝影片清單（Clear all＋theme 篩選；右鍵/Delete 刪）｜右＝播放器＋逐句字幕（預設隱藏，載入影片時自動切換至此） -->
-      <Grid x:Name="PlayPane" Visibility="Collapsed">
+      <Grid x:Name="PlayPane">
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="200" MinWidth="150"/>
           <ColumnDefinition Width="6"/>
@@ -134,13 +134,8 @@
               <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
 
-            <!-- 所屬主題（內容區塊上方；顯示/改指派目前影片之主題，#173）＋播放中影片超連結網址（#177） -->
+            <!-- 內容區塊上方：影片標題＋播放中網址（#177）；所屬主題選單已移至下方控制鈕列（USR：節省空間） -->
             <StackPanel Grid.Row="0" Margin="2,0,2,8">
-              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="Theme:" VerticalAlignment="Center" Foreground="{StaticResource PinkText}" Margin="0,0,6,0"/>
-                <ComboBox x:Name="VideoThemePicker" MinWidth="180" Height="26" VerticalContentAlignment="Center"
-                          IsEnabled="False" ToolTip="Show / change the theme this video belongs to"/>
-              </StackPanel>
               <!-- 影片標題（#187；#189 改唯讀 TextBox 使可選取／複製）：置於網址之上；載入即顯（先用清單標題，起播後以播放器實名更新） -->
               <TextBox x:Name="VideoTitleText" Margin="0,6,0,0" FontWeight="SemiBold" FontSize="13.5"
                        Foreground="{StaticResource PinkText}" TextWrapping="Wrap" Visibility="Collapsed"
@@ -182,26 +177,47 @@
 
               <Border Grid.Row="1" Background="#88FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1" CornerRadius="6"
                       Margin="0,8,0,0" Padding="10" MinHeight="52">
-                <!-- 字級/粗體由 SubtitleDisplaySettings 於 ApplySubtitleDisplay() 套用（設定可調，比照筆記）；文字色比照筆記條目 #3A2C33。點字查詞；右鍵複製整句（#189，字可點故以右鍵複製取代拖選） -->
-                <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" Foreground="#3A2C33">
-                  <TextBlock.ContextMenu>
-                    <ContextMenu>
-                      <MenuItem Header="Copy line" Click="OnCopySubtitleLine"/>
-                    </ContextMenu>
-                  </TextBlock.ContextMenu>
-                </TextBlock>
+                <!-- 字級/粗體由 SubtitleDisplaySettings 套用；文字色依說話人之主題色（RenderClickable，USR）。點字查詞；右鍵複製整句。播音鈕（USR）念當前英文句。 -->
+                <DockPanel>
+                  <Button x:Name="SpeakBandBtn" DockPanel.Dock="Right" Content="&#xE767;" FontFamily="Segoe MDL2 Assets"
+                          Width="30" Height="28" VerticalAlignment="Top" Margin="8,0,0,0" IsEnabled="False"
+                          Background="Transparent" BorderThickness="0" Foreground="#B0578D" Cursor="Hand" FontSize="15"
+                          ToolTip="Play this line (English)"/>
+                  <TextBlock x:Name="SubtitleBand" TextWrapping="Wrap" Foreground="#3A2C33">
+                    <TextBlock.ContextMenu>
+                      <ContextMenu>
+                        <MenuItem Header="Copy line" Click="OnCopySubtitleLine"/>
+                      </ContextMenu>
+                    </TextBlock.ContextMenu>
+                  </TextBlock>
+                </DockPanel>
               </Border>
 
               <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,8,0,0">
-                <Button x:Name="ReplayBtn" Content="&#x23EE; Replay" Width="92" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
+                <!-- 所屬主題（USR：自影片上方移來，節省空間）：顯示/改指派目前影片之主題（#173） -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,4">
+                  <TextBlock Text="Theme:" VerticalAlignment="Center" Foreground="{StaticResource PinkText}" Margin="0,0,4,0"/>
+                  <ComboBox x:Name="VideoThemePicker" MinWidth="130" Height="26" VerticalContentAlignment="Center"
+                            IsEnabled="False" ToolTip="Show / change the theme this video belongs to"/>
+                </StackPanel>
+                <Button x:Name="ReplayBtn" Content="&#x23EE; Previous" Width="96" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
                 <Button x:Name="ResumeBtn" Content="&#x25B6; Continue" Width="96" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
                 <Button x:Name="NextBtn" Content="&#x23ED; Next" Width="84" Height="28" Margin="0,0,6,4" IsEnabled="False"/>
-                <Button x:Name="AddNoteBtn" Content="&#xFF0B; Add to Notes" Width="132" Height="28" Margin="10,0,0,4" IsEnabled="False"/>
+                <Button x:Name="AddNoteBtn" Width="132" Height="28" Margin="10,0,0,4" IsEnabled="False">
+                  <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE70B;" FontFamily="Segoe MDL2 Assets" FontSize="13" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                    <TextBlock Text="Add to Notes" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </Button>
                 <!-- 指定說話人才暫停（增量7） -->
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="16,0,0,4">
-                  <TextBlock Text="Pause at:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
-                  <ComboBox x:Name="PauseAtSpeaker" MinWidth="110" Height="26" VerticalContentAlignment="Center"
-                            IsEnabled="False" ToolTip="Only pause at this speaker's lines (others play through)"/>
+                  <TextBlock Text="Pause:" VerticalAlignment="Center" Foreground="#B0578D" Margin="0,0,4,0"/>
+                  <!-- 兩模式（#189-checklist USR）：不等待／依「說話人勾選面板」勾選者等待。對象＝字幕清單下方勾選清單。 -->
+                  <ComboBox x:Name="PauseAtSpeaker" MinWidth="140" Height="26" VerticalContentAlignment="Center"
+                            IsEnabled="False" ToolTip="Pause at the speakers checked in the Speakers list (below the subtitle list), or never.">
+                    <ComboBoxItem>Don't pause</ComboBoxItem>
+                    <ComboBoxItem>Pause at selected</ComboBoxItem>
+                  </ComboBox>
                 </StackPanel>
               </WrapPanel>
             </Grid>
@@ -216,42 +232,44 @@
                 <RowDefinition Height="*"/>
               </Grid.RowDefinitions>
 
-              <!-- 說話人篩選（#189：移到字幕清單正上方） -->
+              <!-- 顯示模式（#189-checklist USR 修）：全部顯示／只顯示勾選者／只加粗勾選者。說話人字型顏色為常設（依主題描述含其名，見程式），與此三模式無關。 -->
               <ComboBox x:Name="SpeakerFilter" Grid.Row="1" Height="26" VerticalContentAlignment="Center" Margin="0,2,0,4"
-                        IsEnabled="False" ToolTip="Filter the subtitle list by speaker"/>
+                        IsEnabled="False" ToolTip="How to show the checked speakers below: show all lines, show only theirs, or keep all lines but bold theirs. (Speaker text colour is always on, from the theme.)">
+                <ComboBoxItem>Show all</ComboBoxItem>
+                <ComboBoxItem>Show selected only</ComboBoxItem>
+                <ComboBoxItem>Bold selected only</ComboBoxItem>
+              </ComboBox>
 
               <Grid Grid.Row="0" Margin="0,0,0,2">
                 <Grid.RowDefinitions>
                   <RowDefinition Height="Auto"/>
                   <RowDefinition Height="Auto"/>
-                  <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <!-- ① 初始資料（#189）：字幕**來源**——僅顯示（不可操作，避免誤會可切換）。Manual＝人工字幕（時間+斷句皆準）、Auto＝自動字幕（時間準、斷句可能錯）；皆無講話人 -->
-                <Grid Grid.Row="0" Height="26">
+                <!-- 時間偏移（epic #178 增量6′-B「時間 pivot」）：整份字幕時間整體平移校正——取代原 🎙 Voice（Whisper 已移除）。
+                     字幕快→輸負（如 -00:05 使字幕延後對上發音）、慢→輸正；Enter 或按 Shift 套用、存回。來源說明已取消（反正都是字幕）。 -->
+                <Grid Grid.Row="0" Margin="0,2,0,0">
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="26"/>
                     <ColumnDefinition Width="*"/>
-                  </Grid.ColumnDefinitions>
-                  <TextBlock Grid.Column="0" Text="&#x1F4AC;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
-                             ToolTip="自影片來源獲得字幕（僅顯示來源）。"/>
-                  <TextBlock x:Name="BaseSourceText" Grid.Column="1" VerticalAlignment="Center" Foreground="#6D3A4D"
-                             FontSize="12.5" Margin="2,0,0,0"
-                             ToolTip="字幕來源：Manual＝人工字幕（最佳）、Auto＝自動字幕。這是本片實際取得的來源，僅供顯示。"/>
-                </Grid>
-                <!-- ② 精修時間（#189；#180 移除原「講話人／斷句」🌐Script/🧠AI 那列）：🎙 Voice＝抓音檔把時間對到真實發音（Auto 基底另補斷句）。取代原「Re-transcribe」 -->
-                <Grid Grid.Row="1" Margin="0,4,0,0">
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="26"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Grid.Column="0" Text="&#x23F1;" FontSize="15" HorizontalAlignment="Center" VerticalAlignment="Center"
-                             ToolTip="標示時間，若為 Auto 還增加修訂斷句。"/>
-                  <Button x:Name="TranscribeBtn" Grid.Column="1" Grid.ColumnSpan="2" Content="&#x1F399; Voice" Height="26" Margin="0,0,0,0"
-                          IsEnabled="False" ToolTip="Transcribe the actual audio (OpenAI Whisper) to refine the timing to the real speech. Downloads audio; confirms cost first."/>
+                             ToolTip="Shift all subtitle times (＋ = later, − = earlier)."/>
+                  <TextBox x:Name="OffsetBox" Grid.Column="1" Height="26" VerticalContentAlignment="Center" Padding="6,0" Text="00:00"
+                           IsEnabled="False" ToolTip="Time offset MM:SS (or seconds), signed. Positive = subtitles appear later, negative = earlier. Press Enter or Shift to apply to every line."/>
+                  <!-- 即時 ∓1 秒微調（USR：Shift 左側增減鈕）：邊看邊對嘴，不必打字 -->
+                  <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,0,0,0">
+                    <Button x:Name="OffsetMinusBtn" Content="&#x2212;" Width="26" Height="26" FontSize="14" IsEnabled="False"
+                            ToolTip="Nudge all subtitles 1s earlier (applied &amp; saved)."/>
+                    <Button x:Name="OffsetPlusBtn" Content="&#xFF0B;" Width="26" Height="26" FontSize="12" Margin="3,0,0,0" IsEnabled="False"
+                            ToolTip="Nudge all subtitles 1s later (applied &amp; saved)."/>
+                  </StackPanel>
+                  <Button x:Name="OffsetApplyBtn" Grid.Column="3" Content="Shift" Width="54" Height="26" Margin="6,0,0,0"
+                          IsEnabled="False" ToolTip="Shift every subtitle line by the offset (saved)."/>
                 </Grid>
-                <!-- ③ 開啟本片資料夾（#189，📁）＋整檔 YAML 編修（📝）：資料夾鈕在 Edit YAML 左側，開該片 video\{日期 標題}\ -->
-                <Grid Grid.Row="2" Margin="0,6,0,0">
+                <!-- 開啟本片資料夾（#189，📁）＋整檔 YAML 編修（📝）：資料夾鈕在 Edit YAML 左側，開該片 video\{日期 標題}\ -->
+                <Grid Grid.Row="1" Margin="0,6,0,0">
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
@@ -263,16 +281,61 @@
                 </Grid>
               </Grid>
 
-              <!-- 右鍵選單於程式端依游標下之列動態填入（Copy line＋快速指定/修正說話人，#189）；見 OnCueContextMenuOpening -->
-              <ListBox x:Name="CueList" Grid.Row="2" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"
-                       ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Double-click a line to jump there (paused); click a selected line to play/pause; right-click to copy or set the speaker">
-                <ListBox.ItemTemplate>
-                  <DataTemplate>
-                    <!-- 時間標(淡)＋說話人(粗)＋台詞。Run.Text 綁定預設 TwoWay，對唯讀屬性會擲例外 → 明指 OneWay -->
-                    <TextBlock TextWrapping="Wrap" Margin="2" FontSize="12"><Run Text="{Binding TimeLabel, Mode=OneWay}" Foreground="#9A6A82" FontSize="11"/><Run Text="{Binding SpeakerLabel, Mode=OneWay}" FontWeight="Bold"/><Run Text="{Binding Text, Mode=OneWay}"/></TextBlock>
-                  </DataTemplate>
-                </ListBox.ItemTemplate>
-              </ListBox>
+              <!-- 字幕清單（上）＋可上下拖拉之說話人勾選面板（下），中間 GridSplitter（#189-checklist USR） -->
+              <Grid x:Name="CuePanel" Grid.Row="2">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="*" MinHeight="120"/>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="150" MinHeight="46"/>
+                </Grid.RowDefinitions>
+
+                <!-- 右鍵選單於程式端依游標下之列動態填入（Copy line＋快速指定/修正說話人，#189）；見 OnCueContextMenuOpening -->
+                <ListBox x:Name="CueList" Grid.Row="0" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1"
+                         HorizontalContentAlignment="Stretch"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" ToolTip="Double-click a line to jump there (paused); click a selected line to play/pause; right-click to copy or set the speaker">
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <!-- 時間標(淡)＋說話人(粗)＋台詞。Run.Text 綁定預設 TwoWay，對唯讀屬性會擲例外 → 明指 OneWay。
+                           SpeakerBrush＝字型顏色（常設，依說話人＝主題描述配對之鮮明色）；LineWeight＝只加粗勾選模式下勾選者加粗（#189-checklist USR）。 -->
+                      <TextBlock TextWrapping="Wrap" Margin="2" FontSize="12"><Run Text="{Binding TimeLabel, Mode=OneWay}" Foreground="#9A6A82" FontSize="11"/><Run Text="{Binding SpeakerLabel, Mode=OneWay}" FontWeight="Bold" Foreground="{Binding SpeakerBrush}"/><Run Text="{Binding Text, Mode=OneWay}" FontWeight="{Binding LineWeight}" Foreground="{Binding SpeakerBrush}"/></TextBlock>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
+                </ListBox>
+
+                <GridSplitter Grid.Row="1" Height="6" HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                              ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" Background="Transparent"
+                              ToolTip="Drag to resize the speaker list"/>
+
+                <!-- 說話人勾選面板（Everyone＋各原子說話人；合唸句拆開去重）：字幕篩選/顯示與影片等待共用同一份勾選（#189-checklist USR） -->
+                <Border Grid.Row="2" Background="#55FFFFFF" BorderBrush="#F4C2D0" BorderThickness="1" CornerRadius="4">
+                  <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Speakers — used by the filter &amp; pause above" Foreground="#B0578D"
+                               FontSize="11" Margin="6,3,6,2" TextTrimming="CharacterEllipsis"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="4,0,4,4">
+                      <ItemsControl x:Name="SpeakerChecks">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                            <!-- 斑馬紋列底色（RowStripe，USR：全白難辨列尾圖示對應哪名字）＋勾選（左撐滿）＋「加入筆記」鈕（右，去灰框、粉色圖示，同 Notes 分頁 glyph）。全選列不顯此鈕。 -->
+                            <Grid Background="{Binding RowStripe}">
+                              <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                              </Grid.ColumnDefinitions>
+                              <CheckBox Grid.Column="0" Content="{Binding Name}" IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                        FontWeight="{Binding Weight}" FontSize="12" Margin="4,2" VerticalContentAlignment="Center"/>
+                              <Button Grid.Column="1" Content="&#xE70B;" FontFamily="Segoe MDL2 Assets" Foreground="#B0578D"
+                                      Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                      Width="24" Height="22" Padding="0" FontSize="15" Margin="2,1,6,1"
+                                      Visibility="{Binding AddNotesVisibility}" Click="OnAddSpeakerNotesClick"
+                                      ToolTip="Add all of this speaker's lines to My Notes (confirms cost; translates each)"/>
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </ScrollViewer>
+                  </DockPanel>
+                </Border>
+              </Grid>
 
               <Grid x:Name="YamlEditor" Grid.Row="2" Visibility="Collapsed">
                 <Grid.RowDefinitions>

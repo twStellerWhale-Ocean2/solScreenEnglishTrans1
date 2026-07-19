@@ -176,6 +176,58 @@ public class NotesStoreTests
         finally { File.Delete(path); }
     }
 
+    [Fact]
+    public void AddManyRaw_AppendsInOrder_DedupsWithinBatchAndTree_RawOnly()
+    {
+        var path = TempPath();
+        try
+        {
+            var store = new NotesStore(path);
+            store.AddToNamedFolderAndSave(R("Ready, Marshall?"), "Pups - Ryder", "", DateTimeOffset.Now); // 樹中先有一句
+            // 批次：含與既有重複（大小寫/空白折疊）、批次內重複、空白句
+            var (added, skipped) = store.AddManyRawToNamedFolderAndSave(
+                new[] { "  ready, marshall?  ", "Ahoy!", "Let's go!", "Ahoy!", "   " }, "Pups - Ryder", "#E1EFFB", DateTimeOffset.Now);
+            Assert.Equal(2, added);   // Ahoy! + Let's go!
+            Assert.Equal(3, skipped); // 既有 ready + 批次內重複 Ahoy + 空白
+            var d = store.Load();
+            var f = d.Folders.Single(x => x.Name == "Pups - Ryder");
+            Assert.Equal(new[] { "Ready, Marshall?", "Ahoy!", "Let's go!" }, f.Entries.Select(e => e.Original)); // 依序附加（非插頂）
+            Assert.Equal("", f.Entries[1].Phonetic);   // 原文收藏：無音標
+            Assert.Equal("", f.Entries[1].Translation); // 無翻譯
+            Assert.Equal("#E1EFFB", f.Entries[1].Color);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void AddManyRaw_CreatesFolder_EmptyNameUsesDefault()
+    {
+        var path = TempPath();
+        try
+        {
+            var store = new NotesStore(path);
+            var (added, _) = store.AddManyRawToNamedFolderAndSave(new[] { "a", "b" }, "", "", DateTimeOffset.Now);
+            Assert.Equal(2, added);
+            Assert.Equal(NotesStore.DefaultFolderName, store.Load().Folders[0].Name);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void NewOriginals_FiltersTreeExistingAndBatchDupsAndBlank_PreservesOrder()
+    {
+        var path = TempPath();
+        try
+        {
+            var store = new NotesStore(path);
+            store.AddToNamedFolderAndSave(R("Ahoy!"), "Any", "", DateTimeOffset.Now); // 樹中已有（於任一夾）
+            // 批次：既有(大小寫/空白折疊)、新句、批次內重複、空白
+            var fresh = store.NewOriginals(new[] { "  ahoy!  ", "Ready?", "Let's go!", "ready?", "   " });
+            Assert.Equal(new[] { "Ready?", "Let's go!" }, fresh); // 去既有 ahoy、去批次內重複 ready、去空白;保順序
+        }
+        finally { File.Delete(path); }
+    }
+
     // ---- #52：順向/反向排序 ----
 
     [Fact]

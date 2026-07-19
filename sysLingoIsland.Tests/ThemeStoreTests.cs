@@ -24,37 +24,48 @@ public class ThemeStoreTests
         Assert.False(b.IsActive);
     }
 
-    // ---- #69：情境內各色配色規則 ----
+    // ---- #69／#189-checklist：主題 12 色可編輯色盤（hex＋描述） ----
 
     [Fact]
-    public void BuildColorRulesText_FormatsNonEmptyByPaletteOrder()
+    public void BuildColorRulesText_FormatsNonBlankBySlotOrder_HexKeyed()
     {
         var it = new ThemeItem();
-        it.ColorRules["Blue"] = "悲傷的台詞";
-        it.ColorRules["Pink"] = "勇敢或戰鬥";
-        var text = ThemeStore.BuildColorRulesText(it);
-        // 依盤序：Pink 在 Blue 前
-        Assert.Equal("Pink = \"勇敢或戰鬥\"; Blue = \"悲傷的台詞\"", text);
+        it.Colors.Add(new ThemeColor { Hex = "#FBE4EC", Description = "勇敢或戰鬥" });
+        it.Colors.Add(new ThemeColor { Hex = "#E1EFFB", Description = "悲傷的台詞" });
+        // 依槽序、hex 為鍵；Ensure 補足 12 空槽（空描述略過）
+        Assert.Equal("#FBE4EC = \"勇敢或戰鬥\"; #E1EFFB = \"悲傷的台詞\"", ThemeStore.BuildColorRulesText(it));
     }
 
     [Fact]
     public void BuildColorRulesText_SkipsBlankDescriptions()
     {
         var it = new ThemeItem();
-        it.ColorRules["Pink"] = "  ";      // 空白略過
-        it.ColorRules["Green"] = "系統訊息";
-        Assert.Equal("Green = \"系統訊息\"", ThemeStore.BuildColorRulesText(it));
+        it.Colors.Add(new ThemeColor { Hex = "#FBE4EC", Description = "  " });   // 空白略過
+        it.Colors.Add(new ThemeColor { Hex = "#E4F5E9", Description = "系統訊息" });
+        Assert.Equal("#E4F5E9 = \"系統訊息\"", ThemeStore.BuildColorRulesText(it));
     }
 
     [Fact]
     public void BuildColorRulesText_NullOrEmpty_ReturnsEmpty()
     {
         Assert.Equal("", ThemeStore.BuildColorRulesText(null));
-        Assert.Equal("", ThemeStore.BuildColorRulesText(new ThemeItem()));
+        Assert.Equal("", ThemeStore.BuildColorRulesText(new ThemeItem())); // Ensure 補 12 空槽→全略過
     }
 
     [Fact]
-    public void ColorRules_Roundtrips_ThroughStore()
+    public void EnsureColors_MigratesOldColorRules_ThenPadsTo12()
+    {
+        var it = new ThemeItem();
+        it.ColorRules["Blue"] = "sad";   // 舊資料
+        ThemeColors.Ensure(it);
+        Assert.Equal(ThemeColors.Count, it.Colors.Count);                       // 恆 12 槽
+        Assert.Contains(it.Colors, c => c.Hex == "#E1EFFB" && c.Description == "sad"); // Blue→hex 遷移
+        ThemeColors.Ensure(it);                                                 // 再呼叫不重複遷移（Colors 已非空）
+        Assert.Equal(ThemeColors.Count, it.Colors.Count);
+    }
+
+    [Fact]
+    public void Colors_Roundtrip_ThroughStore()
     {
         var path = TempPath();
         try
@@ -62,10 +73,12 @@ public class ThemeStoreTests
             var store = new ThemeStore(path);
             var d = new ThemesData();
             var it = ThemeStore.Add(d, "遊戲A");
-            it.ColorRules["Yellow"] = "旁白";
+            ThemeColors.Ensure(it);
+            it.Colors[3].Hex = "#FDD835"; it.Colors[3].Description = "旁白";
             store.Save(d);
             var loaded = store.Load().Items.Single();
-            Assert.Equal("旁白", loaded.ColorRules["Yellow"]);
+            Assert.Equal("旁白", loaded.Colors[3].Description);
+            Assert.Equal("#FDD835", loaded.Colors[3].Hex);
         }
         finally { File.Delete(path); }
     }
@@ -79,11 +92,11 @@ public class ThemeStoreTests
             var store = new ThemeStore(path);
             var d = new ThemesData();
             var a = ThemeStore.Add(d, "A"); // 首則使用中
-            a.ColorRules["Gray"] = "boss";
+            ThemeColors.Ensure(a); a.Colors[0].Hex = "#111111"; a.Colors[0].Description = "boss";
             var b = ThemeStore.Add(d, "B");
-            b.ColorRules["Pink"] = "小兵";
+            ThemeColors.Ensure(b); b.Colors[0].Description = "小兵";
             store.Save(d);
-            Assert.Equal("Gray = \"boss\"", store.ActiveColorRules()); // A 使用中
+            Assert.Equal("#111111 = \"boss\"", store.ActiveColorRules()); // A 使用中
         }
         finally { File.Delete(path); }
     }

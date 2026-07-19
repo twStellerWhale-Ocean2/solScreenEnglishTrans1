@@ -55,11 +55,14 @@ public class QueryServiceParseTests
     // ---- #55：智能配色 color 欄解析 ----
 
     [Fact]
-    public void Parse_WithColorName_SetsSuggestedColorHex()
+    public void Parse_WithThemeHex_LightensForBackground()
     {
-        var api = WrapApi("{\"original\":\"Attack!\",\"phonetic\":\"x\",\"translation\":\"攻擊！\",\"color\":\"Pink\"}");
+        // #189-checklist：AI 改回主題色 hex（非固定色名）→ 調淡為白底可讀之筆記底色
+        var api = WrapApi("{\"original\":\"Attack!\",\"phonetic\":\"x\",\"translation\":\"攻擊！\",\"color\":\"#E53935\"}");
         var r = QueryService.Parse(api);
-        Assert.Equal("#FBE4EC", r.SuggestedColor); // 色名→盤上 hex
+        Assert.StartsWith("#", r.SuggestedColor);
+        Assert.Equal(7, r.SuggestedColor.Length);
+        Assert.NotEqual("#E53935", r.SuggestedColor); // 已調淡（非原飽和色）
     }
 
     [Fact]

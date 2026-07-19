@@ -178,6 +178,71 @@ public class PauseDeciderTests
         Assert.False(PauseDecider.SpeakerMatches("Ryder", null));
     }
 
+    [Fact]
+    public void SpeakerMatches_JointSpeaker_MatchesEachName()
+    {
+        // USR：選「Ryder」也要停在含 Ryder 的合唸句（「Ryder and Marshall」「Ryder and Zuma」）。
+        Assert.True(PauseDecider.SpeakerMatches("Ryder", "Ryder and Marshall"));
+        Assert.True(PauseDecider.SpeakerMatches("Ryder", "Ryder and Zuma"));
+        Assert.True(PauseDecider.SpeakerMatches("Marshall", "Ryder and Marshall")); // 另一名字亦符合
+        Assert.True(PauseDecider.SpeakerMatches("Rubble", "Chase & Rubble"));        // & 連接
+        Assert.True(PauseDecider.SpeakerMatches("Zuma", "Ryder, Zuma"));             // 逗號連接
+        Assert.True(PauseDecider.SpeakerMatches("Ryder and Marshall", "Ryder and Marshall")); // 直接選合唸句本身
+    }
+
+    [Fact]
+    public void SpeakerMatches_MultiWordSingleName_NotSplit()
+    {
+        // 多詞單名不含連接詞→不誤拆:選「Cap'n」不應停在「Cap'n Turbot」（只整串相符）。
+        Assert.True(PauseDecider.SpeakerMatches("Cap'n Turbot", "Cap'n Turbot"));
+        Assert.False(PauseDecider.SpeakerMatches("Cap'n", "Cap'n Turbot"));
+        Assert.False(PauseDecider.SpeakerMatches("booby", "Blue-footed booby bird"));
+        Assert.False(PauseDecider.SpeakerMatches("Ryder", "Ryder's dad"));           // 非連接詞、不誤中
+        Assert.False(PauseDecider.SpeakerMatches("and", "Ryder and Marshall"));       // 連接詞本身不是名字
+    }
+
+    [Fact]
+    public void SplitSpeakers_JointToAtoms_SingleNameUntouched()
+    {
+        Assert.Equal(new[] { "Ryder", "Marshall" }, PauseDecider.SplitSpeakers("Ryder and Marshall"));
+        Assert.Equal(new[] { "Chase", "Rubble" }, PauseDecider.SplitSpeakers("Chase & Rubble"));
+        Assert.Equal(new[] { "Ryder", "Zuma" }, PauseDecider.SplitSpeakers("Ryder, Zuma"));
+        Assert.Equal(new[] { "Cap'n Turbot" }, PauseDecider.SplitSpeakers("Cap'n Turbot")); // 多詞單名不誤拆
+        Assert.Empty(PauseDecider.SplitSpeakers(""));
+        Assert.Empty(PauseDecider.SplitSpeakers(null));
+    }
+
+    [Fact]
+    public void PauseMatchesSet_NullEveryone_EmptyNone_MembersJoint()
+    {
+        Assert.True(PauseDecider.PauseMatchesSet(null, false, "Ryder"));    // 不指定名單→全部停
+        Assert.False(PauseDecider.PauseMatchesSet(null, true, "Ryder"));    // noSpeaker-only→具名句不停
+        Assert.True(PauseDecider.PauseMatchesSet(null, true, ""));          // noSpeaker→未標示句停
+        var set = new[] { "Ryder", "Zuma" };
+        Assert.True(PauseDecider.PauseMatchesSet(set, false, "Ryder"));
+        Assert.True(PauseDecider.PauseMatchesSet(set, false, "Ryder and Marshall")); // 合唸句含 Ryder
+        Assert.False(PauseDecider.PauseMatchesSet(set, false, "Rocky"));
+        Assert.False(PauseDecider.PauseMatchesSet(System.Array.Empty<string>(), false, "Ryder")); // 空集合→無人符合
+        Assert.False(PauseDecider.PauseMatchesSet(set, false, ""));         // 未標示句、未勾 noSpeaker→不停
+    }
+
+    [Fact]
+    public void NextPause_PauseSpeakersSet_StopsAtAnyMemberStart_SkipsOthers()
+    {
+        var cues = new List<SubtitleCue>
+        {
+            new("a", 1.0, "Ryder"),
+            new("b", 3.0, "Rocky"),
+            new("c", 5.0, "Ryder and Zuma"),  // 合唸句含 Zuma
+            new("d", 7.0, "Marshall"),
+        };
+        var set = new[] { "Ryder", "Zuma" };
+        Assert.Equal(0, PauseDecider.NextPause(1.0, cues, -1, pauseSpeakers: set));   // 停 Ryder 起點
+        Assert.Equal(2, PauseDecider.NextPause(5.0, cues, 0, pauseSpeakers: set));    // 跳過 Rocky、停「Ryder and Zuma」
+        Assert.Equal(-1, PauseDecider.NextPause(999.0, cues, 2, pauseSpeakers: set)); // 其後僅 Marshall（不在名單）→不停
+        Assert.Equal(-1, PauseDecider.NextPause(999.0, cues, -1, pauseSpeakers: System.Array.Empty<string>())); // 空集合→全不停
+    }
+
     // ── 只在未標示（unknown）之句暫停（#189）──
     private static readonly List<SubtitleCue> Mixed = new()
     {

@@ -27,6 +27,14 @@ public interface ITranscriptAligner
     Task<TranscriptAlignResult> AlignAsync(
         IReadOnlyList<TranscriptLine> lines, IReadOnlyList<SubtitleCue> audioCues,
         IProgress<string>? progress = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// 直接抽取（epic #178 增量6′-B「時間 pivot」定案）：讀字幕/逐字稿**網頁純文字**（版面五花八門），**逐句抽出「時間戳＋說話人＋台詞」**——
+    /// 時間戳一律**照網頁原樣抄出**（AI 讀結構化資料、**不推算/不對齊/不編造時間**，故不亂序）。供標準格式（VTT/SRT/固定式逐字稿）之免費解析器讀不到時的 fallback。
+    /// 無金鑰／HTTP 非 2xx／逾時／解析失敗擲 <see cref="SpeakerEnrichException"/>；使用者取消傳遞 <see cref="OperationCanceledException"/>。
+    /// </summary>
+    Task<SubtitleExtractResult> ExtractTimedCuesAsync(
+        string rawTranscript, IProgress<string>? progress = null, CancellationToken ct = default);
 }
 
 /// <summary>字幕檔整理後之一句：說話人（<c>null</c>／空＝未標示）＋台詞。**尚無時間**——時間由 <see cref="ITranscriptAligner.AlignAsync"/> 對齊 Whisper 後補上。</summary>
@@ -37,3 +45,6 @@ public sealed record TranscriptParseResult(IReadOnlyList<TranscriptLine> Lines, 
 
 /// <summary>對齊結果（增量5′）：<see cref="StartSecs"/> 與輸入 lines 等長、逐句對應之開始秒（<c>null</c>＝對不上／時間未知）＋API 用量。</summary>
 public sealed record TranscriptAlignResult(IReadOnlyList<double?> StartSecs, IReadOnlyList<SpeakerUsage> Usages);
+
+/// <summary>AI 直接抽取結果（增量6′-B）：逐句 <see cref="SubtitleCue"/>（時間＋說話人＋台詞,時間照網頁原樣、非估算）＋API 用量＋<see cref="Truncated"/>（輸出被上限截斷＝頁面過長、結果不可靠,呼叫端據此給明確錯誤）。</summary>
+public sealed record SubtitleExtractResult(IReadOnlyList<SubtitleCue> Cues, IReadOnlyList<SpeakerUsage> Usages, bool Truncated = false);

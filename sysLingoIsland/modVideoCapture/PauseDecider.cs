@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace LingoIsland.Video;
 
 /// <summary>
@@ -18,14 +20,20 @@ public static class PauseDecider
     /// <paramref name="lastPausedIndex"/>＝上次已暫停之 cue index（-1＝尚未）；cues 須依 StartSec 遞增。
     /// </summary>
     public static int NextPause(double currentSec, IReadOnlyList<SubtitleCue> cues, int lastPausedIndex,
-        double maxRunSec = DefaultMaxRunSec, string? pauseSpeaker = null, bool pauseNoSpeaker = false)
+        double maxRunSec = DefaultMaxRunSec, string? pauseSpeaker = null, bool pauseNoSpeaker = false,
+        IReadOnlyCollection<string>? pauseSpeakers = null)
     {
+        // 暫停對象（#189-checklist）：優先 pauseSpeakers 組（勾選面板多選）；否則退回單一 pauseSpeaker（相容既有呼叫）。
+        // targets==null＝不指定（全部句皆停）；targets 為空集合＝指定但無人（無句符合→不停）。
+        var targets = pauseSpeakers is { Count: > 0 } ? pauseSpeakers
+                    : !string.IsNullOrEmpty(pauseSpeaker) ? new[] { pauseSpeaker }
+                    : pauseSpeakers; // 空集合原樣傳遞（= 指定但無人）；純 null 才是「全部」
         var next = Math.Max(0, lastPausedIndex + 1);
-        var targeted = !string.IsNullOrEmpty(pauseSpeaker) || pauseNoSpeaker; // 指定說話人／未標示者＝針對特定對象暫停
+        var targeted = targets is not null || pauseNoSpeaker; // 指定名單（含空）／未標示者＝針對特定對象暫停
         // 指定對象：跳過不符之句（不暫停、續播），找下一個符合者。
         // #184：未定時句（StartSec null）不列入時間判定——無已知時間可暫停於此，一律跳過（不作為 pause 目標、不當 0 秒）。
         while (next < cues.Count
-               && (cues[next].StartSec is null || !PauseMatches(pauseSpeaker, pauseNoSpeaker, cues[next].Speaker))) next++;
+               && (cues[next].StartSec is null || !PauseMatchesSet(targets, pauseNoSpeaker, cues[next].Speaker))) next++;
         if (next >= cues.Count) return -1;
         var start = cues[next].StartSec!.Value; // 已定時（null 已於上迴圈略過）
         double pausePoint;
@@ -59,9 +67,38 @@ public static class PauseDecider
         return Math.Min(words * 0.36, 6.0);
     }
 
-    /// <summary>指定說話人是否符合（<paramref name="target"/> null／空＝任何說話人皆符合）。internal 供單元測試。</summary>
-    internal static bool SpeakerMatches(string? target, string? speaker) =>
-        string.IsNullOrEmpty(target) || string.Equals(target, speaker, StringComparison.OrdinalIgnoreCase);
+    /// <summary>合唸說話人之連接詞（「Ryder <b>and</b> Marshall」「Chase <b>&amp;</b> Rubble」「A<b>,</b> B」「A<b>/</b>B」）——拆為個別名字用。</summary>
+    private static readonly Regex Conjunction = new(@"\s*(?:\band\b|&|,|/|\+)\s*", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    /// <summary>
+    /// 把合唸說話人以連接詞拆為個別名字（「Ryder and Marshall」→ Ryder、Marshall；「Chase &amp; Rubble」→ Chase、Rubble）。
+    /// 多詞單名（「Cap'n Turbot」「Mama eagle」「Blue-footed booby bird」）不含連接詞→原樣單一回傳、不誤拆。空/null 回空序列。
+    /// 供勾選面板建「原子說話人」清單與 <see cref="SpeakerMatches"/> 共用（單一來源）。
+    /// </summary>
+    public static IEnumerable<string> SplitSpeakers(string? speaker)
+    {
+        if (string.IsNullOrEmpty(speaker)) yield break;
+        foreach (var part in Conjunction.Split(speaker))
+        {
+            var t = part.Trim();
+            if (t.Length > 0) yield return t;
+        }
+    }
+
+    /// <summary>
+    /// 指定說話人是否符合（<paramref name="target"/> null／空＝任何說話人皆符合）。internal 供單元測試。
+    /// #189-pause（USR：選 Ryder 也要停合唸句）：整串相符,或 <paramref name="speaker"/> 以連接詞拆出的**任一名字**＝目標——
+    /// 選「Ryder」亦停在「Ryder and Marshall」「Ryder and Zuma」;多詞單名不誤拆、只整串相符。大小寫不敏感。
+    /// </summary>
+    internal static bool SpeakerMatches(string? target, string? speaker)
+    {
+        if (string.IsNullOrEmpty(target)) return true;                                     // 未指定＝全部符合
+        if (string.IsNullOrEmpty(speaker)) return false;
+        if (string.Equals(target, speaker, StringComparison.OrdinalIgnoreCase)) return true; // 整串相符（含直接選合唸句本身）
+        foreach (var part in SplitSpeakers(speaker))                                        // 合唸句之某一名字＝目標（Ryder ∈「Ryder and Marshall」）
+            if (string.Equals(target, part, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
+    }
 
     /// <summary>
     /// 暫停對象是否符合（#189）：<paramref name="noSpeaker"/>＝true 時只在**未標示說話人**（空/null）之句暫停；
@@ -69,6 +106,19 @@ public static class PauseDecider
     /// </summary>
     internal static bool PauseMatches(string? target, bool noSpeaker, string? speaker) =>
         noSpeaker ? string.IsNullOrEmpty(speaker) : SpeakerMatches(target, speaker);
+
+    /// <summary>
+    /// 暫停對象是否符合（一組多選，#189-checklist）：未標示句→只在 <paramref name="noSpeaker"/> 時停；具名句→
+    /// <paramref name="targets"/> 為 null＝不指定（全部停）、空集合＝指定但無人（不停）、非空＝該組任一名字符合（沿用 <see cref="SpeakerMatches"/> 拆合唸句）。
+    /// internal 供單元測試。
+    /// </summary>
+    internal static bool PauseMatchesSet(IReadOnlyCollection<string>? targets, bool noSpeaker, string? speaker)
+    {
+        if (string.IsNullOrEmpty(speaker)) return noSpeaker || targets is null; // 未標示句：勾了「(no speaker)」→停；或不指定名單（全部）亦停
+        if (targets is null) return !noSpeaker;                                  // 具名句、不指定名單：noSpeaker-only→不停；否則（全部）停
+        foreach (var t in targets) if (SpeakerMatches(t, speaker)) return true;  // 具名句、指定名單（空集合→無人符合→不停）
+        return false;
+    }
 
     /// <summary>
     /// 回含 <paramref name="currentSec"/> 之 cue index（顯示當前句用）：start-only 一句顯示至下一句開始（無空窗），

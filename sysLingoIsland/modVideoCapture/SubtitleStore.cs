@@ -37,6 +37,7 @@ public sealed class SubtitleStore
     private Dictionary<string, string>? _index; // videoId → 資料夾完整路徑（掃 info.json 建、建新夾時更新）
 
     private const string SubtitleFile = "subtitle.yaml";
+    private const string OriginalFile = "subtitle-original.yaml"; // #178 增量6′-B：時間偏移前保留之原始時間檔（與校正後 subtitle.yaml 並存）
     private const string InfoFile = "info.json";
 
     public SubtitleStore(string? root = null) { _root = root ?? DefaultRoot; }
@@ -132,6 +133,21 @@ public sealed class SubtitleStore
             });
         }
         catch { /* 寫入失敗不影響主流程 */ }
+    }
+
+    /// <summary>首次時間偏移前保留原始時間檔（epic #178 增量6′-B USR）：把目前 <c>subtitle.yaml</c> 複製為 <c>subtitle-original.yaml</c>（僅在尚無備份時），使資料夾**同時留原始與校正後兩檔**。備份失敗不致命。</summary>
+    public void BackupOriginalOnce(string videoId, string? title)
+    {
+        if (string.IsNullOrWhiteSpace(videoId)) { return; }
+        try
+        {
+            var folder = FolderOf(videoId) ?? FolderFor(videoId, title);
+            if (folder is null) { return; }
+            var src = Path.Combine(folder, SubtitleFile);
+            var dst = Path.Combine(folder, OriginalFile);
+            if (File.Exists(src) && !File.Exists(dst)) { File.Copy(src, dst); }
+        }
+        catch { /* 備份失敗不致命 */ }
     }
 
     /// <summary>存/更新一支影片之**網路逐字稿原文**（#189，🌐 Script 取得後）：寫入該片資料夾 <c>{yyyyMMdd} {來源}.txt</c>（同日同源覆寫、可多份）；transcript 空白略過。</summary>
