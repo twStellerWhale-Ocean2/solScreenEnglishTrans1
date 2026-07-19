@@ -2,6 +2,37 @@
 
 版本依語意化版號（SemVer）。版號於 PR merge 當下釘選。
 
+## [3.3.0] - 2026-07-19
+
+影片功能大改（epic #178）增量6′〔輸入 pivot〕：【獲得】頁改為**單一輸入框**——貼「具體影片網址＋字幕檔網址」即建立字幕；砍不穩的 finder／結果表。
+
+### 變更
+- **【獲得】改為單一輸入框**：貼含**具體 YouTube 影片網址＋字幕檔網址**之自然語言文字（可含中文標籤如「影片：」「字幕：」，或 markdown 連結），程式抽出兩個網址即走建立字幕管線、加入【內容】頁。取代原「兩欄直接輸入 ＋ 由字幕檔網址 finder ＋ 結果表格」三件套，介面大幅簡化。
+- **要求具體 URL、不做關鍵字搜尋**：影片＝首個可解析出 YouTube ID 之網址、字幕＝首個非 YouTube 之網址；缺任一即當場回報所缺、不動作、不花費。**刻意不再以 AI 關鍵字查找**——前版 AI 自動配片不穩、常「找到卻 0 結果」或鬼打牆，改由使用者直接給定可靠配對（USR 決策）。
+- **保留跑前費用確認**：抽到兩網址後走與增量5′ 相同之建立管線（取字幕檔→整理說話人＋台詞→Whisper 取時間→逐句對齊），**跑前確認估算費用**；已存字幕免重花。
+- **啟動即顯示主視窗於【影片】頁**（USR 回饋）：原常駐最小化易誤以為程式沒開，改啟動即開窗定位影片頁。
+
+### 內部
+- 新增 `VideoCapturePage.ExtractUrls`（純函式、`internal` 可測）：由自由文字抽 http(s) 網址，取 RFC3986 URL 字元集（自然停在 CJK、不把中文說明黏入網址）、去尾標點、去 markdown 連結尾之孤立 `)`（維基式含配對 `(` 者不動）。挑選規則（影片＝有 ID 者、字幕＝無 ID 者）沿用 `ExtractVideoId`。
+- **砍 finder／結果表**：移除 `VideoCapturePage` 之搜尋結果 `DataGrid`（縮圖/推薦分/三態徽章/逐列 Load）與其驅動碼（`DoTranscriptSearch`／`PopulateResults`／內嵌探測／網路字幕欄／`SearchRow` view-model 等），連帶移除已無用之注入（`ITranscriptVideoFinder`／`IVideoSearcher`／`IWebTranscriptProbe`／`ISubtitleFetcher`）；建構子由 9 參縮為 5 參。
+- **砍 finder／結果表（後端收尾）**：上述注入移除後，`sysLingoIsland/modVideoCapture/` 下已無 live 參照之後端服務類一併刪除——`OpenAiTranscriptVideoFinder`＋`ITranscriptVideoFinder`＋`TranscriptVideoFind`（由字幕檔配影片 web_search finder）、`YtDlpVideoSearcher`＋`IVideoSearcher`（關鍵字搜 YouTube）、`OpenAiWebSpeakerEnricher`＋`IWebTranscriptProbe`（結果表「網路字幕」欄探測）、`YtDlpSubtitleFetcher`（結果表「內嵌字幕」欄探測）、`VideoSearchFilter`（結果長度過濾），及其專屬測試。字幕主線仍共用之 `SpeakerUsage`／`SpeakerEnrichException`（原置 `ISpeakerEnricher.cs`）、`SubtitleException`（原置 `ISubtitleFetcher.cs`）保留並抽出為 `SpeakerAiTypes.cs`／`SubtitleException.cs`；`SpeakerInference`／`TranscriptAlign`／`OpenAiTranscriptAligner` 之失效 `<see cref>` 註記一併修整。
+- 單元測試 585 綠（本增量 UI 層 +10 `ExtractUrls` 情境：使用者實際貼法、markdown＋utm、維基括號、CJK 邊界、只給其一；後端收尾移除孤立服務類之專屬測試 -89）。
+
+## [3.2.0] - 2026-07-18
+
+影片功能大改（epic #178）增量5′〔字幕主線 pivot〕：字幕來源改為**字幕檔（含說話人）＋Whisper 聲音對齊**，完全移除 yt-dlp auto/manual 抓字幕（#186）。
+
+### 變更
+- **字幕唯一來源＝字幕檔＋Whisper 對齊**：載入影片時，取字幕檔內容 → AI 整理為逐句（說話人＋台詞）→ 以 Whisper 轉錄影片實際語音取得時間軸 → AI 逐句對齊字幕檔句至聲音時間 → 產生帶說話人＋時間之字幕。**說話人來自字幕檔本身**（非推斷、非 YouTube 字幕）、**時間來自真實發音**——本 app 差異化（比對說話人）的落地。
+- **移除 yt-dlp auto/manual 抓字幕**：不再依賴 YouTube 內嵌字幕（屬 Chrome 套件已有之 commodity；且「需 YouTube 字幕才可載入」正是灰螢幕卡死、「由字幕檔配片找到卻 0 結果」之根因）。連帶移除「由字幕檔配片」之「可載入（需 YouTube 字幕）」濾鏡——finder 定位到的影片直接全部列出。
+- **載入即建立、跑前確認費用**：首次載入一支影片才跑管線（每支一次 Whisper＋AI 解析／對齊，約 US$0.1–0.2／集），**跑前確認估算費用**；建立後存檔，重載同片免重花。已無 Auto／Manual 之分（來源顯示改「Subtitle file + Whisper timing」）。
+- 字幕維持**字幕檔敘事序**（逐字稿為主之閱讀序）；對不到聲音之句時間留空（`StartSec` null，增量4 已合法化、不誤暫停、不打散閱讀序）。
+
+### 內部
+- 新增 `ITranscriptAligner`／`OpenAiTranscriptAligner`（AI 整理＋對齊，沿用 `OpenAiWebSpeakerEnricher` find→align 骨架、語意反轉為「標時間」；暫態 500/429/逾時退避重試、輸出截斷偵測 `IsTruncated`）、`TranscriptAlign`（去 HTML／提示組建／回應解析／組裝／截斷偵測之純函式）、`TranscriptFetch`（以 **curl 子行程**取字幕檔——Fandom/Cloudflare 以 TLS 指紋擋 `HttpClient`（即使帶完整瀏覽器標頭仍 403），curl 獲放行；curl 隨 Windows 10 1803+ 內建）。`LoadVideoAsync` 改走新管線；移除 `_isAuto` 欄位與 Auto/Manual 顯示。
+- **對齊精度**：逐句對齊採「AI 挑每句對應之**聲音段編號**、取該段 Whisper 精確時間」（非 AI 估算秒數——消除 ±數秒抖動；實測與 YouTube 播放器字幕誤差 &lt;1s）；並過濾純音效／舞台指示句（`IsPureNonSpeech`：只留可學對白、去除時間反轉來源）。
+- 純函式以假 Responses JSON 全測；單元測試 664 綠（+45 增量5′ 純函式情境）。真 API 端對端 smoke（Pups and the Pirate Treasure）通過：316 句對白含精準說話人、Whisper 轉 23 分鐘、逐句對齊 88%、單集實際約 US$0.16（見 README 證據）。
+
 ## [3.1.1] - 2026-07-18
 
 影片功能大改（epic #178）增量4〔資料地基〕：字幕開始時間支援「時間未知」（#184）。

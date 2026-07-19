@@ -5,7 +5,7 @@ namespace LingoIsland.Video;
 
 /// <summary>
 /// 說話人解析之純函式（[modVideoCapture模組]，epic #145 增量6b，#145 §D）：解析 OpenAI（Responses API＋web_search）
-/// 回應為逐句說話人、組逐字稿 find／align 提示、非破壞疊加回 cue。不依賴網路／UI，可單元測試；HTTP 由 <see cref="OpenAiWebSpeakerEnricher"/> 負責。
+/// 回應為逐句說話人、組逐字稿 find／align 提示、非破壞疊加回 cue。不依賴網路／UI，可單元測試（HTTP 由呼叫端負責）。
 /// **來源為網路逐字稿對照、非觀看畫面**——標註為推斷、非 ground truth。
 /// </summary>
 public static class SpeakerInference
@@ -24,8 +24,7 @@ public static class SpeakerInference
         return string.IsNullOrWhiteSpace(text) ? Array.Empty<string?>() : ParseSpeakersJson(text!);
     }
 
-    /// <summary>自 Responses 回應取模型輸出文字：優先便捷欄 <c>output_text</c>，否則彙整 <c>output[] message → content[] output_text.text</c>。無則 null。</summary>
-    /// <summary>自 Responses API 回應取模型輸出文字（<c>output_text</c> 便利欄，或 <c>output[].message.content[].output_text</c> 串接）；無則 null。internal 供同模組其他 Responses 解析（如 <see cref="TranscriptVideoFind"/>）重用。</summary>
+    /// <summary>自 Responses API 回應取模型輸出文字（優先便捷欄 <c>output_text</c>，否則彙整 <c>output[].message.content[].output_text</c> 串接）；無則 null。internal 供同模組其他 Responses 解析重用。</summary>
     internal static string? ExtractOutputText(JsonElement root)
     {
         if (root.TryGetProperty("output_text", out var ot) && ot.ValueKind == JsonValueKind.String)

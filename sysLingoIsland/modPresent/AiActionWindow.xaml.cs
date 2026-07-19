@@ -109,4 +109,11 @@ public partial class AiActionWindow : Window
         _cts.Cancel();               // 取消進行中動作；動作結束（OperationCanceledException）→ Finish → OK
         ActionBtn.IsEnabled = false; // 取消中：防重複點；Finish 會再啟用為 OK
     }
+
+    /// <summary>以標題列 X／系統關閉退出時，若動作仍在跑則一併取消（等同 Cancel 鈕）——否則 <c>ShowDialog</c> 提早返回而 token 未取消，背景 async 管線會續跑續花費（增量5′ 審查修）。</summary>
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (!_done) { _cts.Cancel(); }
+        base.OnClosing(e);
+    }
 }

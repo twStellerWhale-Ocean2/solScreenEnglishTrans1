@@ -11,32 +11,22 @@ using LingoIsland.Query;
 namespace LingoIsland.Present;
 
 /// <summary>
-/// 影片擷取分頁（[modVideoCapture模組]／[techApp桌面查詢工具] 擷取來源頁，spec#2）：貼 YouTube 影片→
-/// yt-dlp 取字幕（<see cref="ISubtitleFetcher"/>）→ WebView2 內嵌 YouTube IFrame Player API 導引播放、
-/// <see cref="PauseDecider"/> 到句暫停顯字幕→暫停句逐字可點（<see cref="WordLookupRequested"/>，沿用既有查詢）→
+/// 影片擷取分頁（[modVideoCapture模組]／[techApp桌面查詢工具] 擷取來源頁，spec#2）：【獲得】單一輸入框貼影片網址＋字幕檔網址（epic #178 增量6′「輸入 pivot」）→
+/// 取字幕檔（<see cref="TranscriptFetch"/>）整理說話人＋台詞、Whisper 轉錄實際語音、<see cref="ITranscriptAligner"/> 逐句對齊建立字幕→
+/// WebView2 內嵌 YouTube IFrame Player API 導引播放、<see cref="PauseDecider"/> 到句暫停顯字幕→暫停句逐字可點（<see cref="WordLookupRequested"/>，沿用既有查詢）→
 /// 加入既有筆記（<see cref="AddToNotesRequested"/>）。與螢幕擷取並列之可插拔擷取來源、下游完全共用。
 /// </summary>
 public partial class VideoCapturePage : System.Windows.Controls.UserControl
 {
-    private readonly ISubtitleFetcher _fetcher;
     private readonly VideoStore _videoStore;                       // 影片清單持久化（epic #145 增量4）
     private readonly ThemeStore _themes;                           // 使用中主題（加入影片時記錄跨媒體歸屬）＋依 theme 篩選（B）＋內容區塊所屬主題指派（#173）
     private bool _populatingVideoFilter;                           // 重填篩選下拉期間抑制 SelectionChanged→重整
     private bool _populatingVideoPicker;                           // 重填「所屬主題」下拉期間抑制 SelectionChanged→重指派（#173）
-    private readonly IWebTranscriptProbe _webProbe;                // 網路字幕可用性探測（#177）：搜尋結果表格「網路字幕」欄按需查（只跑 find 一步、便宜）
-    private readonly IVideoSearcher _searcher;                     // 依關鍵字搜尋 YouTube（#171）
     private readonly IAudioTranscriber _transcriber;               // Whisper 音訊轉錄（#187）：抓真實聲音重轉字幕、修時間漂移；會用 API＋下載音訊、按鈕觸發、跑前確認費用
-    private readonly ITranscriptVideoFinder _finder;                // 由字幕檔網址配影片（epic #178 增量2，#182）：web_search 解析字幕檔網址、驗證含說話人、配 YouTube；會用 API、按鈕觸發、跑前確認費用
+    private readonly ITranscriptAligner _aligner;                   // 字幕主線 pivot（epic #178 增量5′）：字幕檔整理（說話人＋台詞）＋對齊 Whisper 聲音時間軸取時間；會用 API、載入首次觸發、跑前確認費用
     private readonly SubtitleStore _subs;                          // 字幕存檔：免重抓、保留說話人/YAML 編修（#174）
-    private List<SearchRow> _searchRows = new();                   // 搜尋結果表格資料（#177）：縮圖/名稱/連結/片長/三種字幕狀態
-    private System.Windows.Data.ListCollectionView? _searchView;   // 可過濾/預設排序之檢視（#177）；點表頭排序由 DataGrid 內建接手
-    private readonly SearchHistoryStore _searchHistory = new();     // 搜尋關鍵字歷史（#186）：搜尋框下拉、可刪
-    private readonly SearchHistoryStore _transcriptHistory = new(Path.Combine( // 字幕檔網址歷史（epic #178 增量2，#182；機制沿用主題歷史、語意改為「貼過的字幕檔網址」）：字幕檔網址框下拉、可刪
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "LingoIsland", "video-transcript-history.json"));
-    private readonly SearchResultRecordStore _searchRecords = new();// 搜尋成果初次時間紀錄（#186）：First-seen 欄
-    private readonly VideoSubtitleStatusStore _statusStore = new();  // 字幕狀態快取（#188）：還原已探測之 Manual/Auto/Web，重搜同片免重探/免重花額度
+    private readonly VideoSubtitleStatusStore _statusStore = new();  // 字幕狀態快取（#188→增量6′）：獲得框存入字幕檔網址＋載入來源，載入未快取時取用建立字幕
     private readonly AiSpendLedger _spendLedger = new();             // AI 花費帳本（#189）：每次 AI 動作跑前顯示本日/本小時累計、事後記帳
-    private CancellationTokenSource? _searchCts;                   // 搜尋可取消（新搜尋取代進行中者）；亦取消其內嵌字幕探測
     private string? _currentVideoItemId;                           // 目前載入影片於清單之項 Id（供更新標題／選中）
     private string? _currentVideoId;                               // 目前載入影片之 YouTube ID（字幕存檔鍵，#174）
     private readonly DispatcherTimer _poll;
@@ -51,7 +41,6 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private bool _guiding;             // 導引播放中（輪詢到句暫停生效）
     private bool _polling;             // OnPoll 重入防護（async void 掛 100ms timer、橋接往返可能 >100ms）
     private bool _playbackStarted;     // 實際起播確認後才宣稱「逐句暫停」成功（避可嵌入被禁時謊報）
-    private bool _isAuto;              // 目前字幕為自動生成（逐字滾動、較破碎）——供狀態提示；亦即字幕來源＝Auto（#189，Row1 純顯示）
     private bool _loading;             // 抓字幕中（防重入抓字幕）
     private CancellationTokenSource? _loadCts; // 抓字幕可取消（新 Load／取消鈕）
 
@@ -82,29 +71,31 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     /// <summary>加入我的筆記（目前句原文；App 重譯後入既有 NotesStore）。</summary>
     public event Action<string>? AddToNotesRequested;
 
-    public VideoCapturePage(ISubtitleFetcher fetcher, VideoStore videoStore, ThemeStore themes,
-                            IWebTranscriptProbe webProbe,
-                            IVideoSearcher searcher, SubtitleStore subtitles, IAudioTranscriber transcriber,
-                            ITranscriptVideoFinder finder)
+    public VideoCapturePage(VideoStore videoStore, ThemeStore themes,
+                            SubtitleStore subtitles, IAudioTranscriber transcriber,
+                            ITranscriptAligner aligner)
     {
         InitializeComponent();
-        _fetcher = fetcher;
         _videoStore = videoStore;
         _themes = themes;
-        _webProbe = webProbe;
-        _searcher = searcher;
         _transcriber = transcriber;
-        _finder = finder;
+        _aligner = aligner;
         _subs = subtitles;
         _poll = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _poll.Tick += OnPoll;
         _cueClickTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(GetDoubleClickTime()) };
         _cueClickTimer.Tick += (_, _) => { _cueClickTimer.Stop(); if (_cueClickWasSelected) { _ = TogglePlayPauseAsync(); } }; // 單擊逾時未等到雙擊：已選中之句→播/暫停切換；未選中者僅選取（不動作）
 
-        // 由字幕檔網址配影片（epic #178 增量2，#182）：Find／Enter → 解析字幕檔網址、驗證含說話人、配 YouTube，定位後列於成果區塊（花 OpenAI 額度、跑前確認費用）
-        TranscriptSearchBtn.Click += (_, _) => DoTranscriptSearch();
-        TranscriptBox.DropDownOpened += (_, _) => TranscriptBox.ItemsSource = _transcriptHistory.Load(); // 開下拉填入字幕檔網址歷史（比照關鍵字框）
-        TranscriptBox.PreviewKeyDown += OnTranscriptBoxKey;                                               // Enter 搜尋、Delete 刪選中歷史
+        // 獲得（epic #178 增量6′「輸入 pivot」）：單一輸入框貼「影片網址＋字幕檔網址」→抽兩網址、走載入管線建立字幕（跑前確認費用）。空框顯範例佔位。
+        AcqBuildBtn.Click += (_, _) => DoAcquireBuild();
+        AcqInputBox.TextChanged += (_, _) => AcqPlaceholder.Visibility =
+            string.IsNullOrEmpty(AcqInputBox.Text) ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+        // 送出鍵（USR 回饋「按 Enter 沒反應」）：**Enter 直接送出**（符合舊單行框習慣；貼上是 Ctrl+V、不觸發 Enter，故不會誤送）；**Shift+Enter 才插入換行**。Ctrl+Enter 亦送出（Ctrl 不帶 Shift）。
+        // **必須用 PreviewKeyDown（穿隧）**：多行 TextBox（AcceptsReturn）於自身 KeyDown 類別處理即插入換行並標 Handled，冒泡 KeyDown 之實例處理器收不到／已太晚——須在穿隧階段搶先攔下才擋得住換行並改為送出。
+        AcqInputBox.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) == 0) { DoAcquireBuild(); e.Handled = true; }
+        };
         // 右側子頁籤（#177 版面重整）：搜尋下載 / 播放學習，以可見性切換（WebView2 不被卸載重建）
         SubTabSearch.Checked += (_, _) => ShowSubTab(showSearch: true);
         SubTabPlay.Checked += (_, _) => ShowSubTab(showSearch: false);
@@ -232,12 +223,38 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         return m.Success ? m.Groups[1].Value : null;
     }
 
-    /// <summary>載入指定影片（抓字幕→導引播放）。<paramref name="addToStore"/>＝true 時加入影片清單（貼連結載入）；點清單載入者已在清單、不重加。</summary>
-    private async Task LoadVideoAsync(string id, bool addToStore)
+    /// <summary>
+    /// 載入指定影片（epic #178 增量5′ pivot）：已存字幕→直接載入（免費）；未存→**取字幕檔→整理說話人＋台詞→Whisper 取時間→AI 逐句對齊**建立字幕
+    /// （會花費、跑前確認、模態顯進度），存檔後導引播放。字幕檔網址取自 finder 存入之 <see cref="_statusStore"/>（增量6′ 由輸入框另提供）；無字幕檔則提示先配字幕檔。
+    /// <paramref name="addToStore"/>＝true 時建立成功後加入影片清單（自搜尋結果載入）；點清單載入者已在清單、不重加。
+    /// </summary>
+    private async Task LoadVideoAsync(string id, bool addToStore, string? listItemId = null)
     {
+        var cached = _subs.TryLoad(id); // #174：已存字幕優先（免重建、保留說話人/YAML 編修）
+        string? transcriptUrl = null;
+        if (cached is null)
+        {
+            // 未存＝首次載入：需以「字幕檔＋Whisper 對齊」建立（會花費）。先在**拆除目前畫面前**取字幕檔網址並確認費用——使用者取消則保留目前影片。
+            transcriptUrl = _statusStore.Get(id)?.TranscriptUrl;
+            if (string.IsNullOrWhiteSpace(transcriptUrl))
+            {
+                SetStatus("This video has no matched subtitle file yet — paste its subtitle-file URL above and Find to match it, then Load.");
+                if (listItemId is not null) { RefreshVideoList(); } // 審查修：還原清單選取到實際目前影片（提前 return 不錯位到未載入之片）
+                return;
+            }
+            if (!ConfirmBuildRun()) // 取消＝不花費、不拆除目前畫面
+            {
+                if (listItemId is not null) { RefreshVideoList(); } // 審查修：取消建立→還原清單選取
+                return;
+            }
+        }
+
         _loadCts?.Cancel();
         _loadCts = new CancellationTokenSource();
         var ct = _loadCts.Token;
+
+        // 審查修：**確認會實際載入後**才推進清單選取/主題選擇器（清單點選路徑）——否則上方提前 return 會使選取錯位、播放仍舊片。
+        if (listItemId is not null) { _currentVideoItemId = listItemId; UpdateVideoThemePicker(); }
 
         SetLoading(true);
         _guiding = false; _poll.Stop();
@@ -251,33 +268,33 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         SubtitleBand.Inlines.Clear();
         SetControls(false);
 
-        var cached = _subs.TryLoad(id); // #174：已存字幕優先（免重抓、保留說話人/YAML 編修）
-        SetStatus(cached is not null ? "Loading saved subtitles…" : "Fetching subtitles…");
-
         try
         {
             IReadOnlyList<SubtitleCue> cues;
-            if (cached is not null) // #174：用已存字幕
+            if (cached is not null) // #174：用已存字幕（免費）
             {
+                SetStatus("Loading saved subtitles…");
                 cues = cached.Cues;
-                _isAuto = cached.IsAutoGenerated;
             }
-            else
+            else // 首次：字幕檔＋Whisper 對齊管線（模態顯進度、費用）
             {
-                var result = await _fetcher.FetchAsync(id, ct); // 傳已解析 id（與播放器導向一致）＋可取消 token
-                cues = result.Cues;
-                _isAuto = result.IsAutoGenerated;
-                _subs.Save(id, CurrentVideoTitle(), _isAuto, cues); // 首次抓取即存檔（#174）
+                cues = BuildCuesViaPipeline(id, transcriptUrl!, ct) ?? Array.Empty<SubtitleCue>();
+                if (cues.Count == 0)
+                {
+                    SetStatus("Subtitles weren't built (canceled, too long, or failed) — Load again to retry."); // 審查修：中性訊息，取消/截斷/失敗共用（對話框已關、不指其看詳情）
+                    return; // finally 仍 SetLoading(false)
+                }
+                _subs.Save(id, CurrentVideoTitle(), isAutoGenerated: false, cues); // 存建立結果（#174；增量5′ 已無 Auto/Manual 之分）
             }
             SetCues(cues);
-            UpdateSourceLabel(); // #189：顯示本片字幕來源（Auto／Manual，純顯示）
+            UpdateSourceLabel(); // 顯示本片字幕來源（增量5′：字幕檔＋Whisper 對齊，純顯示）
             await EnsureWebAsync();
             if (_webReady)
             {
                 Web.CoreWebView2.Navigate($"https://{HostName}/player-{PlayerCacheBust}.html?v={id}");
                 _guiding = true;
                 _poll.Start();
-                if (addToStore) // 貼連結載入＝加入影片清單（依 VideoId 去重、記錄使用中主題）；標題先用 id、起播後自播放器更新
+                if (addToStore) // 自搜尋結果載入＝加入影片清單（依 VideoId 去重、記錄使用中主題）；標題先用 id、起播後自播放器更新
                 {
                     var a = ThemeStore.GetActive(_themes.Load());
                     var vi = _videoStore.Add(id, id, a?.Id, a?.Name, DateTimeOffset.Now);
@@ -285,9 +302,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                     RefreshVideoList();
                 }
                 // #186：不自動播放。就緒訊息延到 OnPoll 確認播放器 ready 才顯（避免可嵌入被禁/無效影片時謊報）。
-                SetStatus(_isAuto
-                    ? $"{_cues.Count} auto-generated caption lines — loading player…"
-                    : $"{_cues.Count} subtitle lines fetched — loading player…");
+                SetStatus($"{_cues.Count} subtitle lines ready — loading player…");
             }
             else
             {
@@ -300,12 +315,83 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         finally { SetLoading(false); }
     }
 
+    /// <summary>
+    /// 字幕主線建立管線（epic #178 增量5′，模態顯進度＋費用）：取字幕檔內容 → 去 HTML → AI 整理成逐句（說話人＋台詞）→ Whisper 轉錄影片音訊取時間軸 →
+    /// AI 逐句對齊到聲音時間 → 組裝帶說話人＋時間之 cue（對不上者時間未知）。回建立之 cue；空/失敗/取消回 null（呼叫端據此中止載入）。費用：AI token 由視窗顯示、Whisper 依實際音長以訊息呈現，皆記帳。
+    /// </summary>
+    private IReadOnlyList<SubtitleCue>? BuildCuesViaPipeline(string id, string transcriptUrl, CancellationToken outerCt)
+    {
+        IReadOnlyList<SubtitleCue>? built = null;
+        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Build subtitles (subtitle file + Whisper)",
+            async (report, winCt) =>
+            {
+                using var linked = CancellationTokenSource.CreateLinkedTokenSource(outerCt, winCt);
+                var ct = linked.Token;
+                var progress = new System.Progress<string>(s => report(s));
+                var usages = new List<AiActionWindow.AiUsage>();
+
+                report("Reading the subtitle file…");
+                var raw = await TranscriptFetch.FetchAsync(transcriptUrl, ct);
+                var text = TranscriptAlign.StripToPlainText(raw);
+
+                // 審查修：**逐段即時記帳**——每個付費階段一完成就記，任一後段失敗/取消仍記下已實際發生之花費（不使後續確認框累計低估）。
+                var parsed = await _aligner.ParseTranscriptAsync(text, progress, ct);
+                usages.AddRange(TranscriptCost(parsed.Usages));
+                _spendLedger.Record(SumUsd(parsed.Usages), DateTimeOffset.Now);
+                if (parsed.Truncated) // 審查修：字幕檔過長、AI 整理輸出被截斷——明確告知（非靜默回空、非誤指 URL）；已記 parse 費用
+                {
+                    report("This subtitle file is too long to organize in one pass — use a shorter transcript, then Load again.");
+                    return usages; // built 留 null → 中止
+                }
+                if (parsed.Lines.Count == 0)
+                {
+                    report("No dialogue could be organized from that subtitle file — check the subtitle-file URL points to a real transcript.");
+                    return usages;
+                }
+
+                report($"Transcribing audio for timing (Whisper)… ({parsed.Lines.Count} lines to align)");
+                var asr = await _transcriber.TranscribeAsync(id, progress, ct);
+                var whisperUsd = AiCost.EstimateWhisperUsd(asr.AudioSeconds);
+                _spendLedger.Record(whisperUsd, DateTimeOffset.Now); // Whisper 成功即記（每分鐘制、依實際音長）
+
+                var aligned = await _aligner.AlignAsync(parsed.Lines, asr.Cues, progress, ct);
+                usages.AddRange(TranscriptCost(aligned.Usages));
+                _spendLedger.Record(SumUsd(aligned.Usages), DateTimeOffset.Now);
+
+                built = TranscriptAlign.Assemble(parsed.Lines, aligned.StartSecs);
+                var alignedCount = built.Count(c => c.StartSec.HasValue);
+                report($"Done — {built.Count} line(s) with speakers; {alignedCount} aligned to the audio timeline.");
+                report($"實際 Whisper 費用 ≈ 約 NT${AiCost.ToTwd(whisperUsd):0.##}（{asr.AudioSeconds / 60.0:0.#} 分鐘音訊；估算，以 OpenAI 現價為準）");
+                return usages; // AI token 費用由視窗呈現；Whisper 費用以上方訊息行呈現
+            },
+            autoCloseOnSuccess: false, showCost: true);
+        return built;
+    }
+
+    /// <summary>字幕建立跑前確認（增量5′）：顯示流程與粗估費用＋本日/本小時累計（本 app 記帳）；按 OK 才建立、取消回 false＝不花費。實際音長未知，費用以範圍概估、完成後顯示實際。</summary>
+    private bool ConfirmBuildRun()
+    {
+        var now = DateTimeOffset.Now;
+        var msg =
+            "為這支影片建立字幕：讀取字幕檔（含說話人）→ 以 Whisper 轉錄實際語音取得時間軸 → AI 逐句對齊。\n\n" +
+            $"估算費用：約 NT$5 起（20–30 分鐘一集；Whisper 每分鐘約 US${AiCost.WhisperUsdPerMinute:0.###}＋AI 解析／對齊，影片越長越多）\n" +
+            $"今日已花：約 NT${AiCost.ToTwd(_spendLedger.SpentToday(now)):0.##}　·　本小時：約 NT${AiCost.ToTwd(_spendLedger.SpentThisHour(now)):0.##}（本 app 記帳、非帳戶餘額）\n\n" +
+            "帳戶餘額請於 platform.openai.com/usage 查看。完成後顯示實際費用。\n\n" +
+            "要開始建立嗎？";
+        return System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this), msg, "Build subtitles (subtitle file + Whisper)",
+            System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.OK;
+    }
+
+    /// <summary>合計一組 AI 用量之估算 USD（未列價之模型以 0 計）。</summary>
+    private static double SumUsd(IReadOnlyList<SpeakerUsage> usages)
+        => usages.Sum(u => AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0);
+
     // ---- Row1：初始資料來源（Auto／Manual 互斥切換，#189）----
 
-    /// <summary>更新 Row1 字幕來源文字（#189）：**純顯示、不可操作**（避免誤會可切換）——Auto＝自動字幕、Manual＝人工字幕；未載入＝空。</summary>
+    /// <summary>更新字幕來源文字（增量5′）：**純顯示**——來源固定＝字幕檔（含說話人）＋Whisper 聲音對齊（已無 Auto/Manual 之分）；未載入＝空。</summary>
     private void UpdateSourceLabel()
     {
-        BaseSourceText.Text = _cues.Count == 0 ? "" : (_isAuto ? "Auto captions" : "Manual subtitles");
+        BaseSourceText.Text = _cues.Count == 0 ? "" : "Subtitle file + Whisper timing";
     }
 
     // ---- 影片清單（epic #145 增量4） ----
@@ -340,11 +426,10 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         }
         VideoList.SelectionChanged += OnVideoSelect;
         VideoEmptyHint.Text = d.Items.Count == 0
-            ? "No videos yet. Paste a YouTube link above and Load."
+            ? "No videos yet. Add one under the Acquire tab."
             : "No videos for this theme."; // 有影片但本 theme 無
         VideoEmptyHint.Visibility = shown.Count > 0 ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
         UpdateVideoThemePicker(); // 與清單/標題/篩選同步：顯示目前影片之所屬主題（#173）
-        RefreshLoadedFlags();     // #177：清單增/刪/載入後，同步搜尋結果各列 Load 鈕之「已加入」灰態
     }
 
     /// <summary>以目前主題重填「依 theme 篩選」下拉（圖文）；期間抑制重整、保留選取。</summary>
@@ -433,274 +518,53 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private static string FormatTime(string iso) =>
         DateTimeOffset.TryParse(iso, out var t) ? t.LocalDateTime.ToString("yyyy-MM-dd HH:mm") : iso;
 
-    // ---- 由逐字稿找影片（#189）：逐字稿主題框鍵／Find；成果統一列於下方成果區塊 ----
-
-    /// <summary>逐字稿主題框鍵：Enter 找影片、Delete 刪下拉選中之主題歷史（比照關鍵字框慣例，#189）。</summary>
-    private void OnTranscriptBoxKey(object sender, System.Windows.Input.KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter)
-        {
-            DoTranscriptSearch();
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Delete && TranscriptBox.IsDropDownOpen && TranscriptBox.SelectedItem is string q && q.Length > 0)
-        {
-            _transcriptHistory.Delete(q);
-            TranscriptBox.ItemsSource = _transcriptHistory.Load(); // 刷新下拉，反映刪除
-            e.Handled = true;
-        }
-    }
-
-    /// <summary>找片上限選項值（#182 Q2-a：Find up to N，3/5/10；預設 5、界 1–20）：目錄頁一次最多解析/驗證幾份字幕檔連結（花額度、控管筆數）。</summary>
-    private int FindMaxValue()
-    {
-        var s = (FindMaxCount.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Content as string;
-        return int.TryParse(s, out var n) ? Math.Clamp(n, 1, 20) : 5;
-    }
+    // ---- 獲得（epic #178 增量6′「輸入 pivot」）：單一輸入框貼「影片網址＋字幕檔網址」→抽兩網址、走載入管線建立字幕 ----
 
     /// <summary>
-    /// 「由字幕檔網址配影片」（epic #178 增量2，#182）：以 OpenAI <c>web_search</c> 解析使用者所貼之字幕檔網站／網址——
-    /// 單一字幕檔頁 或 列多份字幕檔連結之目錄頁——逐一驗證含說話人、去重濾失效，配對 YouTube 影片；模型未給明確 ID 者以 yt-dlp 依標題定位，
-    /// 濾合輯、篩可載入後列於成果區塊。字幕檔已驗證含說話人→Web 欄直接標 ✓、**字幕檔原始 URL 隨候選帶進 <see cref="SearchRow"/> 與 <c>_statusStore</c>**
-    /// （供增量3 Web 欄超連結、增量5 主從來源）。花 OpenAI 額度、模態顯進度與費用；空網址／取消／失敗以狀態列回報。
+    /// 獲得（epic #178 增量6′「輸入 pivot」）：使用者於單一輸入框貼含**具體 YouTube 影片網址＋字幕檔網址**之自然語言文字。
+    /// 以純字串抽出兩個網址（**不做關鍵字搜尋**——要求具體 URL、避免不穩的 AI 配片與鬼打牆），記字幕檔網址到該片、走載入管線建立字幕
+    /// （取字幕檔→整理說話人＋台詞→Whisper 取時間→逐句對齊；跑前確認費用）、加入內容頁。抽不到影片／字幕檔網址即以狀態列明確回報所缺、不動作、不花費。
     /// </summary>
-    private void DoTranscriptSearch()
+    private void DoAcquireBuild()
     {
-        var url = TranscriptBox.Text?.Trim() ?? "";
-        if (url.Length == 0) { SetStatus("Paste a subtitle-file URL to find its matching videos."); return; }
-        if (!ConfirmAiRun("Read subtitle page",
-            $"上網打開字幕檔網址並解析驗證含說話人，配對 YouTube 影片（OpenAI gpt-4.1 網搜）：\n{Truncate(url, 80)}",
-            EstimateWebSearchCallUsd())) { return; } // #182：跑前確認估價＋本日/小時
-        _transcriptHistory.Add(url);            // #182：記入字幕檔網址歷史（置頂去重、下拉可選/可刪）
-        TranscriptBox.IsDropDownOpen = false;
-        _searchCts?.Cancel();
-        _searchCts = new CancellationTokenSource();                 // 背景探測用（新搜尋取消）
-        var themeForAi = ThemeStore.GetActive(_themes.Load())?.Name; // 供配對參考
-        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Read subtitle page",
-            async (report, ct) =>
-            {
-                var progress = new System.Progress<string>(s => report(s));
-                var find = await _finder.FindAsync(url, FindMaxValue(), progress, ct, themeForAi);
-                _spendLedger.Record(find.Usages.Sum(u => AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0), DateTimeOffset.Now); // #182 記帳
-                if (find.Candidates.Count == 0)
-                {
-                    SetStatus("No subtitle file with a visible speaker was found on that page — check the URL, or try an index page that lists transcripts.");
-                    return TranscriptCost(find.Usages);
-                }
-                // 定位每支影片：優先模型給的 11 碼 ID，否則以標題 yt-dlp 取前 3、挑**非合輯**者；濾掉合輯／長片彙編
-                // （「& MORE」「compilation」等——那類沒有單一乾淨逐字稿、對不上，實測 not-usable 主因之一）；去重。
-                // 同時記下每支定位到之影片對應的字幕檔來源與**原始 URL**（#182：帶進快取／SearchRow）。
-                report($"Locating {find.Candidates.Count} video(s) on YouTube…");
-                var located = new List<VideoSearchResult>();
-                var metaByVideoId = new Dictionary<string, (string Source, string? Url)>(StringComparer.Ordinal);
-                var seen = new HashSet<string>(StringComparer.Ordinal);
-                foreach (var c in find.Candidates)
-                {
-                    if (ct.IsCancellationRequested) { break; }
-                    if (LooksLikeCompilation(c.Title)) { continue; }   // 候選本身像合輯→略過
-                    var id = c.VideoId;
-                    var title = c.Title;
-                    int? dur = null;
-                    if (id is null)
-                    {
-                        try
-                        {
-                            var hits = await _searcher.SearchAsync(c.Title, 3, ct);
-                            var pick = hits.FirstOrDefault(h => !LooksLikeCompilation(h.Title)) ?? hits.FirstOrDefault();
-                            if (pick is not null) { id = pick.VideoId; title = pick.Title; dur = pick.DurationSec; }
-                        }
-                        catch (OperationCanceledException) { throw; }
-                        catch (Exception) { /* 該支定位失敗→略過 */ }
-                    }
-                    if (id is null || LooksLikeCompilation(title) || !seen.Add(id)) { continue; } // 定位到合輯也濾掉
-                    located.Add(new VideoSearchResult(id, title, dur));
-                    metaByVideoId[id] = (c.Source, c.TranscriptUrl);   // #182：字幕檔來源描述＋原始 URL
-                }
-                // #182 增量2（Q2-b）：略過已在影片清單者（預設開）——定位出 VideoId 後即濾，免使用者重複載入已收錄影片。
-                // 語意：「Find up to N」限的是解析/驗證之字幕檔筆數（花額度那步），skip 為定位後之後濾，故最終顯示可能少於 N（不回頭多湊）。
-                var skippedExisting = 0;
-                if (SkipExistingVideos.IsChecked == true && located.Count > 0)
-                {
-                    var owned = new HashSet<string>(_videoStore.Load().Items.Select(i => i.VideoId), StringComparer.Ordinal);
-                    var before = located.Count;
-                    located = located.Where(v => !owned.Contains(v.VideoId)).ToList();
-                    skippedExisting = before - located.Count;
-                    if (skippedExisting > 0) { report($"Skipped {skippedExisting} already in your list…"); }
-                }
-                if (located.Count == 0)
-                {
-                    SetStatus(skippedExisting > 0
-                        ? $"All matched video(s) are already in your list — skipped {skippedExisting}, nothing new to add."
-                        : "Read the subtitle page, but couldn't match any usable videos on YouTube.");
-                    return TranscriptCost(find.Usages);
-                }
-                // **只留可載入者**（實測修）：免費探測內嵌 YT 字幕；無 manual/auto 之影片本 app 載不進來
-                // （例如某整集 YouTube 上無任何字幕——網路逐字稿無時間軸、不足以載入），先濾掉免使用者白載。並存快取供 PopulateResults 直接還原。
-                report($"Checking which of {located.Count} have usable YouTube subtitles…");
-                var loadable = new List<VideoSearchResult>();
-                using (var gate = new SemaphoreSlim(4))
-                {
-                    var checks = located.Select(async v =>
-                    {
-                        await gate.WaitAsync(ct);
-                        try
-                        {
-                            var emb = await _fetcher.ProbeEmbeddedAsync(v.VideoId, ct);
-                            if (emb.HasManual || emb.HasAuto)
-                            {
-                                _statusStore.SaveEmbedded(v.VideoId, emb.HasManual, emb.HasAuto); // 快取→PopulateResults 免重探
-                                lock (loadable) { loadable.Add(v); }
-                            }
-                        }
-                        catch (OperationCanceledException) { throw; }
-                        catch (Exception) { lock (loadable) { loadable.Add(v); } } // 探測偶發失敗→保留（PopulateResults 會再探），不誤刪
-                        finally { gate.Release(); }
-                    }).ToList();
-                    try { await Task.WhenAll(checks); } catch (OperationCanceledException) { throw; } catch { /* 個別已處理 */ }
-                }
-                if (loadable.Count == 0)
-                {
-                    SetStatus("Read the subtitle page, but the matching videos have no usable YouTube subtitles to load — try a more specific transcript URL.");
-                    return TranscriptCost(find.Usages);
-                }
-                // #182：字幕檔已由 finder 驗證含說話人→Web 欄直接標 found，**字幕檔原始 URL 帶進 _statusStore**（供 RestoreCachedStatus 還原到 SearchRow、增量3 Web 欄超連結）。
-                // 不再走 topic 式 Auto web-check 重探（那會重花額度、又對不上——finder 已確認）。
-                foreach (var v in loadable)
-                {
-                    var meta = metaByVideoId.TryGetValue(v.VideoId, out var m) ? m : (Source: "", Url: (string?)null);
-                    _statusStore.SaveWeb(v.VideoId, found: true, source: meta.Source, transcriptUrl: meta.Url);
-                }
-                PopulateResults(loadable);
-                var skipNote = skippedExisting > 0 ? $" (skipped {skippedExisting} already in your list)" : "";
-                SetStatus($"{loadable.Count} video(s) matched from the subtitle page — each transcript has a speaker{skipNote}. Load a result to start.");
-                return TranscriptCost(find.Usages);
-            });
+        var urls = ExtractUrls(AcqInputBox.Text);
+        // 影片＝第一個能取出 YouTube 影片 ID 之網址；字幕＝第一個**非** YouTube 影片之 http(s) 網址。兩者皆須具體給定。
+        string? id = null;
+        foreach (var u in urls) { id = ExtractVideoId(u); if (id is not null) { break; } }
+        var subtitleUrl = urls.FirstOrDefault(u => ExtractVideoId(u) is null);
+        if (id is null)
+        {
+            SetStatus("Add a YouTube video URL — for example https://www.youtube.com/watch?v=…");
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(subtitleUrl))
+        {
+            SetStatus("Add a subtitle-file URL too — a transcript page that names the speakers (for example a fandom transcript).");
+            return;
+        }
+        // 記字幕檔網址到該片：LoadVideoAsync 未快取時即取此建立字幕（快取還原與載入來源一致）。
+        _statusStore.SaveWeb(id, found: true, source: "Direct input", transcriptUrl: subtitleUrl);
+        _ = LoadVideoAsync(id, addToStore: true); // 未快取→確認費用→建立管線；成功加入影片清單並切到內容頁
+    }
+
+    /// <summary>由自由文字抽出所有 http(s) 網址（epic #178 增量6′）：允許 URL 內含括號（維基式有配對 <c>(</c>），但去除 markdown 連結尾之孤立 <c>)</c>；並去常見尾標點。供獲得框抽取影片＋字幕檔網址。internal 供單元測試。</summary>
+    internal static IReadOnlyList<string> ExtractUrls(string? text)
+    {
+        var list = new List<string>();
+        if (string.IsNullOrWhiteSpace(text)) { return list; }
+        // 僅取 RFC3986 之 URL 字元（ASCII）；自然停在 CJK（如「，」「字幕」）與空白，免把中文說明黏進網址。
+        foreach (System.Text.RegularExpressions.Match m in Regex.Matches(text, @"https?://[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+"))
+        {
+            var u = m.Value.TrimEnd('.', ',', ';', ':', '!', '?'); // 去常見句尾標點（皆合法 URL 字元、故先納入再修尾）
+            while (u.EndsWith(")", StringComparison.Ordinal) && !u.Contains('(')) { u = u.Substring(0, u.Length - 1); } // markdown 連結尾之孤立 )（維基式含配對 ( 者不動）
+            if (u.Length > 10) { list.Add(u); } // 長於 "https://"（8）才算有效 URL 主體
+        }
+        return list;
     }
 
     /// <summary>把 <see cref="SpeakerUsage"/> 轉為對話視窗費用顯示用之 <see cref="AiActionWindow.AiUsage"/> 清單。</summary>
     private static List<AiActionWindow.AiUsage> TranscriptCost(IReadOnlyList<SpeakerUsage> usages)
         => usages.Select(u => new AiActionWindow.AiUsage(u.InputTokens, u.OutputTokens, u.Model, u.WebSearch)).ToList();
-
-    /// <summary>標題是否像合輯／長片彙編（#189 實測修）：委派純函式，供「由逐字稿找影片」濾除無單一乾淨逐字稿之影片。</summary>
-    private static bool LooksLikeCompilation(string? title) => TranscriptVideoFind.LooksLikeCompilation(title);
-
-
-    /// <summary>把搜尋結果填入可排序/過濾表格（#177）：即時顯示縮圖/名稱/連結/片長/推薦星等；內嵌字幕背景逐列免費探測填入；預設依推薦分排序。</summary>
-    private void PopulateResults(IReadOnlyList<VideoSearchResult> results)
-    {
-        var firstSeen = _searchRecords.RecordAndGet(results.Select(r => r.VideoId).ToList(), DateTimeOffset.Now); // #186：記/取初次搜尋時間
-        _searchRows = results.Select(r => new SearchRow(r.VideoId, r.Title, r.DurationSec,
-            firstSeen.TryGetValue(r.VideoId, out var fs) ? fs : DateTimeOffset.Now)).ToList();
-        RestoreCachedStatus(_searchRows);                                                // #188：還原已探測之字幕狀態（免重探內嵌、免重花額度查網路）
-        RefreshLoadedFlags();                                                            // 依現有影片清單標示「已加入」（灰）
-        _searchView = new System.Windows.Data.ListCollectionView(_searchRows);
-        ApplyDefaultSort();                                                              // 預設：推薦分遞減、同分短片優先
-        ApplyResultFilter();                                                             // 沿用目前過濾框文字
-        SearchResultsGrid.ItemsSource = _searchView;
-        if (SearchResultsGrid.Columns.Count > 0)
-        {
-            SearchResultsGrid.Columns[0].SortDirection = System.ComponentModel.ListSortDirection.Descending; // Rec 欄顯示排序箭頭
-        }
-        SearchResultsPanel.Visibility = _searchRows.Count > 0
-            ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
-        if (_searchRows.Count > 0)
-        {
-            _ = ProbeEmbeddedForRowsAsync(_searchRows, _searchCts?.Token ?? CancellationToken.None); // 免費、背景、可被新搜尋取消
-        }
-    }
-
-    /// <summary>依快取還原各列已探測之字幕狀態（#188）：內嵌（人工/自動）與網路（found/none＋來源）即時填入、免重探；未快取者維持 spinner 待背景探測。</summary>
-    private void RestoreCachedStatus(IReadOnlyList<SearchRow> rows)
-    {
-        var map = _statusStore.Load();
-        foreach (var row in rows)
-        {
-            if (!map.TryGetValue(row.VideoId, out var e)) { continue; }
-            if (e.Manual.HasValue && e.Auto.HasValue) { row.SetEmbedded(e.Manual.Value, e.Auto.Value); } // 停 spinner、即時徽章
-            if (e.Web == VideoSubtitleStatusStore.WebFound)
-            {
-                row.SetTranscriptUrl(e.TranscriptUrl); // #182：字幕檔原始 URL 還原到列（供增量3 Web 欄超連結、載入時帶入內容區塊）
-                var label = !string.IsNullOrWhiteSpace(e.TranscriptUrl) ? e.TranscriptUrl! : (e.WebSource ?? "");
-                row.SetWebResult("✓", EmbBlue, "Subtitle file: " + Truncate(label, 60), found: true);
-            }
-            else if (e.Web == VideoSubtitleStatusStore.WebNone) { row.SetWebResult("✗", EmbGray, "No web transcript found", found: false); }
-        }
-    }
-
-    /// <summary>逐列免費探測內嵌字幕（yt-dlp metadata、不下載）；限流併發、逐列完成即更新該列徽章；全部完成後重整檢視使推薦排序反映字幕結果。新搜尋（token 取消）即止。#188：只探測未從快取還原者，結果批次存檔（避免併發逐列寫檔互相覆蓋）。</summary>
-    private async Task ProbeEmbeddedForRowsAsync(IReadOnlyList<SearchRow> rows, CancellationToken ct)
-    {
-        var pending = rows.Where(r => r.NeedsEmbeddedProbe).ToList();                    // #188：略過已快取還原者（免重探）
-        using var gate = new SemaphoreSlim(4); // 限流：最多 4 個 yt-dlp 併發，免一次開 8 個行程
-        var tasks = pending.Select(async row =>
-        {
-            try
-            {
-                await gate.WaitAsync(ct);
-                try
-                {
-                    var info = await _fetcher.ProbeEmbeddedAsync(row.VideoId, ct);
-                    row.SetEmbedded(info.HasManual, info.HasAuto);                       // Manual／Auto 各標 ✓／–（免費、免 AI）
-                }
-                finally { gate.Release(); }
-            }
-            catch (OperationCanceledException) { /* 新搜尋取代→靜默 */ }
-            catch (Exception) { row.SetEmbeddedUnknown(); }                              // 私人/移除/逾時→標「?」（不存檔、下次重探）
-        }).ToList();
-        try { await Task.WhenAll(tasks); } catch { /* 個別已處理 */ }
-        if (!ct.IsCancellationRequested)
-        {
-            // 批次存內嵌結果（#188）：僅存探測成功者（ManualRank≠-1）；一次讀寫避免併發互相覆蓋。存檔後重搜同片免重探。
-            _statusStore.SaveEmbeddedBatch(pending.Where(r => r.ManualRank != -1)
-                .Select(r => (r.VideoId, r.ManualRank == 1, r.AutoRank == 1)));
-            try { _searchView?.Refresh(); } catch { /* 重整盡力 */ } // 探測落定→依更新後推薦分重排（非即時、免逐列跳動）
-        }
-    }
-
-    /// <summary>預設排序（#177）：推薦分遞減、同分短片優先。使用者點 DataGrid 表頭排序時由 DataGrid 接手覆寫。</summary>
-    private void ApplyDefaultSort()
-    {
-        if (_searchView is null) { return; }
-        _searchView.SortDescriptions.Clear();
-        _searchView.SortDescriptions.Add(new System.ComponentModel.SortDescription(
-            nameof(SearchRow.RecommendScore), System.ComponentModel.ListSortDirection.Descending));
-        _searchView.SortDescriptions.Add(new System.ComponentModel.SortDescription(
-            nameof(SearchRow.DurationSec), System.ComponentModel.ListSortDirection.Ascending)); // 同分：短片優先（更好入門）
-        _searchView.Refresh();
-    }
-
-    /// <summary>依現有影片清單標示各搜尋列之「已加入」狀態（#177）：清單內者停用 Load 鈕（灰、標 Added）。清單增刪時亦呼叫（見 RefreshVideoList）。</summary>
-    private void RefreshLoadedFlags()
-    {
-        if (_searchRows.Count == 0) { return; }
-        var added = new HashSet<string>(_videoStore.Load().Items.Select(i => i.VideoId), StringComparer.Ordinal);
-        foreach (var row in _searchRows) { row.SetLoaded(added.Contains(row.VideoId)); }
-    }
-
-    /// <summary>過濾框變更→依標題（不分大小寫、含子字串）過濾表格列（#177）；空＝不過濾。</summary>
-    private void OnResultFilterChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
-    {
-        if (FilterPlaceholder is null) { return; } // 防 InitializeComponent 期間佔位符尚未連結時之初始事件
-        FilterPlaceholder.Visibility = string.IsNullOrEmpty(ResultFilterBox.Text)
-            ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
-        ApplyResultFilter();
-    }
-
-    private void ApplyResultFilter()
-    {
-        if (_searchView is null) { return; }
-        var q = ResultFilterBox.Text?.Trim() ?? "";
-        _searchView.Filter = q.Length == 0
-            ? null
-            : o => o is SearchRow r && r.Title.Contains(q, StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <summary>表格列 Load 鈕→載入該影片到播放器（加入清單、記錄使用中主題）；載入後 RefreshVideoList→RefreshLoadedFlags 使該列轉「已加入」灰。</summary>
-    private void OnSearchRowLoad(object sender, System.Windows.RoutedEventArgs e)
-    {
-        if ((sender as System.Windows.Controls.Button)?.DataContext is not SearchRow row) { return; }
-        _ = LoadVideoAsync(row.VideoId, addToStore: true);
-    }
 
     /// <summary>表格點連結→於系統預設瀏覽器開 YouTube 原頁（沿用 AboutPage 開連結作法）。</summary>
     private void OnOpenExternalLink(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
@@ -733,84 +597,13 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         return string.IsNullOrWhiteSpace(listed) ? id : listed!;
     }
 
-    /// <summary>表格點「🌐 Check」→按需查該片是否有網路逐字稿（花 OpenAI 額度）；以對話視窗顯示進度與費用，結果回填該列。</summary>
-    private void OnSearchRowWebProbe(object sender, System.Windows.RoutedEventArgs e)
-    {
-        if ((sender as System.Windows.Controls.Button)?.DataContext is not SearchRow row) { return; }
-        RunWebProbe(row);
-    }
-
-    /// <summary>查該片是否有網路逐字稿（花 OpenAI 額度、跑前確認估價、模態顯進度與費用）；結果回填該列並**存入快取**（#188：重搜同片免重花）。取消/失敗還原按鈕供再試。手動 Check 與右鍵重檢共用。</summary>
-    private void RunWebProbe(SearchRow row)
-    {
-        if (!ConfirmAiRun("Check web subtitles",
-            $"查「{Truncate(row.Title, 40)}」是否有網路逐字稿（OpenAI gpt-4.1 網搜）。", EstimateWebSearchCallUsd())) { return; } // #189：跑前確認估價＋本日/小時
-        row.SetWebChecking();
-        var title = row.Title;
-        var themeForAi = ThemeStore.GetActive(_themes.Load())?.Name; // 尚未載入指派主題→用使用中主題縮小網搜範圍
-        AiActionWindow.RunAndShow(System.Windows.Window.GetWindow(this), "Check web subtitles",
-            async (report, ct) =>
-            {
-                var progress = new System.Progress<string>(s => report(s));
-                var result = await _webProbe.ProbeAsync(title, progress, ct, themeForAi);
-                if (result.Found) { row.SetWebResult("✓", EmbBlue, "Web transcript: " + Truncate(result.Source, 60), found: true); }
-                else { row.SetWebResult("✗", EmbGray, "No web transcript found", found: false); }
-                _statusStore.SaveWeb(row.VideoId, result.Found, result.Source); // #188：存網路結果——重搜同片不再重花額度
-                _spendLedger.Record(result.Usages.Sum(u => AiCost.EstimateUsd(u.Model, u.InputTokens, u.OutputTokens, u.WebSearch) ?? 0), DateTimeOffset.Now); // #189：花費記帳
-                return result.Usages
-                    .Select(u => new AiActionWindow.AiUsage(u.InputTokens, u.OutputTokens, u.Model, u.WebSearch))
-                    .ToList();
-            });
-        if (row.WebResultVisibility != System.Windows.Visibility.Visible) { row.ResetWebButton(); } // 取消/失敗→還原按鈕供再試
-    }
-
-    /// <summary>右鍵表格列→選取該列（#188）：使右鍵選單「重新檢查」作用於游標下那一列（DataGrid 預設右鍵不選取）。</summary>
-    private void OnResultRowRightClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
-    {
-        var dep = e.OriginalSource as System.Windows.DependencyObject;
-        while (dep is not null and not System.Windows.Controls.DataGridRow)
-        {
-            dep = System.Windows.Media.VisualTreeHelper.GetParent(dep);
-        }
-        if (dep is System.Windows.Controls.DataGridRow gridRow) { SearchResultsGrid.SelectedItem = gridRow.Item; }
-    }
-
-    /// <summary>右鍵選單「重新檢查內嵌字幕（免費）」（#188）：清該列徽章、重顯 spinner、重探 yt-dlp、更新快取。</summary>
-    private void OnRecheckEmbedded(object sender, System.Windows.RoutedEventArgs e)
-    {
-        if (SearchResultsGrid.SelectedItem is not SearchRow row) { return; }
-        row.SetEmbeddedChecking();
-        _ = RecheckEmbeddedOneAsync(row, _searchCts?.Token ?? CancellationToken.None);
-    }
-
-    /// <summary>單列重探內嵌字幕並更新快取（#188 手動重檢）；失敗標「?」不存檔（下次可再試）。</summary>
-    private async Task RecheckEmbeddedOneAsync(SearchRow row, CancellationToken ct)
-    {
-        try
-        {
-            var info = await _fetcher.ProbeEmbeddedAsync(row.VideoId, ct);
-            row.SetEmbedded(info.HasManual, info.HasAuto);
-            _statusStore.SaveEmbedded(row.VideoId, info.HasManual, info.HasAuto);
-        }
-        catch (OperationCanceledException) { /* 新搜尋取代→靜默 */ }
-        catch (Exception) { row.SetEmbeddedUnknown(); }
-        try { _searchView?.Refresh(); } catch { /* 盡力 */ }
-    }
-
-    /// <summary>右鍵選單「重新檢查網路字幕（花 OpenAI）」（#188）：走與手動 Check 相同流程（模態顯費用）並更新快取。</summary>
-    private void OnRecheckWeb(object sender, System.Windows.RoutedEventArgs e)
-    {
-        if (SearchResultsGrid.SelectedItem is not SearchRow row) { return; }
-        RunWebProbe(row);
-    }
-
     private void OnVideoSelect(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
         var it = (VideoList.SelectedItem as System.Windows.Controls.ListBoxItem)?.Tag as VideoItem;
         if (it is null || it.Id == _currentVideoItemId) return; // 無選取或已是目前載入 → 不重載
-        _currentVideoItemId = it.Id;
-        UpdateVideoThemePicker(); // 反映所選影片之所屬主題（#173）
-        _ = LoadVideoAsync(it.VideoId, addToStore: false); // 已在清單、不重加
+        // 審查修：_currentVideoItemId／主題選擇器改於 LoadVideoAsync **確認會實際載入後**才推進——
+        // 否則未建片若於 ConfirmBuildRun 取消／無字幕檔而提前 return，選取會錯位到新片、播放仍舊片。
+        _ = LoadVideoAsync(it.VideoId, addToStore: false, listItemId: it.Id); // 已在清單、不重加
     }
 
     private void OnDeleteVideo()
@@ -941,9 +734,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
                 _playbackStarted = true;
                 _ = UpdateCurrentVideoTitleAsync(); // epic #145 增量4：就緒後自播放器取標題回寫影片清單
                 ShowCue(0);                         // 顯示第一句＋啟用控制鈕（不自動播放）
-                SetStatus(_isAuto
-                    ? $"{_cues.Count} auto-generated lines — press ▶ Continue to play (pauses at each line), or double-click a line to jump there (paused)."
-                    : $"{_cues.Count} lines loaded — press ▶ Continue to play (pauses at each line), or double-click a line to jump there (paused).");
+                SetStatus($"{_cues.Count} lines loaded — press ▶ Continue to play (pauses at each line), or double-click a line to jump there (paused).");
             }
 
             var pause = PauseDecider.NextPause(t, _cues, _lastPausedIndex, pauseSpeaker: _pauseSpeaker, pauseNoSpeaker: _pauseNoSpeaker); // 指定說話人（或未標示者）才暫停（增量7／#189）
@@ -1073,7 +864,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         list[i] = list[i] with { Speaker = clean };
         _cues = list;
         row.UpdateSpeaker(clean);                                                   // 就地通知 UI（該列 SpeakerLabel 更新）
-        if (_currentVideoId is not null) { _subs.Save(_currentVideoId, CurrentVideoTitle(), _isAuto, list); } // 存回（#174）
+        if (_currentVideoId is not null) { _subs.Save(_currentVideoId, CurrentVideoTitle(), isAutoGenerated: false, list); } // 存回（#174；增量5′ 已無 Auto/Manual 之分）
         if (_shownCue == i) { RenderClickable(_cues[i]); }                          // 當前句→重繪字幕帶（含新說話人前綴）
         PopulateSpeakerFilter();                                                    // 新說話人可能出現/消失→同步下拉
         PopulatePauseAtSpeaker();
@@ -1232,7 +1023,17 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         var has = _cues.Count > 0;
         SpeakerFilter.IsEnabled = has;
         EditYamlBtn.IsEnabled = has;
-        TranscribeBtn.IsEnabled = has; // #187：Whisper 重轉需有字幕載入
+        SyncTranscribeEnabled(has); // #187 有字幕載入；增量5′：已帶說話人則停用（見方法）
+    }
+
+    /// <summary>同步 🎙Voice（Whisper 重轉）啟用（增量5′ 審查修）：字幕**已帶說話人**時停用——純 Whisper 重轉無說話人、會覆蓋抹除說話人（pivot 差異化），不容此 footgun；僅無說話人之字幕可重轉取時間。附說明 ToolTip。</summary>
+    private void SyncTranscribeEnabled(bool baseEnabled)
+    {
+        var hasSpeaker = _cues.Any(c => !string.IsNullOrEmpty(c.Speaker));
+        TranscribeBtn.IsEnabled = baseEnabled && !hasSpeaker;
+        TranscribeBtn.ToolTip = hasSpeaker
+            ? "Disabled: this subtitle already carries speakers from the subtitle file — re-transcribing with Whisper would drop them."
+            : null;
     }
 
     /// <summary>清空字幕與清單、關工具列（載入新片／取消時）。編修中則先退出編修 UI。</summary>
@@ -1383,8 +1184,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
                 if (!ReferenceEquals(_cues, target)) { report("Subtitle changed meanwhile — result discarded."); return null; }
                 _lastPausedIndex = -1;          // 時間軸全換→暫停判定自目前時間重新起算
                 SetCues(result.Cues);
-                _isAuto = true;                 // 機器轉錄（非人工字幕）
-                if (_currentVideoId is not null) { _subs.Save(_currentVideoId, CurrentVideoTitle(), _isAuto, result.Cues); } // 存轉錄結果（#174）
+                if (_currentVideoId is not null) { _subs.Save(_currentVideoId, CurrentVideoTitle(), isAutoGenerated: false, result.Cues); } // 存轉錄結果（#174；增量5′ 已無 Auto/Manual 之分）
                 _row3Applied = true;            // #189：標記 Row3（Voice 精修時間）已套用
                 if (_rows.Count > 0) { ShowCue(0); }
                 var twd = AiCost.ToTwd(AiCost.EstimateWhisperUsd(result.AudioSeconds));
@@ -1398,30 +1198,13 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         _transcribing = false;
         var enable = _cues.Count > 0 && !_yamlEditing && !_loading;
         EditYamlBtn.IsEnabled = enable;
-        TranscribeBtn.IsEnabled = enable;
+        SyncTranscribeEnabled(enable); // 增量5′：已帶說話人則停用
         UpdateSourceLabel(); // #189：恢復 Row1 狀態
         UpdateRefineButtons();            // #189：反映 Row3 已套用（✓）
     }
 
     /// <summary>估算目前影片音訊秒數（Whisper 跑前費用估算用）：以目前字幕**最後一個有值**之開始時間為估（字幕大致涵蓋全片）；無字幕／皆未定時回 0。#184：容忍未定時句。實際時長於轉錄時由 ffprobe 取得。</summary>
     private double EstimateAudioSeconds() => _cues.LastOrDefault(c => c.StartSec.HasValue)?.StartSec ?? 0;
-
-    /// <summary>AI 動作跑前確認（#189）：顯示本次估算＋本日/本小時累計花費（本 app 記帳、非帳戶餘額）；按 OK 才執行、取消回 false＝不花費。</summary>
-    private bool ConfirmAiRun(string title, string whatDescription, double estUsd)
-    {
-        var now = DateTimeOffset.Now;
-        var msg = whatDescription + "\n\n" +
-            $"本次估算：約 NT${AiCost.ToTwd(estUsd):0.##}\n" +
-            $"今日已花：約 NT${AiCost.ToTwd(_spendLedger.SpentToday(now)):0.##}　·　本小時：約 NT${AiCost.ToTwd(_spendLedger.SpentThisHour(now)):0.##}\n" +
-            "（金額為本 app 記帳與估算，非 OpenAI 帳戶餘額；餘額請上 platform.openai.com/usage 查）\n\n" +
-            "要執行嗎？";
-        return System.Windows.MessageBox.Show(System.Windows.Window.GetWindow(this), msg, title,
-            System.Windows.MessageBoxButton.OKCancel, System.Windows.MessageBoxImage.Question) == System.Windows.MessageBoxResult.OK;
-    }
-
-    /// <summary>粗估單次 gpt-4.1 <c>web_search</c> 呼叫費用（#189 獲得頁 Find／Web check 跑前確認用）：代表性 input/output tokens ＋ 一次網搜工具費（實測 input 約 24k–32k）；僅概估，實際依回傳用量記帳。</summary>
-    private static double EstimateWebSearchCallUsd()
-        => AiCost.EstimateUsd("gpt-4.1", 24000, 300, true) ?? 0;
 
     /// <summary>進入整檔 YAML 編修：序列化目前字幕入編輯框、停導引＋暫停播放、切換清單→編輯面板。</summary>
     private void EnterYamlEdit()
@@ -1450,7 +1233,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
 
         ExitYamlEditUi();
         SetCues(parsed);
-        if (_currentVideoId is not null) { _subs.Save(_currentVideoId, CurrentVideoTitle(), _isAuto, parsed); } // 存 YAML 編修結果（#174）
+        if (_currentVideoId is not null) { _subs.Save(_currentVideoId, CurrentVideoTitle(), isAutoGenerated: false, parsed); } // 存 YAML 編修結果（#174；增量5′ 已無 Auto/Manual 之分）
 
         var t = await CurrentTimeAsync();               // 對齊目前播放時間，續從當前位置（不跳回開頭）
         var at = PauseDecider.CueAt(t, parsed);         // start-only：當前句＝起點<=t 之最後一句
@@ -1469,7 +1252,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         var has = _cues.Count > 0;
         SpeakerFilter.IsEnabled = has;
         EditYamlBtn.IsEnabled = has;
-        TranscribeBtn.IsEnabled = has; // #187
+        SyncTranscribeEnabled(has); // #187；增量5′：已帶說話人則停用
         if (_webReady && IsVisible && has) { _guiding = true; _poll.Start(); }
     }
 
@@ -1513,173 +1296,6 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         }
     }
 
-    /// <summary>
-    /// 搜尋結果表格一列 view-model（#177）：縮圖/名稱/連結建構即定；內嵌字幕（背景免費探測）與網路字幕（按需查）
-    /// 狀態非同步更新，故 <see cref="System.ComponentModel.INotifyPropertyChanged"/>。網路字幕以三態呈現：未查＝按鈕、查中＝按鈕（「…」停用）、完成＝結果文字。
-    /// </summary>
-    private sealed class SearchRow : System.ComponentModel.INotifyPropertyChanged
-    {
-        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
-        private void On([System.Runtime.CompilerServices.CallerMemberName] string? name = null)
-            => PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(name));
-
-        public string VideoId { get; }
-        public string Title { get; }
-        public string WatchUrl { get; }
-        public Uri WatchUri { get; }
-        public System.Windows.Media.ImageSource? ThumbSource { get; }
-        public int? DurationSec { get; }            // 排序鍵（片長，秒；未知＝null 排末）
-        public string DurationText { get; }         // 顯示（m:ss／h:mm:ss／—）
-        public string FirstSeen { get; }            // 初次搜尋時間（#186）：yyyy-MM-dd HH:mm，字串即可排序
-
-        // 字幕檔原始 URL（#182）：由字幕檔網址配得之影片帶入；語意＝可導覽之連結（與 Web 徽章之來源描述分清）。供增量3 表格 Web 欄超連結、增量5 主從合成之逐字稿來源。
-        private string? _transcriptUrl;
-        public string? TranscriptUrl { get => _transcriptUrl; private set { _transcriptUrl = value; On(); } }
-        public void SetTranscriptUrl(string? url) => TranscriptUrl = url;
-
-        public SearchRow(string videoId, string title, int? durationSec, DateTimeOffset firstSeen)
-        {
-            VideoId = videoId;
-            Title = title;
-            WatchUrl = "https://www.youtube.com/watch?v=" + videoId;
-            WatchUri = new Uri(WatchUrl);
-            ThumbSource = MakeThumbSource(videoId);
-            DurationSec = durationSec;
-            DurationText = FormatDuration(durationSec);
-            FirstSeen = firstSeen.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-            RecomputeRecommend(null, null); // 初始（字幕未探測）＝暫定推薦分，探測完成後重算
-        }
-
-        // 載入鈕狀態（#177）：已在影片清單者停用並標「Added」（灰），否則「Load」可按
-        private bool _isLoaded;
-        public bool CanLoad => !_isLoaded;
-        public string LoadText => _isLoaded ? "Added" : "Load";
-        public void SetLoaded(bool loaded)
-        {
-            if (_isLoaded == loaded) { return; }
-            _isLoaded = loaded;
-            On(nameof(CanLoad));
-            On(nameof(LoadText));
-        }
-
-        // 內嵌字幕兩態（yt-dlp 免費探測、背景非同步填入）：Manual(人工)、Auto(自動) 各一徽章；探測中顯旋轉動畫、完成後符號 ✓(有)／–(無)／?(不明)（#186）
-        private string _manualText = "";
-        public string ManualText { get => _manualText; private set { _manualText = value; On(); } }
-        private System.Windows.Media.Brush _manualBrush = EmbGray;
-        public System.Windows.Media.Brush ManualBrush { get => _manualBrush; private set { _manualBrush = value; On(); } }
-        private string _autoText = "";
-        public string AutoText { get => _autoText; private set { _autoText = value; On(); } }
-        private System.Windows.Media.Brush _autoBrush = EmbGray;
-        public System.Windows.Media.Brush AutoBrush { get => _autoBrush; private set { _autoBrush = value; On(); } }
-        private System.Windows.Visibility _embeddedSpinnerVisibility = System.Windows.Visibility.Visible; // 探測中顯 spinner（#186）
-        public System.Windows.Visibility EmbeddedSpinnerVisibility { get => _embeddedSpinnerVisibility; private set { _embeddedSpinnerVisibility = value; On(); } }
-        // 排序鍵（數值，供 CollectionView 排序）：1 有／0 無／-1 未知或失敗
-        private int _manualRank = -1;
-        public int ManualRank { get => _manualRank; private set { _manualRank = value; On(); } }
-        private int _autoRank = -1;
-        public int AutoRank { get => _autoRank; private set { _autoRank = value; On(); } }
-        /// <summary>探測完成：Manual／Auto 各依有無標 ✓（有色）／–（灰），停 spinner、更新排序鍵並重算推薦分。</summary>
-        public void SetEmbedded(bool hasManual, bool hasAuto)
-        {
-            ManualText = hasManual ? "✓" : "–"; ManualBrush = hasManual ? EmbGreen : EmbGray; ManualRank = hasManual ? 1 : 0;
-            AutoText = hasAuto ? "✓" : "–"; AutoBrush = hasAuto ? EmbAmber : EmbGray; AutoRank = hasAuto ? 1 : 0;
-            EmbeddedSpinnerVisibility = System.Windows.Visibility.Collapsed;
-            RecomputeRecommend(hasManual, hasAuto);
-        }
-        /// <summary>探測失敗（私人／移除／逾時）：Manual／Auto 皆標「?」（停 spinner、排序鍵 -1、推薦分視為未知）。</summary>
-        public void SetEmbeddedUnknown()
-        {
-            ManualText = "?"; ManualBrush = EmbGray; ManualRank = -1;
-            AutoText = "?"; AutoBrush = EmbGray; AutoRank = -1;
-            EmbeddedSpinnerVisibility = System.Windows.Visibility.Collapsed;
-            RecomputeRecommend(null, null);
-        }
-        /// <summary>是否仍需內嵌探測（#188）：spinner 仍轉＝未從快取還原、未探測過 → 由背景探測填入。</summary>
-        public bool NeedsEmbeddedProbe => EmbeddedSpinnerVisibility == System.Windows.Visibility.Visible;
-        /// <summary>切回「探測中」（#188 手動重檢）：清徽章、重顯 spinner、排序鍵歸未知，待重新探測填入。</summary>
-        public void SetEmbeddedChecking()
-        {
-            ManualText = ""; ManualBrush = EmbGray; ManualRank = -1;
-            AutoText = ""; AutoBrush = EmbGray; AutoRank = -1;
-            EmbeddedSpinnerVisibility = System.Windows.Visibility.Visible;
-            RecomputeRecommend(null, null);
-        }
-
-        // 網路字幕（按需查、花額度）：三態
-        private string _webButtonText = "\U0001F310 Check";
-        public string WebButtonText { get => _webButtonText; private set { _webButtonText = value; On(); } }
-        private bool _webButtonEnabled = true;
-        public bool WebButtonEnabled { get => _webButtonEnabled; private set { _webButtonEnabled = value; On(); } }
-        private System.Windows.Visibility _webButtonVisibility = System.Windows.Visibility.Visible;
-        public System.Windows.Visibility WebButtonVisibility { get => _webButtonVisibility; private set { _webButtonVisibility = value; On(); } }
-        private string _webResultText = "";
-        public string WebResultText { get => _webResultText; private set { _webResultText = value; On(); } }
-        private System.Windows.Media.Brush _webResultBrush = EmbGray;
-        public System.Windows.Media.Brush WebResultBrush { get => _webResultBrush; private set { _webResultBrush = value; On(); } }
-        private System.Windows.Visibility _webResultVisibility = System.Windows.Visibility.Collapsed;
-        public System.Windows.Visibility WebResultVisibility { get => _webResultVisibility; private set { _webResultVisibility = value; On(); } }
-        private string _webResultTip = "";
-        public string WebResultTip { get => _webResultTip; private set { _webResultTip = value; On(); } }
-        private int _webRank; // 排序鍵：1 有／-1 無／0 未查
-        public int WebRank { get => _webRank; private set { _webRank = value; On(); } }
-        private System.Windows.Visibility _webCheckingVisibility = System.Windows.Visibility.Collapsed; // 查中顯 spinner（#186）
-        public System.Windows.Visibility WebCheckingVisibility { get => _webCheckingVisibility; private set { _webCheckingVisibility = value; On(); } }
-
-        /// <summary>切到「查中」：隱藏按鈕、顯旋轉動畫（#186）。</summary>
-        public void SetWebChecking() { WebButtonVisibility = System.Windows.Visibility.Collapsed; WebCheckingVisibility = System.Windows.Visibility.Visible; }
-        /// <summary>切到「完成」：隱藏按鈕/spinner、顯示結果符號（✓有／✗無），來源置 tooltip，更新排序鍵。</summary>
-        public void SetWebResult(string text, System.Windows.Media.Brush brush, string tip, bool found)
-        {
-            WebButtonVisibility = System.Windows.Visibility.Collapsed;
-            WebCheckingVisibility = System.Windows.Visibility.Collapsed;
-            WebResultText = text; WebResultBrush = brush; WebResultTip = tip;
-            WebResultVisibility = System.Windows.Visibility.Visible;
-            WebRank = found ? 1 : -1;
-        }
-        /// <summary>還原按鈕（取消/失敗後供再試）：隱藏 spinner、顯示 Check 鈕。</summary>
-        public void ResetWebButton() { WebButtonText = "\U0001F310 Check"; WebButtonEnabled = true; WebCheckingVisibility = System.Windows.Visibility.Collapsed; WebButtonVisibility = System.Windows.Visibility.Visible; }
-
-        // ── 推薦優序（#177／#183，第一欄）：規則＝字幕品質（Manual>Auto>無）＋片長適學度；分數 1–5，以彩色圓標呈現（5＝最佳、綠；3＝琥珀；低＝灰）——比星等更好懂、仍可排序 ──
-        private double _recommendScore;
-        public double RecommendScore { get => _recommendScore; private set { _recommendScore = value; On(); } } // 排序鍵（預設遞減）
-        private string _recommendLabel = "";
-        public string RecommendLabel { get => _recommendLabel; private set { _recommendLabel = value; On(); } } // 圓標數字 1–5
-        private System.Windows.Media.Brush _recommendBrush = EmbGray;
-        public System.Windows.Media.Brush RecommendBrush { get => _recommendBrush; private set { _recommendBrush = value; On(); } } // 圓標底色（綠/琥珀/灰）
-        public string RecommendTip =>
-            "Recommended for learning — 5 = best. From subtitle quality (Manual > Auto) and length (a short single lesson beats a long compilation). Click this header to sort by it.";
-
-        /// <summary>依字幕（<paramref name="hasManual"/>／<paramref name="hasAuto"/>，null＝未探測＝中性）與片長算推薦分（1–5）＋圓標色。</summary>
-        private void RecomputeRecommend(bool? hasManual, bool? hasAuto)
-        {
-            int subScore = hasManual == true ? 3 : hasAuto == true ? 1 : hasManual is null ? 1 : 0; // 人工3／自動1／未知1／無0
-            int total = Math.Clamp(subScore + DurationScore(DurationSec), 1, 5);
-            RecommendScore = total;
-            RecommendLabel = total.ToString(System.Globalization.CultureInfo.InvariantCulture);
-            RecommendBrush = total >= 4 ? EmbGreen : total == 3 ? EmbAmber : EmbGray; // 綠(4–5)／琥珀(3)／灰(1–2)
-        }
-
-        /// <summary>片長適學度加分：1–25 分＝2（理想單則）；&lt;1 分或 25–60 分＝1；&gt;60 分（合輯）＝0；未知＝1（中性）。</summary>
-        private static int DurationScore(int? sec)
-        {
-            if (sec is null) return 1;
-            if (sec < 60) return 1;
-            if (sec <= 1500) return 2;
-            if (sec <= 3600) return 1;
-            return 0;
-        }
-
-        /// <summary>片長顯示：&lt;1 小時＝m:ss、≥1 小時＝h:mm:ss；未知／0＝—。</summary>
-        private static string FormatDuration(int? sec)
-        {
-            if (sec is null || sec <= 0) return "—";
-            var t = TimeSpan.FromSeconds(sec.Value);
-            return t.TotalHours >= 1
-                ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}"
-                : $"{t.Minutes}:{t.Seconds:00}";
-        }
-    }
-
     /// <summary>取目前載入影片之所屬主題名（供 AI 字幕分析輔助）；無載入或未指派主題→null。</summary>
     private string? CurrentThemeName()
     {
@@ -1712,14 +1328,12 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         System.Windows.DependencyProperty.Register(nameof(ThumbWidth), typeof(double), typeof(VideoCapturePage), new System.Windows.PropertyMetadata(64.0));
     public double ThumbWidth { get => (double)GetValue(ThumbWidthProperty); set => SetValue(ThumbWidthProperty, value); }
 
-    /// <summary>套用搜尋縮圖高度（#187，選項頁可調 28–120）：設 Thumb 尺寸 DP（寬＝高×16/9）、縮圖欄寬與 DataGrid 列高。</summary>
+    /// <summary>套用搜尋縮圖高度（#187，選項頁可調 28–120）：設 Thumb 尺寸 DP（寬＝高×16/9）。增量6′ 砍結果表後此 DP 已無綁定，僅保留供選項頁呼叫不致錯。</summary>
     public void ApplyThumbSize(double height)
     {
         var h = Math.Clamp(height, 28, 120);
         ThumbHeight = h;
         ThumbWidth = Math.Round(h * 16.0 / 9.0);
-        SearchResultsGrid.RowHeight = h + 8;
-        if (SearchResultsGrid.Columns.Count > 1) { SearchResultsGrid.Columns[1].Width = new System.Windows.Controls.DataGridLength(ThumbWidth + 10); } // 縮圖欄（index 1）
     }
 
     /// <summary>內容區塊網址之上顯示影片標題（#187）；空則隱藏。</summary>
@@ -1730,20 +1344,6 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         VideoTitleText.Visibility = t.Length > 0 ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
     }
 
-    private static string Truncate(string s, int n) => string.IsNullOrEmpty(s) || s.Length <= n ? s : s.Substring(0, n) + "…";
-
-    // 搜尋結果表格三種字幕徽章色（#177）：Manual=綠、Auto=琥珀、Web=藍、無/不明=灰；凍結供背景探測續程更新安全。
-    private static readonly System.Windows.Media.Brush EmbGreen = FrozenBrush(0x2E, 0x7D, 0x32);
-    private static readonly System.Windows.Media.Brush EmbAmber = FrozenBrush(0xB0, 0x6A, 0x00);
-    private static readonly System.Windows.Media.Brush EmbBlue = FrozenBrush(0x15, 0x65, 0xC0);
-    private static readonly System.Windows.Media.Brush EmbGray = FrozenBrush(0x8A, 0x8A, 0x8A);
-
-    private static System.Windows.Media.Brush FrozenBrush(byte r, byte g, byte b)
-    {
-        var br = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(r, g, b));
-        br.Freeze();
-        return br;
-    }
 
     private void SetStatus(string msg) => StatusText.Text = msg;
 
