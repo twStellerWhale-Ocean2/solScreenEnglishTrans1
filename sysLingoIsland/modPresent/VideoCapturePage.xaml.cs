@@ -800,13 +800,20 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             return new AcquireEntry(path, null, AcquireStatus.Unsupported);
         }
         string header;
-        try { header = await Task.Run(() => TranscriptFile.ReadHeader(path)); }
+        double? lastSec;
+        try
+        {
+            // 皆於背景執行緒：檔頭區取影片 ID ＋ **串流掃最後時間戳**取長度（不建構 cue、不抽說話人，故非全檔解析）
+            (header, lastSec) = await Task.Run(() => (TranscriptFile.ReadHeader(path), TranscriptFile.ScanLastTimestampSec(path)));
+        }
         catch (SubtitleException ex) { return new AcquireEntry(path, null, AcquireStatus.Unreadable, ex.Message); }
         catch (Exception ex) { return new AcquireEntry(path, null, AcquireStatus.Unreadable, ex.Message); }
 
         var id = ExtractUrls(header).Select(ExtractVideoId).FirstOrDefault(v => v is not null);
-        if (id is null) { return new AcquireEntry(path, null, AcquireStatus.MissingVideoId); }
-        return new AcquireEntry(path, id, _subs.TryLoad(id) is not null ? AcquireStatus.AlreadyExists : AcquireStatus.Ready);
+        if (id is null) { return new AcquireEntry(path, null, AcquireStatus.MissingVideoId, LastSec: lastSec); }
+        return new AcquireEntry(path, id,
+            _subs.TryLoad(id) is not null ? AcquireStatus.AlreadyExists : AcquireStatus.Ready,
+            LastSec: lastSec);
     }
 
     /// <summary>重建已選檔清單 UI（只顯檔名、完整路徑僅 tooltip；每列可 <c>✕</c> 移除、可 Tab 聚焦並以 Delete 移除）＋更新計數與主鈕文案。</summary>

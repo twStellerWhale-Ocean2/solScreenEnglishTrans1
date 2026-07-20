@@ -99,12 +99,23 @@ public static class AcquireBatch
         return result;
     }
 
+    /// <summary>時間長度文案（純函式）：秒→<c>M:SS</c>／<c>H:MM:SS</c>。null 或非正值回空字串。</summary>
+    public static string FormatLength(double? sec)
+    {
+        if (!sec.HasValue || sec.Value <= 0) { return ""; }
+        var t = TimeSpan.FromSeconds(sec.Value);
+        return t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{(int)t.TotalMinutes}:{t.Seconds:00}";
+    }
+
     /// <summary>單列狀態文案（純函式）——與設計 ＜III.C.(C)＞ 狀態欄一一對應。</summary>
     public static string StatusText(AcquireEntry e) => e.Status switch
     {
+        // 長度於**選檔當下**即顯示（USR 回饋）：取自串流掃描之最後時間戳，非全檔解析故不阻塞；句數/說話人數仍待按下主鈕後解析才有。
         AcquireStatus.Ready => e.CueCount > 0
-            ? $"就緒 · {e.CueCount} 句 · {e.SpeakerCount} 位說話人"
-            : "就緒 · 已取得影片 ID",
+            ? $"就緒 · {e.CueCount} 句 · {e.SpeakerCount} 位說話人 · 長度 {FormatLength(e.LastSec)}"
+            : e.LastSec.HasValue
+                ? $"就緒 · 長度 約 {FormatLength(e.LastSec)}"
+                : "就緒 · 已取得影片 ID（此檔沒有時間軸）",
         AcquireStatus.AlreadyExists => "已有字幕——預設略過（可改選覆寫）",
         AcquireStatus.MissingVideoId => "缺影片網址——檔頭沒有 YouTube 連結",
         AcquireStatus.DuplicateVideoId => "與前一檔指向同一支影片",

@@ -247,6 +247,69 @@ public class LocalSubtitleFileTests
         finally { File.Delete(path); }
     }
 
+    // ── 選檔當下即顯示長度（#193 USR 回饋）：串流掃最後時間戳，非全檔解析 ──
+
+    [Theory]
+    [InlineData("00:00:02,535 --> 00:00:04,437", 4.437)]   // 一行含起訖，取較大者＝該句訖點
+    [InlineData("00:04:58,063 --> 00:04:59,299", 299.299)]
+    [InlineData("01:02:03", 3723.0)]                        // fandom 式無毫秒
+    [InlineData("Peppa: I'm Peppa Pig.", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void LastStampOf_TakesLargestStampOnLine(string? line, double? expected)
+    {
+        var actual = TranscriptFile.LastStampOf(line);
+        if (expected is null) { Assert.Null(actual); }
+        else { Assert.Equal(expected.Value, actual!.Value, 3); }
+    }
+
+    [Fact]
+    public void ScanLastTimestampSec_ReturnsEndOfLastCue_WithoutParsingCues()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lingoisland-dur-{Guid.NewGuid():N}.srt");
+        File.WriteAllText(path, RealSample, new UTF8Encoding(false));
+        try
+        {
+            // RealSample 最後一句訖點＝00:00:59,625
+            Assert.Equal(59.625, TranscriptFile.ScanLastTimestampSec(path)!.Value, 3);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void ScanLastTimestampSec_NoTimestamps_ReturnsNull()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lingoisland-notime-{Guid.NewGuid():N}.txt");
+        File.WriteAllText(path, "Peppa: hello\nSuzy: hi\n", new UTF8Encoding(false));
+        try { Assert.Null(TranscriptFile.ScanLastTimestampSec(path)); }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData(null, "")]
+    [InlineData(0.0, "")]
+    [InlineData(-3.0, "")]
+    [InlineData(59.625, "0:59")]
+    [InlineData(299.3, "4:59")]
+    [InlineData(3723.0, "1:02:03")]
+    public void FormatLength_HandlesRanges(double? sec, string expected)
+        => Assert.Equal(expected, AcquireBatch.FormatLength(sec));
+
+    [Fact]
+    public void StatusText_ShowsLengthAtPickTime_BeforeAnyParsing()
+    {
+        // 選檔當下（尚無 CueCount）即應顯示長度——這正是 USR 要的行為
+        var e = new AcquireEntry(@"C:\a\1.srt", "AAAAAAAAAAA", AcquireStatus.Ready, LastSec: 299.3);
+        Assert.Equal("就緒 · 長度 約 4:59", AcquireBatch.StatusText(e));
+    }
+
+    [Fact]
+    public void StatusText_NoTimeline_SaysSoExplicitly()
+    {
+        var e = new AcquireEntry(@"C:\a\1.txt", "AAAAAAAAAAA", AcquireStatus.Ready);
+        Assert.Contains("沒有時間軸", AcquireBatch.StatusText(e));
+    }
+
     [Fact]
     public void SafeName_EmptyPath_HasPlaceholder() => Assert.Equal("（未命名）", TranscriptFile.SafeName(""));
 

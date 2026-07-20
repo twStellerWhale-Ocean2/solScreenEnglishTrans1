@@ -107,6 +107,53 @@ public static class TranscriptFile
         catch (IOException ex) { throw new SubtitleException($"字幕檔 {name} 正被其他程式使用或無法讀取：{ex.Message}"); }
     }
 
+    // 時間戳：VTT/SRT 之 HH:MM:SS,mmm（毫秒可省）或 fandom 式 HH:MM:SS。取「秒」為單位之三段式。
+    private static readonly Regex Stamp = new(@"(?<h>\d{1,3}):(?<m>\d{2}):(?<s>\d{2})(?:[.,](?<ms>\d{1,3}))?", RegexOptions.Compiled);
+
+    /// <summary>
+    /// 掃描字幕檔之**最後一個時間戳**（秒），供選檔當下即顯示長度（#193 USR 回饋）。
+    /// <b>刻意不做全檔解析</b>——逐行串流、只記最後一個時間戳，不建構 cue 物件、不抽說話人、不排序；
+    /// 代價遠低於 <see cref="SubtitleParser"/> 之解析，故不違反「選檔預掃描不阻塞 UI」之責任邊界（仍應於背景執行緒呼叫）。
+    /// 無任何時間戳（如尚未加時間碼之逐字稿）回 null。失敗擲 <see cref="SubtitleException"/>。
+    /// </summary>
+    public static double? ScanLastTimestampSec(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) { throw new SubtitleException("沒有指定字幕檔。"); }
+        var name = SafeName(path);
+        try
+        {
+            using var reader = new StreamReader(path, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            double? last = null;
+            string? line;
+            while ((line = reader.ReadLine()) is not null)
+            {
+                var sec = LastStampOf(line);
+                if (sec.HasValue && (!last.HasValue || sec.Value > last.Value)) { last = sec; }
+            }
+            return last;
+        }
+        catch (UnauthorizedAccessException) { throw new SubtitleException($"沒有權限讀取字幕檔 {name}。"); }
+        catch (FileNotFoundException) { throw new SubtitleException($"找不到字幕檔 {name}——請重新選檔或改貼網址。"); }
+        catch (DirectoryNotFoundException) { throw new SubtitleException($"找不到字幕檔 {name} 所在的資料夾——請重新選檔或改貼網址。"); }
+        catch (IOException ex) { throw new SubtitleException($"字幕檔 {name} 正被其他程式使用或無法讀取：{ex.Message}"); }
+    }
+
+    /// <summary>單行中最大的時間戳（秒；純函式）。一行可能含起訖兩個時間（`a --&gt; b`），取較大者＝該句訖點。無時間戳回 null。</summary>
+    internal static double? LastStampOf(string? line)
+    {
+        if (string.IsNullOrEmpty(line)) { return null; }
+        double? best = null;
+        foreach (Match m in Stamp.Matches(line))
+        {
+            var sec = int.Parse(m.Groups["h"].Value) * 3600
+                    + int.Parse(m.Groups["m"].Value) * 60
+                    + int.Parse(m.Groups["s"].Value)
+                    + (m.Groups["ms"].Success ? int.Parse(m.Groups["ms"].Value.PadRight(3, '0')) / 1000.0 : 0);
+            if (!best.HasValue || sec > best.Value) { best = sec; }
+        }
+        return best;
+    }
+
     /// <summary>檔名（不含路徑）——UI 與錯誤訊息一律只顯檔名，完整路徑僅存內部／tooltip（絕對路徑含使用者名稱與資料夾結構，防截圖外洩）。</summary>
     public static string SafeName(string? path)
     {
