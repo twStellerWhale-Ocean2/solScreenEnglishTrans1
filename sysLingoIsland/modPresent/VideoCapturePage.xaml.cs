@@ -828,9 +828,11 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         var any = _picked.Count > 0;
         AcqFilesCard.Visibility = any ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
         AcqClearFilesBtn.Visibility = any ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
-        var addable = _picked.Count(x => x.IsAddable);
-        AcqFilesCount.Text = any ? $"已選 {_picked.Count} 檔（{addable} 就緒）" : "";
-        AcqBuildBtn.Content = any ? AcquireBatch.ActionButtonText(addable) : "＋ 加入影片";
+        // 計數與主鈕 N 皆以「會被實際處理」為準（含已有字幕者——單檔問覆寫、批次可改選覆寫），
+        // 否則一次選 3 個都已存在的檔時，主鈕會錯標「加入並播放」卻實走批次。
+        var actionable = _picked.Count(AcquireBatch.IsActionable);
+        AcqFilesCount.Text = any ? $"已選 {_picked.Count} 檔（{actionable} 可加入）" : "";
+        AcqBuildBtn.Content = any ? AcquireBatch.ActionButtonText(actionable) : "＋ 加入影片";
     }
 
     /// <summary>已選檔清單之一列：檔名｜影片 ID｜狀態｜移除鈕。異常列以暖色底標示（不只靠顏色——狀態文字亦明載原因）。</summary>

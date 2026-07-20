@@ -107,23 +107,38 @@ public static class AcquireBatch
         return t.TotalHours >= 1 ? $"{(int)t.TotalHours}:{t.Minutes:00}:{t.Seconds:00}" : $"{(int)t.TotalMinutes}:{t.Seconds:00}";
     }
 
-    /// <summary>單列狀態文案（純函式）——與設計 ＜III.C.(C)＞ 狀態欄一一對應。</summary>
-    public static string StatusText(AcquireEntry e) => e.Status switch
+    /// <summary>
+    /// 單列狀態文案（純函式）——與設計 ＜III.C.(C)＞ 狀態欄一一對應。
+    /// **長度於選檔當下即顯示（USR 回饋）且不分狀態**：取自串流掃描之最後時間戳（非全檔解析故不阻塞），
+    /// 只要掃得到就附在狀態後面——「已有字幕」「缺影片網址」等狀態同樣看得到長度，使用者才能據以判斷是不是要的那一集。
+    /// 句數／說話人數則須按下主鈕實際解析後才有，選檔階段不顯示。
+    /// </summary>
+    public static string StatusText(AcquireEntry e)
     {
-        // 長度於**選檔當下**即顯示（USR 回饋）：取自串流掃描之最後時間戳，非全檔解析故不阻塞；句數/說話人數仍待按下主鈕後解析才有。
-        AcquireStatus.Ready => e.CueCount > 0
-            ? $"就緒 · {e.CueCount} 句 · {e.SpeakerCount} 位說話人 · 長度 {FormatLength(e.LastSec)}"
-            : e.LastSec.HasValue
-                ? $"就緒 · 長度 約 {FormatLength(e.LastSec)}"
-                : "就緒 · 已取得影片 ID（此檔沒有時間軸）",
-        AcquireStatus.AlreadyExists => "已有字幕——預設略過（可改選覆寫）",
-        AcquireStatus.MissingVideoId => "缺影片網址——檔頭沒有 YouTube 連結",
-        AcquireStatus.DuplicateVideoId => "與前一檔指向同一支影片",
-        AcquireStatus.Unsupported => "不支援的檔案類型",
-        AcquireStatus.Unreadable => string.IsNullOrWhiteSpace(e.Detail) ? "無法讀取" : e.Detail!,
-        AcquireStatus.Misdecoded => "疑似編碼不符——請確認內容是否亂碼",
-        _ => "",
-    };
+        var len = FormatLength(e.LastSec);
+        var suffix = len.Length > 0 ? $" · 長度 約 {len}" : "";
+        return e.Status switch
+        {
+            AcquireStatus.Ready => e.CueCount > 0
+                ? $"就緒 · {e.CueCount} 句 · {e.SpeakerCount} 位說話人 · 長度 {len}"
+                : len.Length > 0 ? $"就緒{suffix}" : "就緒 · 已取得影片 ID（此檔沒有時間軸）",
+            AcquireStatus.AlreadyExists => $"已有字幕（單檔會問覆寫／批次預設略過）{suffix}",
+            AcquireStatus.MissingVideoId => $"缺影片網址——檔頭沒有 YouTube 連結{suffix}",
+            AcquireStatus.DuplicateVideoId => $"與前一檔指向同一支影片{suffix}",
+            AcquireStatus.Unsupported => "不支援的檔案類型",
+            AcquireStatus.Unreadable => string.IsNullOrWhiteSpace(e.Detail) ? "無法讀取" : e.Detail!,
+            AcquireStatus.Misdecoded => $"疑似編碼不符——請確認內容是否亂碼{suffix}",
+            _ => "",
+        };
+    }
+
+    /// <summary>
+    /// 此列按下主鈕後**會被實際處理**（非略過、非失敗）：`Ready`／`Misdecoded` 可直接建立，
+    /// `AlreadyExists` 於單檔會問覆寫、於批次可逐列改選覆寫——三者皆計入主鈕之 N 與「可加入」計數。
+    /// 與 <see cref="AcquireEntry.IsAddable"/> 的差別：後者只表「可**直接**建立」，不含須使用者裁決者。
+    /// </summary>
+    public static bool IsActionable(AcquireEntry e)
+        => e.IsAddable || e.Status == AcquireStatus.AlreadyExists;
 
     /// <summary>
     /// 主行動鈕文案（純函式，#193）：**同手勢異結果須前置揭露**——0–1 個可加入者顯「加入並播放」、

@@ -310,6 +310,42 @@ public class LocalSubtitleFileTests
         Assert.Contains("沒有時間軸", AcquireBatch.StatusText(e));
     }
 
+    /// <summary>USR 實測回報：已匯入過的檔看不到長度。長度須**不分狀態**顯示，否則使用者無從判斷是不是要的那一集。</summary>
+    [Theory]
+    [InlineData(AcquireStatus.AlreadyExists)]
+    [InlineData(AcquireStatus.MissingVideoId)]
+    [InlineData(AcquireStatus.DuplicateVideoId)]
+    [InlineData(AcquireStatus.Misdecoded)]
+    public void StatusText_ShowsLength_ForNonReadyStatusesToo(AcquireStatus status)
+    {
+        var e = new AcquireEntry(@"C:\a\1.srt", "AAAAAAAAAAA", status, LastSec: 299.3);
+        Assert.Contains("長度 約 4:59", AcquireBatch.StatusText(e));
+    }
+
+    [Fact]
+    public void IsActionable_CountsAlreadyExists_SoButtonLabelMatchesWhatWillHappen()
+    {
+        // 一次選 3 個都已存在的檔：主鈕須顯「批次加入 3 部」而非「加入並播放」（後者會與實走批次不符）
+        var entries = Enumerable.Range(1, 3)
+            .Select(i => new AcquireEntry($@"C:\a\{i}.srt", $"ID{i}", AcquireStatus.AlreadyExists))
+            .ToList();
+
+        var actionable = entries.Count(AcquireBatch.IsActionable);
+
+        Assert.Equal(3, actionable);
+        Assert.Equal("＋ 批次加入 3 部", AcquireBatch.ActionButtonText(actionable));
+    }
+
+    [Fact]
+    public void IsActionable_ExcludesRealFailures()
+    {
+        Assert.False(AcquireBatch.IsActionable(new AcquireEntry("a.docx", null, AcquireStatus.Unsupported)));
+        Assert.False(AcquireBatch.IsActionable(new AcquireEntry("a.srt", null, AcquireStatus.Unreadable)));
+        Assert.False(AcquireBatch.IsActionable(new AcquireEntry("a.srt", null, AcquireStatus.MissingVideoId)));
+        Assert.True(AcquireBatch.IsActionable(new AcquireEntry("a.srt", "id", AcquireStatus.Ready)));
+        Assert.True(AcquireBatch.IsActionable(new AcquireEntry("a.srt", "id", AcquireStatus.AlreadyExists)));
+    }
+
     [Fact]
     public void SafeName_EmptyPath_HasPlaceholder() => Assert.Equal("（未命名）", TranscriptFile.SafeName(""));
 
