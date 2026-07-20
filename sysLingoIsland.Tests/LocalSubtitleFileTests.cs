@@ -174,6 +174,83 @@ public class LocalSubtitleFileTests
     }
 
     [Fact]
+    public void Decode_Utf32Boms_RoundTrip()
+    {
+        const string text = "George: (SNORTS)";
+        var le = new UTF32Encoding(bigEndian: false, byteOrderMark: true);
+        var be = new UTF32Encoding(bigEndian: true, byteOrderMark: true);
+
+        Assert.Equal(text, TranscriptFile.Decode(le.GetPreamble().Concat(le.GetBytes(text)).ToArray()));
+        Assert.Equal(text, TranscriptFile.Decode(be.GetPreamble().Concat(be.GetBytes(text)).ToArray()));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(new byte[0])]
+    public void Decode_NullOrEmpty_ReturnsEmpty(byte[]? bytes) => Assert.Equal("", TranscriptFile.Decode(bytes!));
+
+    [Fact]
+    public void Read_OverSizeLimit_ThrowsWithSizeAndLimit()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lingoisland-big-{Guid.NewGuid():N}.srt");
+        File.WriteAllBytes(path, new byte[TranscriptFile.MaxBytes + 1]);
+        try
+        {
+            var ex = Assert.Throws<SubtitleException>(() => TranscriptFile.Read(path));
+            Assert.Contains("過大", ex.Message);
+            Assert.Contains("上限", ex.Message);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void Read_NoPath_Throws(string? path)
+        => Assert.Throws<SubtitleException>(() => TranscriptFile.Read(path!));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    public void ReadHeader_NoPath_Throws(string? path)
+        => Assert.Throws<SubtitleException>(() => TranscriptFile.ReadHeader(path!));
+
+    [Fact]
+    public void ReadHeader_MissingFile_ThrowsHumanReadable()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "lingoisland-no-such-header-193.srt");
+        var ex = Assert.Throws<SubtitleException>(() => TranscriptFile.ReadHeader(path));
+        Assert.Contains("找不到", ex.Message);
+    }
+
+    [Fact]
+    public void ReadHeader_DirectoryPath_ThrowsHumanReadable_NotRawIoException()
+    {
+        // 拖入資料夾之保底（UI 已先以白名單擋下，此為 IO 層不當機之保證）
+        var ex = Assert.Throws<SubtitleException>(() => TranscriptFile.ReadHeader(Path.GetTempPath()));
+        Assert.False(string.IsNullOrWhiteSpace(ex.Message));
+    }
+
+    [Fact]
+    public void ReadHeader_StopsAtTimeLine_ReadingOnlyTheCommentBlock()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"lingoisland-hdr-{Guid.NewGuid():N}.srt");
+        File.WriteAllText(path, RealSample, new UTF8Encoding(false));
+        try
+        {
+            var header = TranscriptFile.ReadHeader(path);
+            Assert.Contains("E2MPOr2g0zg", header);
+            Assert.DoesNotContain("-->", header);            // 串流讀取確實停在第一個時間行
+            Assert.DoesNotContain("Peppa: I'm Peppa Pig", header);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void SafeName_EmptyPath_HasPlaceholder() => Assert.Equal("（未命名）", TranscriptFile.SafeName(""));
+
+    [Fact]
     public void SafeName_ReturnsFileNameOnly_SoAbsolutePathNeverLeaks()
     {
         // UI 與錯誤訊息只顯檔名（絕對路徑含使用者名稱，README 須嵌真實截圖故不得外洩）

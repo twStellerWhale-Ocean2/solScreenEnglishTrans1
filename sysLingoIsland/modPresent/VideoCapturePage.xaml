@@ -54,7 +54,9 @@
     <Grid Grid.Row="1">
 
       <!-- 【獲得】關鍵字搜尋＋結果表格＋網址載入 -->
-      <Border x:Name="SearchPane" Style="{StaticResource Card}" Padding="12" VerticalAlignment="Top" Visibility="Collapsed">
+      <!-- AllowDrop 置於整張卡片（#193 USR 回饋）：拖放範圍＝整個「加入影片」區塊，非僅輸入框；以 Preview 事件於此統一處理，子元素不各自實作 -->
+      <Border x:Name="SearchPane" Style="{StaticResource Card}" Padding="12" VerticalAlignment="Top" Visibility="Collapsed"
+              AllowDrop="True">
         <StackPanel>
           <TextBlock Text="加入影片" FontWeight="Bold" FontSize="14" Foreground="{StaticResource PinkText}" Margin="0,0,0,6"/>
 
@@ -169,7 +171,7 @@
               <TextBlock x:Name="WatchUrlRow" Margin="0,3,0,0" FontSize="11.5" Foreground="#9A6A82"
                          Visibility="Collapsed" TextTrimming="CharacterEllipsis">
                 <Run Text="網址："/><Hyperlink x:Name="WatchUrlLink" RequestNavigate="OnOpenExternalLink"
-                         Foreground="{StaticResource PinkText}"><Run x:Name="WatchUrlText"/></Hyperlink>
+                         Foreground="{StaticResource PinkText}"><Run x:Name="WatchUrlText"/></Hyperlink><Run x:Name="WatchDurationText"/>
               </TextBlock>
             </StackPanel>
 
