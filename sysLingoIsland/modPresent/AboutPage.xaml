@@ -28,9 +28,6 @@
           </TextBlock>
           <TextBlock Text="辨識與翻譯由 OpenAI 提供；朗讀採 Windows 內建語音。" FontSize="11.5"
                      Foreground="#9A6A82" Margin="0,10,0,0" TextWrapping="Wrap"/>
-          <!-- #159：更新紀錄改按鈕跳出獨立視窗 -->
-          <Button x:Name="ChangeLogBtn" Content="更新紀錄" Style="{StaticResource GhostButton}"
-                  HorizontalAlignment="Left" Margin="0,12,0,0" ToolTip="檢視各版本的變更"/>
           <!-- 更新區（Issue #51）：僅 Velopack 安裝形態顯示；dev 裸跑隱藏 -->
           <StackPanel x:Name="UpdatePanel" Orientation="Horizontal" Margin="0,12,0,0" Visibility="Collapsed">
             <TextBlock x:Name="UpdateStatusText" FontSize="12.5" Foreground="{StaticResource PinkSub}"
@@ -39,6 +36,9 @@
             <Button x:Name="RestartUpdateBtn" Content="重啟以更新" Style="{StaticResource PinkButton}"
                     Visibility="Collapsed"/>
           </StackPanel>
+          <!-- #159：更新紀錄改按鈕跳出獨立視窗；#199：移至「檢查更新」之後（更新區下方）——仍置於 UpdatePanel 之外、恆顯，不隨更新區於 dev 裸跑隱藏 -->
+          <Button x:Name="ChangeLogBtn" Content="更新紀錄" Style="{StaticResource GhostButton}"
+                  HorizontalAlignment="Left" Margin="0,12,0,0" ToolTip="檢視各版本的變更"/>
         </StackPanel>
       </Grid>
     </Border>
