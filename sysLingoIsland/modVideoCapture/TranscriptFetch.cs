@@ -4,10 +4,10 @@ using System.Text;
 namespace LingoIsland.Video;
 
 /// <summary>
-/// 取字幕檔網址之原始內容（[modVideoCapture模組]，epic #178 增量5′）：以 <c>curl</c> 子行程 GET 使用者／finder 提供之字幕檔／逐字稿 URL，
-/// 回原始文字（HTML 或純文字，交 <see cref="TranscriptAlign.StripToPlainText"/> 去雜訊、再交 <see cref="ITranscriptAligner.ParseTranscriptAsync"/> 整理）。
+/// 取字幕檔網址之原始內容（[modVideoCapture模組]，epic #178 增量5′）：以 <c>curl</c> 子行程 GET 使用者提供之字幕檔／逐字稿 URL，
+/// 回原始文字（HTML 或純文字；標準格式交 <see cref="SubtitleParser"/> 免費解析，網頁式無時間戳者才交 <see cref="TranscriptAlign.StripToPlainText"/> 去雜訊、再由 <see cref="ITranscriptAligner.ExtractTimedCuesAsync"/> AI 抽取）。
 /// <b>為何用 curl 而非 <c>HttpClient</c></b>：Fandom／Cloudflare 等以 TLS/HTTP 指紋辨識，<c>HttpClient</c> 即使帶完整瀏覽器標頭仍回 403（增量5′ smoke 實測）；
-/// curl 之指紋獲放行。curl.exe 隨 Windows 10 1803+ 內建（本 app 目標 ≥ 19041），與 yt-dlp／ffmpeg 同為外部行程依賴。純 IO、不列單元測試；失敗擲 <see cref="SpeakerEnrichException"/>（人類可讀）、取消傳遞。
+/// curl 之指紋獲放行。curl.exe 隨 Windows 10 1803+ 內建（本 app 目標 ≥ 19041），為本 app 唯一之外部行程依賴（epic #178 增量6′-B 廢止 Whisper 後，已不再依賴 yt-dlp／ffmpeg）。純 IO、不列單元測試；失敗擲 <see cref="SpeakerEnrichException"/>（人類可讀）、取消傳遞。
 /// </summary>
 public static class TranscriptFetch
 {

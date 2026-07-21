@@ -8,7 +8,7 @@ namespace LingoIsland.Query;
 /// <summary>
 /// 影片搜尋字幕狀態快取（[modQuery模組]，#188）：記每支影片探測過的**內嵌字幕（人工/自動）**與**網路字幕**結果，存
 /// <c>%APPDATA%\LingoIsland\video-subtitle-status.json</c>（VideoId → 狀態）。搜尋時**還原已知結果、不再重探**——
-/// 內嵌探測雖免費但慢（每列一個 yt-dlp 行程），網路探測**會花 OpenAI 額度**：快取讓同片重搜不再重花錢（#188 的核心動機）。
+/// 內嵌探測雖免費但慢（每列一次外部子行程探測），網路探測**會花 OpenAI 額度**：快取讓同片重搜不再重花錢（#188 的核心動機）。
 /// 內嵌與網路兩部分**各自獨立更新、互不覆寫**（<see cref="MergeEmbedded"/>／<see cref="MergeWeb"/>）。讀寫失敗一律靜默降級、退回未知（照原路即時探測），不影響搜尋主流程。
 /// </summary>
 public sealed class VideoSubtitleStatusStore

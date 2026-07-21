@@ -255,8 +255,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     }
 
     /// <summary>
-    /// 載入指定影片（epic #178 增量5′ pivot）：已存字幕→直接載入（免費）；未存→**取字幕檔→整理說話人＋台詞→Whisper 取時間→AI 逐句對齊**建立字幕
-    /// （會花費、跑前確認、模態顯進度），存檔後導引播放。字幕檔網址取自 finder 存入之 <see cref="_statusStore"/>（增量6′ 由輸入框另提供）；無字幕檔則提示先配字幕檔。
+    /// 載入指定影片（epic #178 增量6′-B「時間 pivot」定案）：已存字幕→直接載入（免費）；未存→**取字幕檔→自帶之時間＋說話人直接解析**建立字幕
+    /// （自帶時間軸者免費、不跑 AI；唯無時間戳之網頁式逐字稿才落 AI 抽取＝會花費、跑前確認、模態顯進度），存檔後導引播放。字幕檔網址取自 <see cref="_statusStore"/>（增量6′ 由輸入框提供）；無字幕檔則提示先配字幕檔。
     /// <paramref name="addToStore"/>＝true 時建立成功後加入影片清單（自搜尋結果載入）；點清單載入者已在清單、不重加。
     /// </summary>
     private async Task LoadVideoAsync(string id, bool addToStore, string? listItemId = null)
@@ -584,7 +584,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     /// <summary>
     /// 獲得（epic #178 增量6′「輸入 pivot」）：使用者於單一輸入框貼含**具體 YouTube 影片網址＋字幕檔網址**之自然語言文字。
     /// 以純字串抽出兩個網址（**不做關鍵字搜尋**——要求具體 URL、避免不穩的 AI 配片與鬼打牆），記字幕檔網址到該片、走載入管線建立字幕
-    /// （取字幕檔→整理說話人＋台詞→Whisper 取時間→逐句對齊；跑前確認費用）、加入內容頁。抽不到影片／字幕檔網址即以狀態列明確回報所缺、不動作、不花費。
+    /// （取字幕檔→自帶之時間＋說話人直接解析〔增量6′-B「時間 pivot」，免費〕；唯無時間戳之網頁式逐字稿才落 AI 抽取、跑前確認費用）、加入內容頁。抽不到影片／字幕檔網址即以狀態列明確回報所缺、不動作、不花費。
     /// </summary>
     private void DoAcquireBuild()
     {
