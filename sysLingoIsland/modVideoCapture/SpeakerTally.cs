@@ -30,6 +30,21 @@ public static class SpeakerTally
         return counts;
     }
 
+    /// <summary>
+    /// 依語句數**遞減**排序原子說話人名（同數以名字 <paramref name="comparer"/> 遞增 tie-break，穩定、決定性），
+    /// 供勾選面板「主要說話人置頂」呈現（#201）。<paramref name="counts"/> 缺鍵者以 0 計；純函式、可單元測試、不改比對邏輯。
+    /// 呼叫端負責把 `（全部說話人）` 置首、`（無說話人）` 置尾——本函式只排具名說話人。
+    /// </summary>
+    public static IReadOnlyList<string> OrderByLineCountDesc(
+        IEnumerable<string> atoms, IReadOnlyDictionary<string, int> counts, IComparer<string>? comparer = null)
+    {
+        comparer ??= StringComparer.OrdinalIgnoreCase;
+        return atoms
+            .OrderByDescending(a => counts.TryGetValue(a, out var n) ? n : 0)
+            .ThenBy(a => a, comparer)
+            .ToList();
+    }
+
     /// <summary>「（全部說話人）」列之語句數＝本片總句數（所有 cue）。</summary>
     public static int TotalCount(IReadOnlyCollection<SubtitleCue> cues) => cues.Count;
 

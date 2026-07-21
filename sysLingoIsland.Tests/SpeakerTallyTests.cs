@@ -69,4 +69,33 @@ public class SpeakerTallyTests
         Assert.Equal(0, SpeakerTally.TotalCount(new List<SubtitleCue>()));
         Assert.Equal(0, SpeakerTally.NoSpeakerCount(new List<SubtitleCue>()));
     }
+
+    // --- 依語句數遞減排序（#201；主要說話人置頂） ---
+
+    [Fact]
+    public void OrderByLineCountDesc_ByCountDesc_ThenNameAsc()
+    {
+        var counts = new Dictionary<string, int>(System.StringComparer.OrdinalIgnoreCase)
+        {
+            ["Peppa"] = 3, ["Suzy"] = 2, ["George"] = 3, ["Danny"] = 1,
+        };
+        var ordered = SpeakerTally.OrderByLineCountDesc(new[] { "Danny", "Suzy", "Peppa", "George" }, counts);
+        // 句數遞減：3,3,2,1；同 3 以名字遞增（George < Peppa）
+        Assert.Equal(new[] { "George", "Peppa", "Suzy", "Danny" }, ordered);
+    }
+
+    [Fact]
+    public void OrderByLineCountDesc_MissingCount_TreatedAsZero_SinksToBottom()
+    {
+        var counts = new Dictionary<string, int>(System.StringComparer.OrdinalIgnoreCase) { ["Rocky"] = 5 };
+        var ordered = SpeakerTally.OrderByLineCountDesc(new[] { "Zuma", "Rocky" }, counts);
+        Assert.Equal(new[] { "Rocky", "Zuma" }, ordered); // Zuma 無鍵＝0，沉底
+    }
+
+    [Fact]
+    public void OrderByLineCountDesc_Empty_ReturnsEmpty()
+    {
+        Assert.Empty(SpeakerTally.OrderByLineCountDesc(
+            System.Array.Empty<string>(), new Dictionary<string, int>()));
+    }
 }

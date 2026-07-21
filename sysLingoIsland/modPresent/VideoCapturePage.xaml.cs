@@ -1460,13 +1460,13 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         _speakerChecks.Clear();
         _everyoneCheck = null; _noSpeakerCheck = null;
 
-        var atoms = _cues.Where(c => !string.IsNullOrEmpty(c.Speaker))
-                         .SelectMany(c => PauseDecider.SplitSpeakers(c.Speaker))     // 合唸句拆為個別名字
-                         .Distinct(StringComparer.OrdinalIgnoreCase)
-                         .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
-                         .ToList();
         var hasNoSpeaker = _cues.Any(c => string.IsNullOrEmpty(c.Speaker));
-        var lineCounts = SpeakerTally.CountBySpeaker(_cues);                                     // 各原子說話人句數（合唸句各計一次，#196）——僅供顯示
+        var lineCounts = SpeakerTally.CountBySpeaker(_cues);                                     // 各原子說話人句數（合唸句各計一次，#196）——供顯示與排序
+        var atoms = SpeakerTally.OrderByLineCountDesc(                                           // 依語句數遞減排序（主要說話人置頂，#201）；同數以名字 tie-break
+            _cues.Where(c => !string.IsNullOrEmpty(c.Speaker))
+                 .SelectMany(c => PauseDecider.SplitSpeakers(c.Speaker))                          // 合唸句拆為個別名字
+                 .Distinct(StringComparer.OrdinalIgnoreCase),
+            lineCounts, StringComparer.OrdinalIgnoreCase);
 
         if (atoms.Count > 0 || hasNoSpeaker)
         {
@@ -1543,20 +1543,43 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     {
         _speakerColorHex = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var theme = CurrentTheme();
-        if (theme is null) { return; }
-        LingoIsland.Query.ThemeColors.Ensure(theme);
-        foreach (var sc in _speakerChecks)
+        if (theme is not null)
         {
-            if (sc.IsEveryone || sc.IsNoSpeaker) { continue; }
-            foreach (var col in theme.Colors) // 依槽序,取第一個描述含此說話人名之色
+            LingoIsland.Query.ThemeColors.Ensure(theme);
+            foreach (var sc in _speakerChecks)
             {
-                if (!string.IsNullOrWhiteSpace(col.Description) && !string.IsNullOrWhiteSpace(col.Hex)
-                    && col.Description.Contains(sc.Name, StringComparison.OrdinalIgnoreCase))
+                if (sc.IsEveryone || sc.IsNoSpeaker) { continue; }
+                foreach (var col in theme.Colors) // 依槽序,取第一個描述含此說話人名之色
                 {
-                    _speakerColorHex[sc.Name] = col.Hex.Trim();
-                    break;
+                    if (!string.IsNullOrWhiteSpace(col.Description) && !string.IsNullOrWhiteSpace(col.Hex)
+                        && col.Description.Contains(sc.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _speakerColorHex[sc.Name] = col.Hex.Trim();
+                        break;
+                    }
                 }
             }
+        }
+        ApplySpeakerListColors();  // #201：主題色套到清單各列名字（過淺壓暗）；無主題/未配色→預設近黑
+    }
+
+    /// <summary>
+    /// 依 <see cref="_speakerColorHex"/> 把主題色套到勾選面板各列之字型色（#201「比照字幕依人上色」）：
+    /// 具名說話人＝其主題色**經 <see cref="LingoIsland.Query.ColorMath.ReadableOnLight"/> 壓暗至白底可讀**（清單小字非粗體、近白面板，過淺色如亮黃恐不可讀）；
+    /// `（全部說話人）`／`（無說話人）`／未配色者＝預設近黑。字幕帶另循 <see cref="CueRow.SpeakerBrush"/>（大字、用原色不壓暗）。
+    /// 主題改指派／切回本頁時經 <see cref="RebuildSpeakerColors"/> 呼叫，NameBrush 通知即時刷新。
+    /// </summary>
+    private void ApplySpeakerListColors()
+    {
+        foreach (var sc in _speakerChecks)
+        {
+            System.Windows.Media.Brush brush = DefaultCueBrush;
+            if (!sc.IsEveryone && !sc.IsNoSpeaker && _speakerColorHex.TryGetValue(sc.Name, out var hex))
+            {
+                var readable = LingoIsland.Query.ColorMath.ReadableOnLight(hex);
+                if (!string.IsNullOrEmpty(readable)) { brush = BrushOfHex(readable); }
+            }
+            sc.NameBrush = brush;
         }
     }
 
@@ -1803,10 +1826,15 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         public System.Windows.Media.Brush SpeakerBrush { get => _speakerBrush; private set { if (!ReferenceEquals(_speakerBrush, value)) { _speakerBrush = value; Raise(nameof(SpeakerBrush)); } } }
         private System.Windows.FontWeight _lineWeight = System.Windows.FontWeights.Normal;
         public System.Windows.FontWeight LineWeight { get => _lineWeight; private set { if (_lineWeight != value) { _lineWeight = value; Raise(nameof(LineWeight)); } } }
-        /// <summary>設定本列字型色（hex 非 null＝該說話人有主題配對色;否則預設深色）＋是否加粗（只加粗勾選模式）。</summary>
+        /// <summary>
+        /// 設定本列字型色（hex 非 null＝該說話人有主題配對色;否則預設深色）＋是否加粗（只加粗勾選模式）。
+        /// #201：**逐句清單為小字白底**，主題色**過淺者壓暗至白底可讀**（<see cref="LingoIsland.Query.ColorMath.ReadableOnLight"/>，與說話人勾選面板 <see cref="SpeakerCheck.NameBrush"/> 同口徑、兩小字面一致）；
+        /// 字幕帶（大字，見 <see cref="RenderClickable"/>）另循原鮮色、不壓暗。
+        /// </summary>
         public void SetEmphasis(string? hex, bool bold)
         {
-            SpeakerBrush = hex is not null ? BrushOfHex(hex) : DefaultCueBrush;
+            var readable = hex is null ? null : LingoIsland.Query.ColorMath.ReadableOnLight(hex);
+            SpeakerBrush = !string.IsNullOrEmpty(readable) ? BrushOfHex(readable) : DefaultCueBrush;
             LineWeight = bold ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
         }
 
@@ -1853,6 +1881,9 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         public System.Windows.Visibility AddNotesVisibility => IsEveryone ? System.Windows.Visibility.Collapsed : System.Windows.Visibility.Visible;
         /// <summary>斑馬紋列底色（USR：全白難分辨列尾圖示對應哪個名字）——建構時依索引指派奇偶色。</summary>
         public System.Windows.Media.Brush RowStripe { get; set; } = System.Windows.Media.Brushes.Transparent;
+        private System.Windows.Media.Brush _nameBrush = DefaultCueBrush;
+        /// <summary>此列名字之字型色（#201「比照字幕依人上色」）：具名說話人＝其主題色（過淺已壓暗至白底可讀），`（全部說話人）`／`（無說話人）`／未配色＝預設近黑；由 <see cref="ApplySpeakerListColors"/> 指派、可即時通知（主題改指派時刷新）。</summary>
+        public System.Windows.Media.Brush NameBrush { get => _nameBrush; set { if (!ReferenceEquals(_nameBrush, value)) { _nameBrush = value; PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(NameBrush))); } } }
         private bool _checked = true;
         public bool IsChecked { get => _checked; set { if (_checked != value) { _checked = value; PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsChecked))); } } }
     }

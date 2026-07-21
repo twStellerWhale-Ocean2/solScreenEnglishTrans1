@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="380" height="322" viewBox="0 0 380 322" font-family="Segoe UI, Microsoft JhengHei, sans-serif">
+  <!-- #201 說話人清單依人上色、依語句數排序：預覽（顏色為 ColorMath.ReadableOnLight 對預設主題 12 色之實際輸出、排序為 SpeakerTally.OrderByLineCountDesc 實際結果） -->
+  <rect x="0" y="0" width="380" height="322" fill="#FDF5F8"/>
+  <!-- 面板外框（比照 #F4C2D0 粉框、近白底） -->
+  <rect x="10" y="10" width="360" height="302" rx="6" fill="#FBFCFF" stroke="#F4C2D0" stroke-width="1"/>
+  <!-- 標題列 -->
+  <text x="22" y="30" font-size="12.5" fill="#B0578D">說話人（供上方篩選與暫停使用）</text>
+  <line x1="18" y1="38" x2="362" y2="38" stroke="#F4E2E9" stroke-width="1"/>
+
+  <!-- 列：zebra（奇列 #FAE8EF）；勾選框（☑ 深灰）＋「名字 (語句數)」依人上色＋列尾加入筆記鈕（粉，全選列不顯） -->
+  <!-- row0 Everyone：粗體、預設近黑、置首、無筆記鈕、even 透明 -->
+  <g transform="translate(18,42)">
+    <rect x="0" y="0" width="344" height="31" fill="transparent"/>
+    <rect x="8" y="9" width="13" height="13" rx="2" fill="#2A2A2A"/>
+    <path d="M11 15 l2.4 2.6 L18 12" fill="none" stroke="#fff" stroke-width="1.6"/>
+    <text x="28" y="20" font-size="12.5" font-weight="700" fill="#2A2A2A">（全部說話人） (216)</text>
+  </g>
+  <!-- row1 Ryder 72：紅 #E53935（達標不變）、odd #FAE8EF -->
+  <g transform="translate(18,73)">
+    <rect x="0" y="0" width="344" height="31" fill="#FAE8EF"/>
+    <rect x="8" y="9" width="13" height="13" rx="2" fill="#2A2A2A"/>
+    <path d="M11 15 l2.4 2.6 L18 12" fill="none" stroke="#fff" stroke-width="1.6"/>
+    <text x="28" y="20" font-size="12.5" fill="#E53935">Ryder (72)</text>
+    <text x="322" y="21" font-size="13" fill="#B0578D" font-family="Segoe MDL2 Assets">&#xE70B;</text>
+  </g>
+  <!-- row2 Marshall 58：藍 #1E88E5（達標不變）、even -->
+  <g transform="translate(18,104)">
+    <rect x="0" y="0" width="344" height="31" fill="transparent"/>
+    <rect x="8" y="9" width="13" height="13" rx="2" fill="#2A2A2A"/>
+    <path d="M11 15 l2.4 2.6 L18 12" fill="none" stroke="#fff" stroke-width="1.6"/>
+    <text x="28" y="20" font-size="12.5" fill="#1E88E5">Marshall (58)</text>
+    <text x="322" y="21" font-size="13" fill="#B0578D" font-family="Segoe MDL2 Assets">&#xE70B;</text>
+  </g>
+  <!-- row3 Skye 58：黃 #FDD835 → 壓暗 #AC8C02（同 58 以名字 tie-break，Marshall<Skye）、odd -->
+  <g transform="translate(18,135)">
+    <rect x="0" y="0" width="344" height="31" fill="#FAE8EF"/>
+    <rect x="8" y="9" width="13" height="13" rx="2" fill="#2A2A2A"/>
+    <path d="M11 15 l2.4 2.6 L18 12" fill="none" stroke="#fff" stroke-width="1.6"/>
+    <text x="28" y="20" font-size="12.5" fill="#AC8C02">Skye (58)</text>
+    <text x="128" y="20" font-size="9.5" fill="#9A6A82">← 主題色亮黃 #FDD835 壓暗保可讀</text>
+    <text x="322" y="21" font-size="13" fill="#B0578D" font-family="Segoe MDL2 Assets">&#xE70B;</text>
+  </g>
+  <!-- row4 Rubble 31：橘 #FB8C00 → 壓暗 #DC7B00、even -->
+  <g transform="translate(18,166)">
+    <rect x="0" y="0" width="344" height="31" fill="transparent"/>
+    <rect x="8" y="9" width="13" height="13" rx="2" fill="#2A2A2A"/>
+    <path d="M11 15 l2.4 2.6 L18 12" fill="none" stroke="#fff" stroke-width="1.6"/>
+    <text x="28" y="20" font-size="12.5" fill="#DC7B00">Rubble (31)</text>
+    <text x="322" y="21" font-size="13" fill="#B0578D" font-family="Segoe MDL2 Assets">&#xE70B;</text>
+  </g>
+  <!-- row5 Zuma 12：綠 #43A047（達標不變）、odd -->
+  <g transform="translate(18,197)">
+    <rect x="0" y="0" width="344" height="31" fill="#FAE8EF"/>
+    <rect x="8" y="9" width="13" height="13" rx="2" fill="#2A2A2A"/>
+    <path d="M11 15 l2.4 2.6 L18 12" fill="none" stroke="#fff" stroke-width="1.6"/>
+    <text x="28" y="20" font-size="12.5" fill="#43A047">Zuma (12)</text>
+    <text x="322" y="21" font-size="13" fill="#B0578D" font-family="Segoe MDL2 Assets">&#xE70B;</text>
+  </g>
+  <!-- row6 Rocky 8：主題未配色 → 預設近黑、even -->
+  <g transform="translate(18,228)">
+    <rect x="0" y="0" width="344" height="31" fill="transparent"/>
+    <rect x="8" y="9" width="13" height="13" rx="2" fill="#2A2A2A"/>
+    <path d="M11 15 l2.4 2.6 L18 12" fill="none" stroke="#fff" stroke-width="1.6"/>
+    <text x="28" y="20" font-size="12.5" fill="#2A2A2A">Rocky (8)</text>
+    <text x="112" y="20" font-size="9.5" fill="#9A6A82">← 主題未點名此人 → 預設色（同字幕）</text>
+    <text x="322" y="21" font-size="13" fill="#B0578D" font-family="Segoe MDL2 Assets">&#xE70B;</text>
+  </g>
+  <!-- row7 （無說話人）6：預設近黑、置尾、odd -->
+  <g transform="translate(18,259)">
+    <rect x="0" y="0" width="344" height="31" fill="#FAE8EF"/>
+    <rect x="8" y="9" width="13" height="13" rx="2" fill="#2A2A2A"/>
+    <path d="M11 15 l2.4 2.6 L18 12" fill="none" stroke="#fff" stroke-width="1.6"/>
+    <text x="28" y="20" font-size="12.5" fill="#2A2A2A">（無說話人） (6)</text>
+  </g>
+
+  <text x="18" y="304" font-size="9.5" fill="#B692A6">預覽：顏色為 ColorMath.ReadableOnLight 對預設 12 色之實際輸出、排序為 SpeakerTally.OrderByLineCountDesc 實際結果；實機外觀待 USR 手測確認。</text>
+</svg>

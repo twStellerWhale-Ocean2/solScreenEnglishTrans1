@@ -47,4 +47,40 @@ public static class ColorMath
         HslToRgb(h, Math.Min(s, 0.55), 0.90, out var r2, out var g2, out var b2);
         return $"#{r2:X2}{g2:X2}{b2:X2}";
     }
+
+    /// <summary>WCAG 相對亮度（sRGB 線性化加權；0＝黑、1＝白）。</summary>
+    public static double RelativeLuminance(byte r, byte g, byte b)
+    {
+        static double Lin(byte c) { var s = c / 255.0; return s <= 0.03928 ? s / 12.92 : Math.Pow((s + 0.055) / 1.055, 2.4); }
+        return 0.2126 * Lin(r) + 0.7152 * Lin(g) + 0.0722 * Lin(b);
+    }
+
+    /// <summary>兩相對亮度之 WCAG 對比比（1～21）。</summary>
+    public static double ContrastRatio(double lum1, double lum2)
+    {
+        double hi = Math.Max(lum1, lum2), lo = Math.Min(lum1, lum2);
+        return (hi + 0.05) / (lo + 0.05);
+    }
+
+    /// <summary>
+    /// 把（可能過淺之）主題色調整為「白底小字可讀」之**字型色**：保色相/飽和，若對白底對比不足
+    /// <paramref name="minContrast"/>（預設 3.0）即逐步**降低 HSL 亮度**至達標（或觸底 L=0.10），使亮黃/萊姆/青等
+    /// 淺色不致於近白面板上看不清名字。已達標者原樣返回（含多數高飽和色）；非法 hex 回空字串。純函式、可單元測試。
+    /// </summary>
+    public static string ReadableOnLight(string? hex, double minContrast = 3.0)
+    {
+        if (!TryParseHex(hex, out var r, out var g, out var b)) { return ""; }
+        const double bgLum = 1.0; // 近白面板底，以白為保守參考
+        if (ContrastRatio(RelativeLuminance(r, g, b), bgLum) >= minContrast) { return $"#{r:X2}{g:X2}{b:X2}"; }
+        RgbToHsl(r, g, b, out var h, out var s, out var l);
+        for (var li = l; li >= 0.10; li -= 0.02)
+        {
+            HslToRgb(h, s, li, out var rr, out var gg, out var bb);
+            if (ContrastRatio(RelativeLuminance(rr, gg, bb), bgLum) >= minContrast || li - 0.02 < 0.10)
+            {
+                return $"#{rr:X2}{gg:X2}{bb:X2}";
+            }
+        }
+        return $"#{r:X2}{g:X2}{b:X2}";
+    }
 }

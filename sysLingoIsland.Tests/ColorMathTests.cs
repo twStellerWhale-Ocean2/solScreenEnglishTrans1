@@ -47,4 +47,40 @@ public class ColorMathTests
         ColorMath.HslToRgb(h, s, l, out var r2, out var g2, out var b2);
         Assert.True(System.Math.Abs(r - r2) <= 1 && System.Math.Abs(g - g2) <= 1 && System.Math.Abs(b - b2) <= 1);
     }
+
+    // --- ReadableOnLight（#201：過淺主題色壓暗至白底可讀，供說話人清單小字字型色） ---
+
+    [Fact]
+    public void ReadableOnLight_TooLightColor_DarkenedToMeetContrast()
+    {
+        // 亮黃 #FDD835 對白底對比 ~1.4:1，遠低於門檻→須壓暗
+        var readable = ColorMath.ReadableOnLight("#FDD835");
+        Assert.True(ColorMath.TryParseHex(readable, out var r, out var g, out var b));
+        var contrast = ColorMath.ContrastRatio(ColorMath.RelativeLuminance(r, g, b), 1.0);
+        Assert.True(contrast >= 3.0 - 0.05, $"壓暗後對白底對比應達門檻 3.0，實得 {contrast:0.00}");
+        Assert.NotEqual("#FDD835", readable); // 已壓暗、非原亮黃
+    }
+
+    [Fact]
+    public void ReadableOnLight_AlreadyReadable_Unchanged()
+    {
+        // 深洋紅 #D81B60 對白底對比 ~5:1，已達標→原樣返回（大寫正規化）
+        Assert.Equal("#D81B60", ColorMath.ReadableOnLight("#D81B60"));
+    }
+
+    [Fact]
+    public void ReadableOnLight_PreservesHue_WhenDarkening()
+    {
+        var readable = ColorMath.ReadableOnLight("#FDD835"); // 黃（色相約 45–55°）
+        Assert.True(ColorMath.TryParseHex(readable, out var r, out var g, out var b));
+        ColorMath.RgbToHsl(r, g, b, out var h, out _, out _);
+        Assert.InRange(h, 40.0, 65.0); // 壓暗保色相，仍是黃
+    }
+
+    [Fact]
+    public void ReadableOnLight_InvalidHex_Empty()
+    {
+        Assert.Equal("", ColorMath.ReadableOnLight("nope"));
+        Assert.Equal("", ColorMath.ReadableOnLight(null));
+    }
 }

@@ -348,7 +348,7 @@
                                 <ColumnDefinition Width="Auto"/>
                               </Grid.ColumnDefinitions>
                               <CheckBox Grid.Column="0" Content="{Binding DisplayName}" IsChecked="{Binding IsChecked, Mode=TwoWay}"
-                                        FontWeight="{Binding Weight}" FontSize="12" Margin="4,2" VerticalContentAlignment="Center"/>
+                                        FontWeight="{Binding Weight}" FontSize="12" Foreground="{Binding NameBrush}" Margin="4,2" VerticalContentAlignment="Center"/>
                               <Button Grid.Column="1" Content="&#xE70B;" FontFamily="Segoe MDL2 Assets" Foreground="#B0578D"
                                       Background="Transparent" BorderThickness="0" Cursor="Hand"
                                       Width="24" Height="22" Padding="0" FontSize="15" Margin="2,1,6,1"
