@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
              xmlns:local="clr-namespace:LingoIsland.Present"
-             Background="Transparent">
+             Background="Transparent" Focusable="True">
   <UserControl.Resources>
     <!-- 標準表格控制項 DataGrid 主題（#177）：透明底、粉表頭、細列分隔、粉選取；欄可拖曳調寬/排序/重排（內建） -->
     <Style x:Key="GridColHeader" TargetType="DataGridColumnHeader">

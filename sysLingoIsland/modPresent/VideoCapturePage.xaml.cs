@@ -38,6 +38,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private int _lastPausedIndex = -1; // 上次已暫停之 cue（PauseDecider 用）
     private int? _navPauseIndex;       // #208 導航一次性暫停 override：上一句/下一句/雙擊跳句後，下一暫停點強制為目標句句末（全部句規則）——防指定說話人暫停下導航至非勾選句立即彈回原句；停達或狀態重置即清、恢復勾選規則
     private bool _holdCueDisplay;      // #208 未定時句導航之顯示保持：該句無法 seek（#184）、暫停原地時 poll 不以時間對應句覆蓋顯示；任何播放/導航動作解除
+    private double _lastPollSec = -1;  // #208 審查修：上輪 poll 播放秒數——時間確實前進即解除顯示保持（涵蓋播放器自身播放鈕續播）
     private int _shownCue = -1;        // 目前字幕帶顯示之 cue
     private bool _webReady;
     private Task? _webInit;            // WebView2 單次初始化任務（避 Loaded 與 Load 併發重複 CreateAsync 擲例外）
@@ -157,6 +158,8 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         Loaded += async (_, _) => await EnsureWebAsync();
         IsVisibleChanged += OnVisibleChanged; // 切走分頁：停輪詢＋暫停播放；切回：恢復輪詢
         PreviewKeyDown += OnPageHotkey;       // #208 內容頁快速鍵：Space＝繼續/暫停、←＝上一句、→＝下一句（穿隧搶先；打字/下拉/YAML 編修不劫）
+        // #208 審查修：初入頁焦點死區——以滑鼠切至影片頁時焦點停在功能列鈕（頁外）、頁級 PreviewKeyDown 收不到；可見即種焦點至頁內
+        IsVisibleChanged += (_, e2) => { if ((bool)e2.NewValue && SubTabPlay.IsChecked == true) { Dispatcher.BeginInvoke(new Action(() => Keyboard.Focus(this)), System.Windows.Threading.DispatcherPriority.Input); } };
 
         // 影片清單（epic #145 增量4）＋依 theme 篩選（B）：點清單載入該片、篩選、初次載入
         VideoList.SelectionChanged += OnVideoSelect;
@@ -1129,6 +1132,8 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
 
             // 播放時字幕清單跟隨（#178 增量6′-B USR）：當前句隨播放時間前進即高亮＋捲動＋更新字幕帶（不只在暫停點）。
             // #208：顯示保持中（未定時句導航）不覆蓋；導航 override 期間 seek 落點早於目標句（YouTube 關鍵幀對齊）不回退顯示。
+            if (_holdCueDisplay && t > _lastPollSec + 0.2) { _holdCueDisplay = false; } // 審查修：播放時間確實前進＝使用者已續播（含播放器自身播放鈕，不經 Resume/Toggle）→ 解除顯示保持
+            _lastPollSec = t;
             var cur = PauseDecider.CueAt(t, _cues);
             if (cur >= 0 && cur != _shownCue && !_holdCueDisplay && !(_navPauseIndex is int hold && cur < hold)) { ShowCue(cur); }
 
@@ -1392,7 +1397,8 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     private void OnPageHotkey(object sender, System.Windows.Input.KeyEventArgs e)
     {
         if (e.Key is not (Key.Space or Key.Left or Key.Right)) { return; }
-        if (SubTabPlay.IsChecked != true || !_webReady || _cues.Count == 0 || _yamlEditing) { return; }
+        if (SubTabPlay.IsChecked != true || !_webReady || !_playbackStarted || _cues.Count == 0 || _yamlEditing) { return; } // 審查修：補 _playbackStarted——載入視窗期不提早解鎖控制/設過期 override
+        if (e.Key == Key.Space && e.IsRepeat) { e.Handled = true; return; } // 審查修：長按 Space 自動重複＝播/停高頻抖動，濾之
         if (IsTypingTarget(e.OriginalSource as System.Windows.DependencyObject)) { return; }
         switch (e.Key)
         {
@@ -1410,7 +1416,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         {
             if (d is System.Windows.Controls.Primitives.TextBoxBase or System.Windows.Controls.PasswordBox
                 or System.Windows.Controls.ComboBox or System.Windows.Controls.ComboBoxItem) { return true; }
-            d = System.Windows.Media.VisualTreeHelper.GetParent(d);
+            d = VisualOrLogicalParent(d); // 審查修：OriginalSource 可為 ContentElement（字幕帶 Hyperlink/Run 焦點）——裸 VisualTreeHelper.GetParent 必擲，走 Visual/邏輯樹雙軌
         }
         return false;
     }
@@ -1492,6 +1498,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         {
             _navPauseIndex = null;
             _holdCueDisplay = true; // #184 未定時句無法跳轉定位——顯示保持本句、不被 poll 拉回
+            try { await Web.ExecuteScriptAsync("window.li_pause&&window.li_pause()"); } catch { /* 盡力暫停 */ } // 審查修：比照 NavigateToCueAsync 暫停原地，免播放續走音畫脫節
         }
     }
 
@@ -1517,6 +1524,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         // 依開始時間穩定排序（增量6′-B 修）:PauseDecider／CueAt 要求 cues 遞增,而逐字稿頁常見場景倒敘/片尾曲致時間回退
         // （USR「選 Ryder 沒每次停」病根）。載入、時間偏移、YAML 編修**三條安裝路徑皆經此**→單點保證單調。對已遞增輸入 idempotent。
         _cues = SubtitleParser.NormalizeOrder(cues);
+        _navPauseIndex = null; _holdCueDisplay = false; // #208 審查修：cues 換裝（載入/時間平移/YAML 套用）即作廢導航 override——舊 index 對新 cues 失義，殘留會靜默癱瘓勾選暫停
         _rows = new List<CueRow>(_cues.Count);
         for (var i = 0; i < _cues.Count; i++) _rows.Add(new CueRow(i, _cues[i]));
         CueList.ItemsSource = _rows;
