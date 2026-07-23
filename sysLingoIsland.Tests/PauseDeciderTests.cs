@@ -325,4 +325,32 @@ public class PauseDeciderTests
         var allNull = new List<SubtitleCue> { new("x", (double?)null), new("y", (double?)null) };
         Assert.Equal(-1, PauseDecider.CueAt(50.0, allNull));
     }
+
+    // ── 導航一次性暫停 override 之語意（#208，修「上一句彈回」）──
+    // UI 導航（上一句/下一句/雙擊跳句）至句 i 後，以 NextPause(t, cues, i-1)（無 targets＝全部句規則）判
+    // 「句 i 句末必停」；若沿用說話人勾選規則，導航至非勾選句會跳過它、停在後面勾選句起點＝彈回原句（病因對照）。
+    private static readonly List<SubtitleCue> NavCues = new()
+    {
+        new SubtitleCue("hi", 1.0, "Peppa"),
+        new SubtitleCue("oink", 3.0, "George"),  // 導航目標：非勾選句
+        new SubtitleCue("dear", 5.0, "Peppa"),   // 勾選句（targeted 停其起點）
+    };
+
+    [Fact]
+    public void NextPause_NavOverride_PausesNavTargetAtItsEnd_IgnoresSpeakerFilter()
+    {
+        // 導航至句 1（George、非勾選）：override 呼叫形＝lastPausedIndex=0、無 targets → 句 1 於下一句開始（5.0）暫停。
+        Assert.Equal(-1, PauseDecider.NextPause(3.2, NavCues, 0));  // 句中不停（不早停）
+        Assert.Equal(-1, PauseDecider.NextPause(4.9, NavCues, 0));
+        Assert.Equal(1, PauseDecider.NextPause(5.0, NavCues, 0));   // 句 1 句末＝必停（override 語意）
+    }
+
+    [Fact]
+    public void NextPause_SpeakerFilterOnly_WouldBounceBackToTargetedCue()
+    {
+        // 病因對照（#208）：同一情境若仍帶說話人勾選（只停 Peppa），句 1（George）被跳過、
+        // 於句 2（Peppa）起點 5.0 即停——畫面落回勾選句＝使用者所見「按上一句又彈回」。
+        Assert.Equal(-1, PauseDecider.NextPause(4.9, NavCues, 0, pauseSpeakers: new[] { "Peppa" }));
+        Assert.Equal(2, PauseDecider.NextPause(5.0, NavCues, 0, pauseSpeakers: new[] { "Peppa" })); // 停句 2 起點、非句 1 句末
+    }
 }

@@ -36,6 +36,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     private bool _cueDoubleClicking;                               // 雙擊進行中：抑制其第二次放開再武裝單擊計時（否則雙擊跳轉暫停後又被單擊 toggle 續播）
     private IReadOnlyList<SubtitleCue> _cues = new List<SubtitleCue>();
     private int _lastPausedIndex = -1; // 上次已暫停之 cue（PauseDecider 用）
+    private int? _navPauseIndex;       // #208 導航一次性暫停 override：上一句/下一句/雙擊跳句後，下一暫停點強制為目標句句末（全部句規則）——防指定說話人暫停下導航至非勾選句立即彈回原句；停達或狀態重置即清、恢復勾選規則
+    private bool _holdCueDisplay;      // #208 未定時句導航之顯示保持：該句無法 seek（#184）、暫停原地時 poll 不以時間對應句覆蓋顯示；任何播放/導航動作解除
+    private double _lastPollSec = -1;  // #208 審查修：上輪 poll 播放秒數——時間確實前進即解除顯示保持（涵蓋播放器自身播放鈕續播）
     private int _shownCue = -1;        // 目前字幕帶顯示之 cue
     private bool _webReady;
     private Task? _webInit;            // WebView2 單次初始化任務（避 Loaded 與 Load 併發重複 CreateAsync 擲例外）
@@ -154,6 +157,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         CancelYamlBtn.Click += (_, _) => CancelYamlEdit();
         Loaded += async (_, _) => await EnsureWebAsync();
         IsVisibleChanged += OnVisibleChanged; // 切走分頁：停輪詢＋暫停播放；切回：恢復輪詢
+        PreviewKeyDown += OnPageHotkey;       // #208 內容頁快速鍵：Space＝繼續/暫停、←＝上一句、→＝下一句（穿隧搶先；打字/下拉/YAML 編修不劫）
+        // #208 審查修：初入頁焦點死區——以滑鼠切至影片頁時焦點停在功能列鈕（頁外）、頁級 PreviewKeyDown 收不到；可見即種焦點至頁內
+        IsVisibleChanged += (_, e2) => { if ((bool)e2.NewValue && SubTabPlay.IsChecked == true) { Dispatcher.BeginInvoke(new Action(() => Keyboard.Focus(this)), System.Windows.Threading.DispatcherPriority.Input); } };
 
         // 影片清單（epic #145 增量4）＋依 theme 篩選（B）：點清單載入該片、篩選、初次載入
         VideoList.SelectionChanged += OnVideoSelect;
@@ -300,7 +306,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 
         SetLoading(true);
         _guiding = false; _poll.Stop();
-        _lastPausedIndex = -1; _shownCue = -1; _playbackStarted = false;
+        _lastPausedIndex = -1; _shownCue = -1; _playbackStarted = false; _navPauseIndex = null; _holdCueDisplay = false; // #208 導航 override 隨載入重置
         _currentTitle = null; // 增量6：新片重置標題（起播後自播放器重新取得）
         _currentVideoId = id;  // 字幕存檔鍵（#174）
         SetWatchUrl(id);       // #177：內容區塊顯示可點超連結網址
@@ -1022,7 +1028,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _currentVideoItemId = null;
         _currentVideoId = null;
         _guiding = false; _poll.Stop();
-        _lastPausedIndex = -1; _shownCue = -1; _playbackStarted = false;
+        _lastPausedIndex = -1; _shownCue = -1; _playbackStarted = false; _navPauseIndex = null; _holdCueDisplay = false; // #208 導航 override 隨載入重置
         _currentTitle = null;
         if (_webReady) { try { Web.CoreWebView2.Navigate("about:blank"); } catch { /* 盡力清空播放器 */ } }
         ClearCues();
@@ -1125,10 +1131,24 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
             }
 
             // 播放時字幕清單跟隨（#178 增量6′-B USR）：當前句隨播放時間前進即高亮＋捲動＋更新字幕帶（不只在暫停點）。
+            // #208：顯示保持中（未定時句導航）不覆蓋；導航 override 期間 seek 落點早於目標句（YouTube 關鍵幀對齊）不回退顯示。
+            if (_holdCueDisplay && t > _lastPollSec + 0.2) { _holdCueDisplay = false; } // 審查修：播放時間確實前進＝使用者已續播（含播放器自身播放鈕，不經 Resume/Toggle）→ 解除顯示保持
+            _lastPollSec = t;
             var cur = PauseDecider.CueAt(t, _cues);
-            if (cur >= 0 && cur != _shownCue) { ShowCue(cur); }
+            if (cur >= 0 && cur != _shownCue && !_holdCueDisplay && !(_navPauseIndex is int hold && cur < hold)) { ShowCue(cur); }
 
-            if (PauseTargets() is { } pt) // 等待模式＝依勾選（#189-checklist）：不等待模式回 null→只跟隨、不暫停
+            if (_navPauseIndex is int nav) // #208 導航一次性暫停 override：目標句句末必停（全部句規則）——防指定說話人暫停把導航彈回勾選句；停達即恢復勾選規則
+            {
+                var pause = PauseDecider.NextPause(t, _cues, nav - 1);
+                if (pause >= 0)
+                {
+                    _lastPausedIndex = pause;
+                    _navPauseIndex = null;
+                    try { await Web.ExecuteScriptAsync("window.li_pause&&window.li_pause()"); } catch { /* 盡力暫停 */ }
+                    ShowCue(pause);
+                }
+            }
+            else if (PauseTargets() is { } pt) // 等待模式＝依勾選（#189-checklist）：不等待模式回 null→只跟隨、不暫停
             {
                 var pause = PauseDecider.NextPause(t, _cues, _lastPausedIndex, pauseSpeakers: pt.Targets, pauseNoSpeaker: pt.NoSpeaker); // 勾選之說話人（含未標示）才暫停；Everyone 全勾→逐句停
                 if (pause >= 0)
@@ -1371,7 +1391,38 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         return $"{title} - {speaker}";
     }
 
-    /// <summary>Previous（USR：原 Replay 改此）：跳到**上一句**起點並自該處播放（鏡像 <see cref="SkipNextAsync"/>）；已在首句則忽略。</summary>
+    /// <summary>#208 內容頁快速鍵（頁級穿隧）：`Space`＝繼續/暫停切換、`←`＝上一句、`→`＝下一句。
+    /// 僅內容 pane 可見＋播放器就緒＋非 YAML 編修時作用；焦點在文字輸入／下拉（打字、選項導航）不劫走；
+    /// 焦點落 WebView2 內時 WPF 收不到鍵盤（HWND 島，平台限制）——點字幕帶或控制列即回。</summary>
+    private void OnPageHotkey(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Space or Key.Left or Key.Right)) { return; }
+        if (SubTabPlay.IsChecked != true || !_webReady || !_playbackStarted || _cues.Count == 0 || _yamlEditing) { return; } // 審查修：補 _playbackStarted——載入視窗期不提早解鎖控制/設過期 override
+        if (e.Key == Key.Space && e.IsRepeat) { e.Handled = true; return; } // 審查修：長按 Space 自動重複＝播/停高頻抖動，濾之
+        if (IsTypingTarget(e.OriginalSource as System.Windows.DependencyObject)) { return; }
+        switch (e.Key)
+        {
+            case Key.Space: _ = TogglePlayPauseAsync(); break;
+            case Key.Left: _ = SkipPrevAsync(); break;
+            case Key.Right: _ = SkipNextAsync(); break;
+        }
+        e.Handled = true;
+    }
+
+    /// <summary>#208：快速鍵不得劫走打字／下拉操作——來源沿視覺樹上溯遇文字框（TextBoxBase/PasswordBox）或下拉（ComboBox/ComboBoxItem，含 Popup 內項）即放行預設行為。</summary>
+    private static bool IsTypingTarget(System.Windows.DependencyObject? d)
+    {
+        while (d is not null)
+        {
+            if (d is System.Windows.Controls.Primitives.TextBoxBase or System.Windows.Controls.PasswordBox
+                or System.Windows.Controls.ComboBox or System.Windows.Controls.ComboBoxItem) { return true; }
+            d = VisualOrLogicalParent(d); // 審查修：OriginalSource 可為 ContentElement（字幕帶 Hyperlink/Run 焦點）——裸 VisualTreeHelper.GetParent 必擲，走 Visual/邏輯樹雙軌
+        }
+        return false;
+    }
+
+    /// <summary>Previous（USR：原 Replay 改此）：跳到**上一句**起點並自該處播放（鏡像 <see cref="SkipNextAsync"/>）；已在首句則忽略。
+    /// #208：設導航一次性暫停 override（該句句末必停、不被說話人勾選彈回）；未定時句（#184）無法 seek→暫停原地、顯示保持。</summary>
     private async Task SkipPrevAsync()
     {
         if (_cues.Count == 0 || !_webReady) return;
@@ -1379,25 +1430,45 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         if (prev < 0) return;
         _lastPausedIndex = prev - 1;
         ShowCue(prev);
-        if (_cues[prev].StartSec is double sec) await SeekAsync(sec); // #184：未定時句仍顯示，但無法 seek 定位
+        await NavigateToCueAsync(prev);
+    }
+
+    /// <summary>#208 導航共用尾段：已定時句→設 override、seek 起點播放；未定時句→暫停原地、顯示保持該句（`li_pause` 盡力）。</summary>
+    private async Task NavigateToCueAsync(int i)
+    {
+        if (_cues[i].StartSec is double sec)
+        {
+            _holdCueDisplay = false;
+            _navPauseIndex = i;
+            await SeekAsync(sec);
+        }
+        else
+        {
+            _navPauseIndex = null;
+            _holdCueDisplay = true;
+            try { await Web.ExecuteScriptAsync("window.li_pause&&window.li_pause()"); } catch { /* 盡力暫停 */ }
+        }
     }
 
     private async Task ResumeAsync()
     {
         if (!_webReady) return;
+        _holdCueDisplay = false; // #208：續播即恢復顯示跟隨
         try { await Web.ExecuteScriptAsync("window.li_play&&window.li_play()"); } catch { /* 盡力續播 */ }
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern uint GetDoubleClickTime(); // 系統雙擊判定時間（ms），供區分字幕清單單擊/雙擊
 
-    /// <summary>字幕清單單擊**已選中**之句：切換播放/暫停（依播放器實際狀態）；未就緒／無字幕／YAML 編修中則忽略。</summary>
+    /// <summary>字幕清單單擊**已選中**之句：切換播放/暫停（依播放器實際狀態）；未就緒／無字幕／YAML 編修中則忽略。#208 亦為 `Space` 快速鍵動作。</summary>
     private async Task TogglePlayPauseAsync()
     {
         if (!_webReady || _cues.Count == 0 || _yamlEditing) { return; }
+        _holdCueDisplay = false; // #208：播放動作即恢復顯示跟隨
         try { await Web.ExecuteScriptAsync("window.li_toggle&&window.li_toggle()"); } catch { /* 盡力切換 */ }
     }
 
+    /// <summary>下一句（#208：同 <see cref="SkipPrevAsync"/> 設導航 override）。</summary>
     private async Task SkipNextAsync()
     {
         if (_cues.Count == 0 || !_webReady) return;
@@ -1405,10 +1476,11 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         if (next >= _cues.Count) return;
         _lastPausedIndex = next - 1;
         ShowCue(next);
-        if (_cues[next].StartSec is double sec) await SeekAsync(sec); // #184：未定時句仍顯示，但無法 seek 定位
+        await NavigateToCueAsync(next);
     }
 
-    /// <summary>雙擊字幕句→**跳到該句起點、暫停並顯示該處畫面**（只定位不續播；之後按 ▶ Continue 才自該句起播、到句末暫停）。</summary>
+    /// <summary>雙擊字幕句→**跳到該句起點、暫停並顯示該處畫面**（只定位不續播；之後按 ▶ Continue 才自該句起播、到句末暫停）。
+    /// #208：Continue 後之暫停點以導航 override 強制為**本句句末**（不受說話人勾選跳過本句、連播至下個勾選句）。</summary>
     private async Task JumpToSelectedAsync()
     {
         if (CueList.SelectedItem is not CueRow row || !_webReady) return;
@@ -1416,7 +1488,18 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         if (i < 0 || i >= _cues.Count) return;
         _lastPausedIndex = i - 1; // 之後 Continue＝自此句起點播、到句末暫停（不影響本次「只定位不播」）
         ShowCue(i);
-        if (_cues[i].StartSec is double sec) await SeekPauseAsync(sec); // #184：未定時句仍顯示，但無法跳轉定位
+        if (_cues[i].StartSec is double sec)
+        {
+            _holdCueDisplay = false;
+            _navPauseIndex = i; // #208：Continue 後於本句句末必停
+            await SeekPauseAsync(sec);
+        }
+        else
+        {
+            _navPauseIndex = null;
+            _holdCueDisplay = true; // #184 未定時句無法跳轉定位——顯示保持本句、不被 poll 拉回
+            try { await Web.ExecuteScriptAsync("window.li_pause&&window.li_pause()"); } catch { /* 盡力暫停 */ } // 審查修：比照 NavigateToCueAsync 暫停原地，免播放續走音畫脫節
+        }
     }
 
     /// <summary>跳到指定秒並播放（Replay／Next 用）。</summary>
@@ -1441,6 +1524,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
         // 依開始時間穩定排序（增量6′-B 修）:PauseDecider／CueAt 要求 cues 遞增,而逐字稿頁常見場景倒敘/片尾曲致時間回退
         // （USR「選 Ryder 沒每次停」病根）。載入、時間偏移、YAML 編修**三條安裝路徑皆經此**→單點保證單調。對已遞增輸入 idempotent。
         _cues = SubtitleParser.NormalizeOrder(cues);
+        _navPauseIndex = null; _holdCueDisplay = false; // #208 審查修：cues 換裝（載入/時間平移/YAML 套用）即作廢導航 override——舊 index 對新 cues 失義，殘留會靜默癱瘓勾選暫停
         _rows = new List<CueRow>(_cues.Count);
         for (var i = 0; i < _cues.Count; i++) _rows.Add(new CueRow(i, _cues[i]));
         CueList.ItemsSource = _rows;
@@ -1552,6 +1636,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
 
         RebuildCheckedNames();
         _lastPausedIndex = -1;      // 勾選變→暫停判定自目前時間重算
+        _navPauseIndex = null;      // #208：勾選變更即恢復勾選規則（導航 override 作廢）
         RefreshFilterView();
         RefreshCueEmphasis();
     }
@@ -1671,6 +1756,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     {
         _pauseMode = PauseAtSpeaker.SelectedIndex == 1 ? PauseMode.Selected : PauseMode.Off;
         _lastPausedIndex = -1;
+        _navPauseIndex = null; // #208：等待模式變更即恢復勾選規則
     }
 
     /// <summary>把下拉選取同步為目前模式（不觸發套用）。</summary>
@@ -1741,6 +1827,7 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
             _subs.BackupOriginalOnce(_currentVideoId, CurrentVideoTitle());
             var shifted = ShiftCues(_cues, secs); // 直接加：正＝延後、負＝提前
             _lastPausedIndex = -1;                // 時間全平移→暫停判定自目前時間重新起算
+            _navPauseIndex = null;                // #208：時間座標已變、導航 override 作廢
             SetCues(shifted);
             _subs.Save(_currentVideoId, CurrentVideoTitle(), isAutoGenerated: false, shifted); // 存回校正後（#174）
             if (_rows.Count > 0) { ShowCue(0); }
