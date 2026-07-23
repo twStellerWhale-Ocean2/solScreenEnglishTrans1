@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 430" font-family="Segoe UI, Microsoft JhengHei, sans-serif">
-  <!-- #207 影片欄排序下拉設計預覽：主題篩選下方新增排序下拉（展開態）；清單順序＝VideoStore.SortVideos 對示例資料之「長度 短→長」實際輸出（無長度值排末） -->
+  <!-- #207 影片欄排序下拉設計預覽：主題篩選下方新增排序下拉（展開態）；清單順序＝VideoStore.SortVideos 對示例資料之「長度 短→長」實際輸出（無長度值排末）；列 meta＝加入時間 · 長度 · 主題（與 VideoItemView 實作一致，#207 審查修） -->
   <rect x="0" y="0" width="340" height="430" fill="#FBEFF4"/>
   <!-- 標題列：影片＋全部清除 -->
   <text x="14" y="30" font-size="15" font-weight="bold" fill="#B0578D">影片</text>
@@ -27,24 +27,24 @@
     <rect x="12" y="232" width="316" height="44" rx="4" fill="#FFFFFF" stroke="#E7CFDC"/>
     <rect x="18" y="238" width="56" height="32" rx="3" fill="#E9D2DF"/>
     <text x="84" y="252" font-size="12" fill="#3A2C33">Peppa Pig e02</text>
-    <text x="84" y="268" font-size="10.5" fill="#9A6A82">3:15 · Peppa</text>
+    <text x="84" y="268" font-size="9.5" fill="#9A6A82">07-21 19:02 · 3:15 · Peppa</text>
   </g>
   <g>
     <rect x="12" y="282" width="316" height="44" rx="4" fill="#FFFFFF" stroke="#E7CFDC"/>
     <rect x="18" y="288" width="56" height="32" rx="3" fill="#E9D2DF"/>
     <text x="84" y="302" font-size="12" fill="#3A2C33">Paw Patrol e01</text>
-    <text x="84" y="318" font-size="10.5" fill="#9A6A82">8:40 · Paw Patrol</text>
+    <text x="84" y="318" font-size="9.5" fill="#9A6A82">07-22 08:11 · 8:40 · Paw Patrol</text>
   </g>
   <g>
     <rect x="12" y="332" width="316" height="44" rx="4" fill="#FFFFFF" stroke="#E7CFDC"/>
     <rect x="18" y="338" width="56" height="32" rx="3" fill="#E9D2DF"/>
     <text x="84" y="352" font-size="12" fill="#3A2C33">Bluey e07</text>
-    <text x="84" y="368" font-size="10.5" fill="#9A6A82">12:05 · Bluey</text>
+    <text x="84" y="368" font-size="9.5" fill="#9A6A82">07-23 10:45 · 12:05 · Bluey</text>
   </g>
   <g>
     <rect x="12" y="382" width="316" height="40" rx="4" fill="#FFFFFF" stroke="#E7CFDC" stroke-dasharray="3 2"/>
     <rect x="18" y="388" width="56" height="28" rx="3" fill="#F0E2EA"/>
     <text x="84" y="400" font-size="12" fill="#3A2C33">newly added video</text>
-    <text x="84" y="415" font-size="10.5" fill="#9A6A82">長度未知（播過一次即記住）· 排最後</text>
+    <text x="84" y="415" font-size="9.5" fill="#9A6A82">07-23 21:30 · 長度未知（載入即補）· 排最後</text>
   </g>
 </svg>
