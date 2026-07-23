@@ -12,12 +12,14 @@ public sealed class VideoItem
     public string? ThemeId { get; set; }
     public string? ThemeName { get; set; }
     public string AddedAt { get; set; } = "";     // ISO 8601
+    public double? DurationSec { get; set; }      // #207：時間長度（秒）——載入字幕以推估先落、起播後播放器實測覆蓋；舊檔無值＝null
 }
 
 /// <summary>影片清單根結構（新在前）。</summary>
 public sealed class VideosData
 {
     public List<VideoItem> Items { get; set; } = new();
+    public string? SortKey { get; set; }          // #207：影片欄排序鍵（AddedNew|Title|Duration|Theme）；null＝AddedNew（插入序新在前）
 }
 
 /// <summary>
@@ -89,6 +91,26 @@ public sealed class VideoStore
         if (SetTheme(d, id, themeId, themeName)) { Save(d); }
     }
 
+    /// <summary>回寫某項時間長度（#207）：<paramref name="estimateOnly"/>＝true＝字幕推估、僅該項尚無值才落；false＝播放器實測、一律覆蓋。非正值不寫。</summary>
+    public void UpdateDuration(string id, double durationSec, bool estimateOnly = false)
+    {
+        if (durationSec <= 0) { return; }
+        var d = Load();
+        var it = d.Items.FirstOrDefault(i => i.Id == id);
+        if (it is null) { return; }
+        if (estimateOnly && it.DurationSec is > 0) { return; } // 已有值（含實測）不被推估退化
+        it.DurationSec = durationSec;
+        Save(d);
+    }
+
+    /// <summary>回寫影片欄排序鍵（#207）；跨啟動沿用。</summary>
+    public void UpdateSortKey(string? sortKey)
+    {
+        var d = Load();
+        d.SortKey = sortKey;
+        Save(d);
+    }
+
     // ---- 純函式（可單元測試，不觸檔案） ----
 
     /// <summary>依 VideoId 去重加入：既有則移至最前並更新標題（非空才更新）/主題/時間；新則以標題（空退 VideoId）插入最前。回該項。</summary>
@@ -132,5 +154,29 @@ public sealed class VideoStore
         it.ThemeId = themeId;
         it.ThemeName = string.IsNullOrWhiteSpace(themeName) ? null : themeName.Trim();
         return true;
+    }
+
+    /// <summary>
+    /// 影片欄排序（#207，純函式、穩定排序、不改動傳入序）：呈現層投影、清單仍存插入序。
+    /// `AddedNew`（null／未知鍵＝預設）＝插入序（新在前，即現況）；`Title`＝標題自然排序（沿筆記 <see cref="NotesStore.NaturalCompare"/> 家規：大小寫不敏感、數字段依數值）；
+    /// `Duration`＝短→長、無值排末；`Theme`＝主題名自然排序群組（未歸屬排末）、組內維持插入序。
+    /// </summary>
+    public static List<VideoItem> SortVideos(IEnumerable<VideoItem> items, string? sortKey)
+    {
+        var list = items.ToList();
+        return sortKey switch
+        {
+            "Title" => list.OrderBy(i => i.Title ?? "", NaturalTitleComparer.Instance).ToList(),
+            "Duration" => list.OrderBy(i => i.DurationSec is > 0 ? 0 : 1).ThenBy(i => i.DurationSec ?? double.MaxValue).ToList(),
+            "Theme" => list.OrderBy(i => string.IsNullOrWhiteSpace(i.ThemeName) ? 1 : 0).ThenBy(i => i.ThemeName ?? "", NaturalTitleComparer.Instance).ToList(),
+            _ => list, // AddedNew／null／未知鍵＝插入序
+        };
+    }
+
+    /// <summary>#207：包 <see cref="NotesStore.NaturalCompare"/> 為 IComparer（供 OrderBy 穩定排序用）。</summary>
+    private sealed class NaturalTitleComparer : IComparer<string>
+    {
+        public static readonly NaturalTitleComparer Instance = new();
+        public int Compare(string? x, string? y) => NotesStore.NaturalCompare(x ?? "", y ?? "");
     }
 }

@@ -128,6 +128,7 @@
           <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
           </Grid.RowDefinitions>
           <Grid Grid.Row="0">
@@ -137,7 +138,10 @@
           <!-- 依 theme 篩選（圖文下拉，多媒體主題管理·B） -->
           <ComboBox x:Name="VideoThemeFilter" Grid.Row="1" Height="26" Margin="0,6,0,4"
                     VerticalContentAlignment="Center" ToolTip="依主題篩選影片"/>
-          <Border Grid.Row="2" Style="{StaticResource Card}">
+          <!-- 排序下拉（#207）：加入時間／名稱／長度／主題，選擇存 videos.json 之 SortKey 跨啟動沿用 -->
+          <ComboBox x:Name="VideoSortCombo" Grid.Row="2" Height="26" Margin="0,0,0,4"
+                    VerticalContentAlignment="Center" ToolTip="影片排序"/>
+          <Border Grid.Row="3" Style="{StaticResource Card}">
             <Grid>
               <ListBox x:Name="VideoList" BorderThickness="0" Background="Transparent" Margin="4"
                        HorizontalContentAlignment="Stretch"

@@ -1,3 +1,4 @@
+using System.IO;
 using LingoIsland.Query;
 using Xunit;
 
@@ -97,5 +98,93 @@ public class VideoStoreTests
         VideoStore.Upsert(d, "aaaaaaaaaaa", "A", "th", "Theme", "t1");
         Assert.False(VideoStore.SetTheme(d, "nope", "x", "X"));
         Assert.Equal("th", d.Items[0].ThemeId); // 未變
+    }
+
+    // ---- SortVideos（影片欄排序，#207）：四鍵、null 長度排末、穩定排序、舊檔相容 ----
+
+    private static VideoItem V(string title, double? dur = null, string? theme = null, string vid = "") => new()
+    {
+        VideoId = string.IsNullOrEmpty(vid) ? title : vid,
+        Title = title,
+        ThemeName = theme,
+        DurationSec = dur,
+    };
+
+    [Fact]
+    public void SortVideos_DefaultOrUnknownKey_KeepsInsertionOrder()
+    {
+        var items = new[] { V("b"), V("a"), V("c") };
+        Assert.Equal(new[] { "b", "a", "c" }, VideoStore.SortVideos(items, null).Select(i => i.Title));
+        Assert.Equal(new[] { "b", "a", "c" }, VideoStore.SortVideos(items, "AddedNew").Select(i => i.Title));
+        Assert.Equal(new[] { "b", "a", "c" }, VideoStore.SortVideos(items, "Bogus").Select(i => i.Title)); // 未知鍵退預設
+    }
+
+    [Fact]
+    public void SortVideos_Title_NaturalCaseInsensitive()
+    {
+        var items = new[] { V("e10"), V("E2"), V("apple") }; // 自然排序：數字段依數值、大小寫不敏感
+        Assert.Equal(new[] { "apple", "E2", "e10" }, VideoStore.SortVideos(items, "Title").Select(i => i.Title));
+    }
+
+    [Fact]
+    public void SortVideos_Duration_ShortFirst_NullLast()
+    {
+        var items = new[] { V("long", 300), V("noDur"), V("short", 60) };
+        Assert.Equal(new[] { "short", "long", "noDur" }, VideoStore.SortVideos(items, "Duration").Select(i => i.Title));
+    }
+
+    [Fact]
+    public void SortVideos_Duration_NullsKeepRelativeOrder()
+    {
+        var items = new[] { V("n1"), V("mid", 120), V("n2") }; // 穩定排序：無值群維持相對序
+        Assert.Equal(new[] { "mid", "n1", "n2" }, VideoStore.SortVideos(items, "Duration").Select(i => i.Title));
+    }
+
+    [Fact]
+    public void SortVideos_Theme_GroupsByName_UnassignedLast_StableWithin()
+    {
+        var items = new[] { V("z", theme: "Zoo"), V("noTheme1"), V("a2", theme: "Apple"), V("a1", theme: "Apple"), V("noTheme2") };
+        // 主題名自然排序群組（Apple→Zoo）、組內維持插入序（a2 在 a1 前）、未歸屬排末且維持相對序
+        Assert.Equal(new[] { "a2", "a1", "z", "noTheme1", "noTheme2" }, VideoStore.SortVideos(items, "Theme").Select(i => i.Title));
+    }
+
+    [Fact]
+    public void SortVideos_DoesNotMutateInput()
+    {
+        var items = new List<VideoItem> { V("b"), V("a") };
+        VideoStore.SortVideos(items, "Title");
+        Assert.Equal(new[] { "b", "a" }, items.Select(i => i.Title)); // 呈現層投影、原清單不動
+    }
+
+    [Fact]
+    public void UpdateDuration_EstimateOnlyDoesNotOverwrite_ActualOverwrites()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"videos-test-{Guid.NewGuid():N}.json");
+        try
+        {
+            var store = new VideoStore(path);
+            var it = store.Add("aaaaaaaaaaa", "A", null, null, DateTimeOffset.Now);
+            store.UpdateDuration(it.Id, 100, estimateOnly: true);   // 無值 → 推估落
+            Assert.Equal(100, store.Load().Items[0].DurationSec);
+            store.UpdateDuration(it.Id, 999, estimateOnly: true);   // 已有值 → 推估不覆蓋（不退化）
+            Assert.Equal(100, store.Load().Items[0].DurationSec);
+            store.UpdateDuration(it.Id, 250);                        // 實測 → 一律覆蓋
+            Assert.Equal(250, store.Load().Items[0].DurationSec);
+            store.UpdateDuration(it.Id, 0);                          // 非正值不寫
+            Assert.Equal(250, store.Load().Items[0].DurationSec);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    public void VideosData_OldJsonWithoutNewFields_DeserializesToDefaults()
+    {
+        // 舊檔（無 SortKey/DurationSec）反序列化相容：缺鍵＝null、不失資料
+        var json = """{"Items":[{"Id":"x","VideoId":"aaaaaaaaaaa","Title":"A","AddedAt":"t1"}]}""";
+        var d = System.Text.Json.JsonSerializer.Deserialize<VideosData>(json)!;
+        Assert.Null(d.SortKey);
+        Assert.Single(d.Items);
+        Assert.Null(d.Items[0].DurationSec);
+        Assert.Equal("A", d.Items[0].Title);
     }
 }

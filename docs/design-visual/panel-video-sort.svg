@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 430" font-family="Segoe UI, Microsoft JhengHei, sans-serif">
+  <!-- #207 影片欄排序下拉設計預覽：主題篩選下方新增排序下拉（展開態）；清單順序＝VideoStore.SortVideos 對示例資料之「長度 短→長」實際輸出（無長度值排末） -->
+  <rect x="0" y="0" width="340" height="430" fill="#FBEFF4"/>
+  <!-- 標題列：影片＋全部清除 -->
+  <text x="14" y="30" font-size="15" font-weight="bold" fill="#B0578D">影片</text>
+  <text x="326" y="30" font-size="12" fill="#9A6A82" text-anchor="end">全部清除</text>
+  <!-- 主題篩選下拉 -->
+  <rect x="12" y="42" width="316" height="30" rx="4" fill="#FFFFFF" stroke="#D8B9C8"/>
+  <text x="22" y="62" font-size="12.5" fill="#3A2C33">All themes</text>
+  <path d="M 312 53 l 5 6 l 5 -6" stroke="#9A6A82" stroke-width="1.6" fill="none"/>
+  <!-- 排序下拉（#207 新增；展開態、選中「長度 短→長」） -->
+  <rect x="12" y="78" width="316" height="30" rx="4" fill="#FFFFFF" stroke="#B0578D" stroke-width="1.4"/>
+  <text x="22" y="98" font-size="12.5" fill="#3A2C33">長度 短→長</text>
+  <path d="M 312 95 l 5 -6 l 5 6" stroke="#B0578D" stroke-width="1.6" fill="none"/>
+  <!-- 展開清單 -->
+  <g>
+    <rect x="12" y="110" width="316" height="112" rx="4" fill="#FFFFFF" stroke="#D8B9C8"/>
+    <text x="26" y="130" font-size="12.5" fill="#3A2C33">加入時間 新→舊</text>
+    <text x="26" y="158" font-size="12.5" fill="#3A2C33">名稱 A→Z</text>
+    <rect x="14" y="166" width="312" height="26" fill="#F6E0EB"/>
+    <text x="26" y="184" font-size="12.5" font-weight="bold" fill="#B0578D">長度 短→長</text>
+    <text x="318" y="184" font-size="12.5" fill="#B0578D" text-anchor="end">✓</text>
+    <text x="26" y="212" font-size="12.5" fill="#3A2C33">主題</text>
+  </g>
+  <!-- 影片清單（依長度 短→長；SortVideos 實際輸出：195s → 520s → 725s → 無長度排末） -->
+  <g>
+    <rect x="12" y="232" width="316" height="44" rx="4" fill="#FFFFFF" stroke="#E7CFDC"/>
+    <rect x="18" y="238" width="56" height="32" rx="3" fill="#E9D2DF"/>
+    <text x="84" y="252" font-size="12" fill="#3A2C33">Peppa Pig e02</text>
+    <text x="84" y="268" font-size="10.5" fill="#9A6A82">3:15 · Peppa</text>
+  </g>
+  <g>
+    <rect x="12" y="282" width="316" height="44" rx="4" fill="#FFFFFF" stroke="#E7CFDC"/>
+    <rect x="18" y="288" width="56" height="32" rx="3" fill="#E9D2DF"/>
+    <text x="84" y="302" font-size="12" fill="#3A2C33">Paw Patrol e01</text>
+    <text x="84" y="318" font-size="10.5" fill="#9A6A82">8:40 · Paw Patrol</text>
+  </g>
+  <g>
+    <rect x="12" y="332" width="316" height="44" rx="4" fill="#FFFFFF" stroke="#E7CFDC"/>
+    <rect x="18" y="338" width="56" height="32" rx="3" fill="#E9D2DF"/>
+    <text x="84" y="352" font-size="12" fill="#3A2C33">Bluey e07</text>
+    <text x="84" y="368" font-size="10.5" fill="#9A6A82">12:05 · Bluey</text>
+  </g>
+  <g>
+    <rect x="12" y="382" width="316" height="40" rx="4" fill="#FFFFFF" stroke="#E7CFDC" stroke-dasharray="3 2"/>
+    <rect x="18" y="388" width="56" height="28" rx="3" fill="#F0E2EA"/>
+    <text x="84" y="400" font-size="12" fill="#3A2C33">newly added video</text>
+    <text x="84" y="415" font-size="10.5" fill="#9A6A82">長度未知（播過一次即記住）· 排最後</text>
+  </g>
+</svg>

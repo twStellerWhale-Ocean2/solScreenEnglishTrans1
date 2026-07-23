@@ -160,12 +160,14 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         ClearVideosBtn.Click += (_, _) => OnClearVideos(); // #165 清空影片清單
         OpenFolderBtn.Click += (_, _) => OpenVideoFolder(); // #189：開啟目前影片資料夾（其 subtitle.yaml 與 🌐 Script 逐字稿原文）
         VideoThemeFilter.SelectionChanged += (_, _) => { if (!_populatingVideoFilter) { RefreshVideoList(); } };
+        VideoSortCombo.SelectionChanged += (_, _) => { if (!_populatingSortCombo) { OnVideoSortChanged(); } };     // 影片欄排序（#207）
         VideoThemePicker.SelectionChanged += (_, _) => { if (!_populatingVideoPicker) { OnVideoThemePicked(); } }; // 內容區塊改指派所屬主題（#173）
         // 刪除改右鍵選單/Delete 鍵（#167，取代 Delete 按鈕）
         VideoList.ContextMenu = ListDeleteSupport.DeleteMenu(OnDeleteVideo);
         VideoList.PreviewMouseRightButtonDown += ListDeleteSupport.SelectItemUnderMouse;
         VideoList.KeyDown += (_, e) => { if (e.Key == Key.Delete) { OnDeleteVideo(); } };
         PopulateVideoThemeFilter();
+        InitVideoSortCombo();      // #207：排序下拉四鍵、初值自 videos.json 之 SortKey
         RefreshVideoList();
         ApplySubtitleDisplay();   // 字幕帶字級/粗體偏好（比照筆記，設定可調）
         MigrateSubtitleStorage();  // #189：一次性把舊版扁平 subtitles\{id}.json 搬到 video\{日期 標題}\ 結構
@@ -333,6 +335,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                     var a = ThemeStore.GetActive(_themes.Load());
                     var vi = _videoStore.Add(id, id, a?.Id, a?.Name, DateTimeOffset.Now);
                     _currentVideoItemId = vi.Id;
+                    _videoStore.UpdateDuration(vi.Id, LastCueStartSec(), estimateOnly: true); // #207：新加入即落字幕推估長度（Add 時 _currentVideoItemId 尚未設、SetWatchDurationFromCues 未及回寫）
                     RefreshVideoList();
                 }
                 // #186：不自動播放。就緒訊息延到 OnPoll 確認播放器 ready 才顯（避免可嵌入被禁/無效影片時謊報）。
@@ -448,12 +451,45 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 
     // ---- 影片清單（epic #145 增量4） ----
 
-    /// <summary>重載影片清單（標題／加入時間／主題名）；目前載入影片自動選中（不觸發載入）。空清單顯提示。</summary>
+    /// <summary>#207：影片欄排序四鍵（Tag=SortKey；序＝下拉顯示序，`AddedNew` 居首＝預設）。</summary>
+    private static readonly (string Key, string Label)[] VideoSortOptions =
+    {
+        ("AddedNew", "加入時間 新→舊"),
+        ("Title", "名稱 A→Z"),
+        ("Duration", "長度 短→長"),
+        ("Theme", "主題"),
+    };
+    private bool _populatingSortCombo;
+
+    /// <summary>#207：填排序下拉並依 videos.json 之 SortKey 設初值（未知鍵退預設、不觸發回寫）。</summary>
+    private void InitVideoSortCombo()
+    {
+        _populatingSortCombo = true;
+        VideoSortCombo.Items.Clear();
+        foreach (var (key, label) in VideoSortOptions)
+        {
+            VideoSortCombo.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = label, Tag = key });
+        }
+        var current = _videoStore.Load().SortKey ?? "AddedNew";
+        var idx = Array.FindIndex(VideoSortOptions, o => o.Key == current);
+        VideoSortCombo.SelectedIndex = idx >= 0 ? idx : 0;
+        _populatingSortCombo = false;
+    }
+
+    /// <summary>#207：排序選擇改變——落地 SortKey（跨啟動沿用）並重排清單。</summary>
+    private void OnVideoSortChanged()
+    {
+        var key = (VideoSortCombo.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string ?? "AddedNew";
+        _videoStore.UpdateSortKey(key);
+        RefreshVideoList();
+    }
+
+    /// <summary>重載影片清單（標題／加入時間／主題名）；先依主題篩選、再依 SortKey 排序（#207 呈現層投影）；目前載入影片自動選中（不觸發載入）。空清單顯提示。</summary>
     public void RefreshVideoList()
     {
         var d = _videoStore.Load();
         var themeId = ThemeFilter.SelectedThemeId(VideoThemeFilter); // null＝All（B）
-        var shown = d.Items.Where(it => ThemeFilter.Match(themeId, it.ThemeId)).ToList();
+        var shown = VideoStore.SortVideos(d.Items.Where(it => ThemeFilter.Match(themeId, it.ThemeId)), d.SortKey); // #207：先篩後排
         VideoList.SelectionChanged -= OnVideoSelect;
         VideoList.Items.Clear();
         foreach (var it in shown)
@@ -1015,6 +1051,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
             if (double.TryParse(durRaw, NumberStyles.Float, CultureInfo.InvariantCulture, out var sec) && sec > 0)
             {
                 WatchDurationText.Text = $"　·　長度 {FormatPos(sec)}";
+                if (_currentVideoItemId is not null) { _videoStore.UpdateDuration(_currentVideoItemId, sec); RefreshVideoList(); } // #207：實測長度落地（覆蓋推估），長度排序即時歸位
             }
         }
         catch { /* 取長度失敗維持字幕推估值 */ }
@@ -1919,9 +1956,13 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
     /// </summary>
     private void SetWatchDurationFromCues()
     {
-        var last = _cues.Where(c => c.StartSec.HasValue).Select(c => c.StartSec!.Value).DefaultIfEmpty(-1).Max();
+        var last = LastCueStartSec();
         WatchDurationText.Text = last > 0 ? $"　·　長度 約 {FormatPos(last)}" : "";
+        if (last > 0 && _currentVideoItemId is not null) { _videoStore.UpdateDuration(_currentVideoItemId, last, estimateOnly: true); } // #207：推估先落（僅無值時），供長度排序
     }
+
+    /// <summary>#207：字幕最後一句起點（秒）＝時間長度推估值；無已定時句回 -1。</summary>
+    private double LastCueStartSec() => _cues.Where(c => c.StartSec.HasValue).Select(c => c.StartSec!.Value).DefaultIfEmpty(-1).Max();
 
     // 搜尋縮圖尺寸（#187，選項頁可調）：DataTemplate 之 Image 綁此 DP（AncestorType=UserControl）
     public static readonly System.Windows.DependencyProperty ThumbHeightProperty =
