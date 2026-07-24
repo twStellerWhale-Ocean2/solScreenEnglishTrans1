@@ -259,6 +259,7 @@ public partial class ThemeManagementPage : UserControl
         }
         NameBox.Text = _selected.Name;
         DescBox.Text = _selected.Text;
+        BlockBox.Text = _selected.BlockedWords; // #217：自動屏蔽字串
         StatusLine.Text = _selected.IsActive ? "此主題為使用中。" : "";
         ShowPreview(!string.IsNullOrEmpty(_selected.Image) ? LoadImage(_store.ImagePathFor(_selected.Image!)) : null);
         // 載入 12 色（色票色＋描述，#189-checklist）
@@ -295,6 +296,7 @@ public partial class ThemeManagementPage : UserControl
         if (_selected is null) { return; }
         ThemeStore.Rename(_data, _selected.Id, NameBox.Text);
         ThemeStore.UpdateText(_data, _selected.Id, DescBox.Text);
+        _selected.BlockedWords = BlockBox.Text?.Trim() ?? ""; // #217：自動屏蔽字串（與 Colors 同採直接指派）
         if (_pending is not null)
         {
             _selected.Image = _store.WriteImage(_selected.Id, _pending);

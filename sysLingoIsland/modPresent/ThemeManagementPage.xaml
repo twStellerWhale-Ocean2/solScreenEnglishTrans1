@@ -40,6 +40,7 @@
               <RowDefinition Height="Auto"/>  <!-- 名稱 -->
               <RowDefinition Height="Auto"/>  <!-- 描述 label -->
               <RowDefinition Height="*"/>     <!-- DescBox 成長 -->
+              <RowDefinition Height="Auto"/>  <!-- 自動屏蔽字串（#217） -->
               <RowDefinition Height="Auto"/>  <!-- 配色規則 -->
               <RowDefinition Height="Auto"/>  <!-- 狀態列 -->
               <RowDefinition Height="Auto"/>  <!-- 動作鈕 -->
@@ -74,7 +75,14 @@
                      AcceptsReturn="True" MinHeight="80" VerticalAlignment="Stretch"
                      VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto"/>
 
-            <Border Grid.Row="5" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8">
+            <!-- 自動屏蔽字串（#217）：主題描述之後、以 , 分隔；匯入字幕時自各句移除 -->
+            <StackPanel Grid.Row="5" Margin="0,4,0,8">
+              <TextBlock Text="自動屏蔽字串（匯入字幕時自動移除；以 , 分隔）" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
+              <TextBox x:Name="BlockBox" Padding="6" Margin="0,4,0,0"
+                       ToolTip="例：(SNORT), (LAUGHS)——之後匯入這個主題的字幕時，這些字串會自動從每句台詞移除；整句只剩屏蔽字串則整句剔除。已匯入的字幕不回溯（重新載入字幕即套用）。"/>
+            </StackPanel>
+
+            <Border Grid.Row="6" Style="{StaticResource Card}" Padding="8" Margin="0,0,0,8">
               <StackPanel>
                 <TextBlock Text="顏色（12）— 點按色票即可更改" FontWeight="SemiBold" Foreground="{StaticResource PinkText}"/>
                 <TextBlock Text="說明哪些說話人／字幕行使用各顏色（例：角色名稱）。用於字幕說話人文字色與筆記底色（自動調亮）。留空＝未使用。"
@@ -83,9 +91,9 @@
               </StackPanel>
             </Border>
 
-            <TextBlock Grid.Row="6" x:Name="StatusLine" Foreground="#2E7D46" FontSize="12" Margin="0,0,0,8"/>
+            <TextBlock Grid.Row="7" x:Name="StatusLine" Foreground="#2E7D46" FontSize="12" Margin="0,0,0,8"/>
 
-            <WrapPanel Grid.Row="7">
+            <WrapPanel Grid.Row="8">
               <Button x:Name="ActiveBtn" Content="設為使用中" Style="{StaticResource PinkButton}" Margin="0,0,8,0"/>
               <Button x:Name="SaveBtn" Content="儲存" Style="{StaticResource GhostButton}"/>
             </WrapPanel>

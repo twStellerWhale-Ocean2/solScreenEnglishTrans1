@@ -293,6 +293,14 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                 return;
             }
             (fresh, freshRaw) = fetched.Value; // #218：cues＋來源原文
+            // #217：使用中主題之自動屏蔽字串——摘要確認前先濾（摘要句數＝所見即所得）；subtitle-source 仍存過濾前原文
+            fresh = SubtitleBlocklist.Remove(fresh, ThemeStore.ParseBlockedWords(ThemeStore.GetActive(_themes.Load())?.BlockedWords));
+            if (!fresh.Any(c => c.StartSec.HasValue))
+            {
+                SetStatus("字幕經主題屏蔽字串過濾後已無可用句——請檢查主題頁的自動屏蔽字串設定。");
+                if (listItemId is not null) { RefreshVideoList(); }
+                return;
+            }
             var srcLabel = subtitleUrl!.StartsWith("http", StringComparison.OrdinalIgnoreCase)
                 ? subtitleUrl
                 : $"本機字幕檔 {TranscriptFile.SafeName(subtitleUrl)}";
@@ -778,12 +786,14 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
                     if (e.Status == AcquireStatus.AlreadyExists) { skipped.Add(e); continue; }   // 批次預設略過已有字幕者
                     try
                     {
+                        var blocked = ThemeStore.ParseBlockedWords(themeActive?.BlockedWords); // #217：使用中主題之自動屏蔽字串
                         var (cues, rawText) = await Task.Run(() =>
                         {
                             var raw = TranscriptFile.Read(e.Path);                    // 免費解析直吃 raw——**不得先 StripToPlainText**（會刪 VTT <v 名字> 語音標記）
                             var parsed = SubtitleParser.Parse(raw);
                             if (!parsed.Any(c => c.StartSec.HasValue)) { parsed = SubtitleParser.ParseTimedTranscript(raw); }
-                            return (SubtitleParser.NormalizeOrder(SubtitleParser.ExtractInlineSpeakers(parsed)), raw);
+                            var ordered = SubtitleParser.NormalizeOrder(SubtitleParser.ExtractInlineSpeakers(parsed));
+                            return (SubtitleBlocklist.Remove(ordered, blocked), raw);  // #217：批次路徑同濾；subtitle-source 仍存過濾前原文
                         }, ct);
                         if (!cues.Any(c => c.StartSec.HasValue))
                         {

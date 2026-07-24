@@ -11,6 +11,8 @@ public sealed class ThemeItem
     public string Text { get; set; } = "";
     /// <summary>搜尋關鍵字（#171）：供影片頁「依關鍵字查 YouTube」預填；舊 themes.json 無此鍵→反序列化為空。</summary>
     public string Keywords { get; set; } = "";
+    /// <summary>自動屏蔽字串（#217）：逗號分隔原字串（半形 `,`／全形 `，` 皆可）——匯入字幕時自各句移除（如 `(SNORT)` 音效標記）；舊檔無此鍵→空＝不過濾。解析用 <see cref="ThemeStore.ParseBlockedWords"/>。</summary>
+    public string BlockedWords { get; set; } = "";
     /// <summary>圖片檔名（<c>themes\{檔名}</c>）；null＝無圖。</summary>
     public string? Image { get; set; }
     public bool IsActive { get; set; }
@@ -222,6 +224,19 @@ public sealed class ThemeStore
     public static ThemeItem? GetActive(ThemesData d) => d.Items.FirstOrDefault(i => i.IsActive);
 
     public static string ActiveText(ThemesData d) => GetActive(d)?.Text ?? "";
+
+    /// <summary>
+    /// 解析自動屏蔽字串（#217，純函式）：以半形 <c>,</c> 或全形 <c>，</c> 分隔，逐項去空白、剔空、大小寫不敏感去重；
+    /// null／空白回空清單（＝不過濾）。
+    /// </summary>
+    public static IReadOnlyList<string> ParseBlockedWords(string? raw) =>
+        string.IsNullOrWhiteSpace(raw)
+            ? Array.Empty<string>()
+            : raw.Split(new[] { ',', '，' }, StringSplitOptions.RemoveEmptyEntries)
+                 .Select(w => w.Trim())
+                 .Where(w => w.Length > 0)
+                 .Distinct(StringComparer.OrdinalIgnoreCase)
+                 .ToList();
 
     /// <summary>使用中主題之配色規則注入文字（Issue #69）；無使用中或全空回空字串（＝不啟用智能配色）。</summary>
     public string ActiveColorRules() => BuildColorRulesText(GetActive(Load()));
