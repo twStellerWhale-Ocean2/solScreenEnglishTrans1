@@ -353,4 +353,30 @@ public class PauseDeciderTests
         Assert.Equal(-1, PauseDecider.NextPause(4.9, NavCues, 0, pauseSpeakers: new[] { "Peppa" }));
         Assert.Equal(2, PauseDecider.NextPause(5.0, NavCues, 0, pauseSpeakers: new[] { "Peppa" })); // 停句 2 起點、非句 1 句末
     }
+
+    [Fact]
+    public void IsRewind_DetectsLargeBackwardJump_OnlyBeyondThreshold()
+    {
+        Assert.True(PauseDecider.IsRewind(0.2, 28.0));   // ended 重播：28s→0.2s
+        Assert.True(PauseDecider.IsRewind(5.0, 6.0));    // 恰達閾值 1.0
+        Assert.False(PauseDecider.IsRewind(5.5, 6.0));   // 閾值內微倒退不觸發
+        Assert.False(PauseDecider.IsRewind(6.0, 5.0));   // 正常前進不觸發
+    }
+
+    [Fact]
+    public void IsRewind_InvalidSeconds_NotRewind()
+    {
+        Assert.False(PauseDecider.IsRewind(0.0, -1.0));  // _lastPollSec 初值（載入後首輪）不觸發
+        Assert.False(PauseDecider.IsRewind(-1.0, 30.0)); // 無效當前秒不觸發
+    }
+
+    [Fact]
+    public void ReplayAfterEnded_ResetByCueAt_RestoresPerCuePause()
+    {
+        // 病因重播情境（#214）：末句已停（lastPaused=2）→ ended 重播回 0.2s——舊游標下永不再停。
+        Assert.Equal(-1, PauseDecider.NextPause(3.0, Cues, 2));
+        // 修法：偵測倒退後以 CueAt(t)-1 重算游標 → 首句句末（two 之開始 3.0）恢復暫停。
+        var reset = PauseDecider.CueAt(0.2, Cues) - 1;   // 0.2s 早於首句(1.0)→CueAt=-1→游標 -2→Max(-1,·) 由呼叫端夾
+        Assert.Equal(0, PauseDecider.NextPause(3.0, Cues, System.Math.Max(-1, reset)));
+    }
 }

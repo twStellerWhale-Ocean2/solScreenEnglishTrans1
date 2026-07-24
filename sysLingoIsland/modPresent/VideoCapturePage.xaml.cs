@@ -306,7 +306,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 
         SetLoading(true);
         _guiding = false; _poll.Stop();
-        _lastPausedIndex = -1; _shownCue = -1; _playbackStarted = false; _navPauseIndex = null; _holdCueDisplay = false; // #208 導航 override 隨載入重置
+        _lastPausedIndex = -1; _shownCue = -1; _playbackStarted = false; _navPauseIndex = null; _holdCueDisplay = false; _lastPollSec = -1; // #208 導航 override 隨載入重置；#214 上輪秒數同重置（防跨影片殘值誤判倒退）
         _currentTitle = null; // 增量6：新片重置標題（起播後自播放器重新取得）
         _currentVideoId = id;  // 字幕存檔鍵（#174）
         SetWatchUrl(id);       // #177：內容區塊顯示可點超連結網址
@@ -1028,7 +1028,7 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         _currentVideoItemId = null;
         _currentVideoId = null;
         _guiding = false; _poll.Stop();
-        _lastPausedIndex = -1; _shownCue = -1; _playbackStarted = false; _navPauseIndex = null; _holdCueDisplay = false; // #208 導航 override 隨載入重置
+        _lastPausedIndex = -1; _shownCue = -1; _playbackStarted = false; _navPauseIndex = null; _holdCueDisplay = false; _lastPollSec = -1; // #208 導航 override 隨載入重置；#214 上輪秒數同重置（防跨影片殘值誤判倒退）
         _currentTitle = null;
         if (_webReady) { try { Web.CoreWebView2.Navigate("about:blank"); } catch { /* 盡力清空播放器 */ } }
         ClearCues();
@@ -1133,6 +1133,13 @@ window.li_seek_pause=function(t){if(ready&&player){seekPausePending=true;player.
             // 播放時字幕清單跟隨（#178 增量6′-B USR）：當前句隨播放時間前進即高亮＋捲動＋更新字幕帶（不只在暫停點）。
             // #208：顯示保持中（未定時句導航）不覆蓋；導航 override 期間 seek 落點早於目標句（YouTube 關鍵幀對齊）不回退顯示。
             if (_holdCueDisplay && t > _lastPollSec + 0.2) { _holdCueDisplay = false; } // 審查修：播放時間確實前進＝使用者已續播（含播放器自身播放鈕，不經 Resume/Toggle）→ 解除顯示保持
+            // #214：ended 後重播／使用者往回拉＝時間大幅倒退→暫停游標自當前位置重算，恢復逐句暫停；
+            // 導航 override 生效期間不重置（導航 seek 本身就是倒退，誤清會重蹈 #208 彈回）——其 _lastPausedIndex 已由導航路徑設妥。
+            if (_navPauseIndex is null && PauseDecider.IsRewind(t, _lastPollSec))
+            {
+                _lastPausedIndex = Math.Max(-1, PauseDecider.CueAt(t, _cues) - 1);
+                _holdCueDisplay = false;
+            }
             _lastPollSec = t;
             var cur = PauseDecider.CueAt(t, _cues);
             if (cur >= 0 && cur != _shownCue && !_holdCueDisplay && !(_navPauseIndex is int hold && cur < hold)) { ShowCue(cur); }

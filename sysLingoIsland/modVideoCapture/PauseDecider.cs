@@ -12,6 +12,16 @@ public static class PauseDecider
     /// <summary>start-only 到句暫停之預設「單句最長走時」上限（秒，#158）：一句最多走這麼久即先暫停（本句仍顯示），避免超長靜默間隔乾等。</summary>
     public const double DefaultMaxRunSec = 8.0;
 
+    /// <summary>倒退重置閾值（秒，#214）：播放時間相對上輪 poll 倒退達此值＝重播（ended 後）或使用者往回拉，暫停判定應自當前位置重算。正常播放輪詢單調前進、微小抖動不觸發。</summary>
+    public const double RewindResetSec = 1.0;
+
+    /// <summary>
+    /// 播放時間是否大幅倒退（#214：ended 後重播／使用者往回拉）——是則呼叫端應以 <see cref="CueAt"/> 重算暫停游標，恢復逐句暫停。
+    /// 任一秒數無效（&lt;0，含 <paramref name="lastPollSec"/> 初值 -1）不判倒退。純函式、可單元測試。
+    /// </summary>
+    public static bool IsRewind(double currentSec, double lastPollSec, double threshold = RewindResetSec) =>
+        currentSec >= 0 && lastPollSec >= 0 && lastPollSec - currentSec >= threshold;
+
     /// <summary>
     /// 依當前播放秒數判斷是否應暫停：回「下一句（尚未暫停過）」之 index，否則 -1。
     /// start-only（#158）：一句之暫停點＝<c>min(下一句開始, 本句開始＋<paramref name="maxRunSec"/>)</c>——一般到下一句才停；
