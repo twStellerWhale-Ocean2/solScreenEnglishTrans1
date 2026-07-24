@@ -1,0 +1,155 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480" viewBox="0 0 640 480" font-family="Segoe UI, Microsoft JhengHei, PingFang TC, system-ui, sans-serif">
+  <!-- window background (light pink theme) + 小女孩 logo 浮水印 -->
+  <rect width="640" height="480" fill="#FFF0F5"/>
+  <circle cx="320" cy="272" r="150" fill="#F4C2D0" opacity="0.10"/>
+  <text x="320" y="290" text-anchor="middle" font-size="120" fill="#F4C2D0" opacity="0.12">&#9829;</text>
+
+  <!-- OS title bar (標題只在 OS 標題列、內容區不重複) -->
+  <rect x="0" y="0" width="640" height="26" fill="#F4C2D0" opacity="0.55"/>
+  <text x="10" y="17" font-size="11" fill="#7a3b55">LingoIsland</text>
+  <text x="600" y="17" font-size="12" fill="#7a3b55">&#8212; &#9633; &#10005;</text>
+
+  <!-- main tab strip (icon over text, Segoe MDL2 style: monochrome glyphs); 電子書 active -->
+  <g font-size="8.5" fill="#8a5a6e" text-anchor="middle">
+    <rect x="0" y="26" width="640" height="42" fill="#FFFFFF" opacity="0.45"/>
+    <text x="34" y="47" font-size="11">&#9670;</text><text x="34" y="61">主題</text>
+    <text x="92" y="47" font-size="11">&#9635;</text><text x="92" y="61">截圖</text>
+    <text x="150" y="47" font-size="11">&#9654;</text><text x="150" y="61">影片</text>
+    <rect x="180" y="28" width="66" height="38" rx="6" fill="#FFFFFF" opacity="0.92"/>
+    <text x="213" y="47" font-size="11" fill="#B0578D">&#9636;</text><text x="213" y="61" fill="#B0578D" font-weight="bold">電子書</text>
+    <text x="280" y="47" font-size="11">&#9633;</text><text x="280" y="61">筆記</text>
+    <text x="338" y="47" font-size="11">&#8635;</text><text x="338" y="61">歷史</text>
+    <text x="396" y="47" font-size="11">&#9881;</text><text x="396" y="61">選項</text>
+    <text x="454" y="47" font-size="11">&#8505;</text><text x="454" y="61">關於</text>
+    <text x="596" y="47" font-size="11">&#9776;</text><text x="596" y="61">字典</text>
+  </g>
+
+  <!-- sub-tabs: 獲得 / 內容 — 疊放同格、互斥切換；此圖畫【獲得】為使用中（增量1 焦點） -->
+  <g font-size="11">
+    <rect x="16" y="76" width="66" height="24" rx="5" fill="#B0578D"/>
+    <text x="49" y="92" text-anchor="middle" fill="#ffffff" font-weight="bold">獲得</text>
+    <rect x="88" y="76" width="66" height="24" rx="5" fill="#FFFFFF" opacity="0.45" stroke="#F4C2D0"/>
+    <text x="121" y="92" text-anchor="middle" fill="#8a5a6e">內容</text>
+    <text x="166" y="92" font-size="8.5" fill="#9a8a90">增量1＝【獲得】書櫃＋匯入；【內容】閱讀渲染為後續增量（此增量僅骨架）</text>
+  </g>
+
+  <!-- ============ LEFT: 書櫃清單 ============ -->
+  <rect x="16" y="108" width="288" height="342" rx="8" fill="#FFFFFF" opacity="0.55" stroke="#F4C2D0"/>
+  <text x="28" y="127" font-size="12" fill="#B0578D" font-weight="bold">書櫃</text>
+  <text x="70" y="127" font-size="8.5" fill="#9a8a90">（右鍵／Delete 刪除、清空）</text>
+
+  <!-- 主題篩選下拉 -->
+  <rect x="28" y="134" width="150" height="22" rx="5" fill="#FFFFFF" opacity="0.85" stroke="#F4C2D0"/>
+  <text x="36" y="149" font-size="9" fill="#7a3b55">主題：Peppa Pig</text>
+  <text x="170" y="149" font-size="9" fill="#B0578D" text-anchor="end">&#9662;</text>
+  <!-- 四鍵排序 icon toggle 鈕（加入時間/書名/作者/主題；作用中＝加入時間，▼） -->
+  <g font-size="10">
+    <rect x="184" y="134" width="26" height="22" rx="4" fill="#B0578D"/>
+    <text x="197" y="149" text-anchor="middle" fill="#ffffff">&#8635;</text>
+    <rect x="212" y="134" width="26" height="22" rx="4" fill="#FFFFFF" opacity="0.85" stroke="#F4C2D0"/>
+    <text x="225" y="149" text-anchor="middle" fill="#8a5a6e">&#9636;</text>
+    <rect x="240" y="134" width="26" height="22" rx="4" fill="#FFFFFF" opacity="0.85" stroke="#F4C2D0"/>
+    <circle cx="253" cy="142" r="2.7" fill="#8a5a6e"/>
+    <path d="M247.6 151.5 a5.4 5 0 0 1 10.8 0 z" fill="#8a5a6e"/>
+    <rect x="268" y="134" width="26" height="22" rx="4" fill="#FFFFFF" opacity="0.85" stroke="#F4C2D0"/>
+    <text x="281" y="149" text-anchor="middle" fill="#8a5a6e">&#9873;</text>
+  </g>
+  <text x="197" y="167" font-size="7" fill="#B0578D" text-anchor="middle">&#9660;</text>
+  <text x="28" y="176" font-size="7.5" fill="#9a8a90">排序：加入時間／書名／作者／主題（同鈕再點翻向）</text>
+
+  <!-- 書卡 1：封面縮圖＋書名/作者/章數/主題 -->
+  <rect x="28" y="182" width="264" height="60" rx="6" fill="#FFFFFF" opacity="0.78" stroke="#B0578D"/>
+  <rect x="36" y="190" width="34" height="44" rx="2" fill="#C8D9F0"/>
+  <rect x="38" y="190" width="4" height="44" fill="#9BB5DC"/>
+  <text x="53" y="210" font-size="6.5" fill="#33506e" text-anchor="middle">The</text>
+  <text x="53" y="219" font-size="6.5" fill="#33506e" text-anchor="middle">Velve-</text>
+  <text x="53" y="228" font-size="6.5" fill="#33506e" text-anchor="middle">teen</text>
+  <text x="78" y="200" font-size="10.5" fill="#3a3a3a" font-weight="bold">The Velveteen Rabbit</text>
+  <text x="78" y="215" font-size="9" fill="#6a6a6a">Margery Williams</text>
+  <text x="78" y="231" font-size="8" fill="#9a8a90">12 章 &#183; EPUB 3</text>
+  <rect x="228" y="223" width="56" height="14" rx="7" fill="#F4C2D0" opacity="0.7"/>
+  <text x="256" y="233" font-size="7.5" fill="#7a3b55" text-anchor="middle">Peppa Pig</text>
+
+  <!-- 書卡 2 -->
+  <rect x="28" y="248" width="264" height="60" rx="6" fill="#FFFFFF" opacity="0.62" stroke="#F4C2D0"/>
+  <rect x="36" y="256" width="34" height="44" rx="2" fill="#E4D2B8"/>
+  <rect x="38" y="256" width="4" height="44" fill="#C9B48C"/>
+  <text x="53" y="276" font-size="6.5" fill="#5a4a2a" text-anchor="middle">Alice</text>
+  <text x="53" y="286" font-size="6.5" fill="#5a4a2a" text-anchor="middle">in W.</text>
+  <text x="78" y="266" font-size="10.5" fill="#3a3a3a" font-weight="bold">Alice in Wonderland</text>
+  <text x="78" y="281" font-size="9" fill="#6a6a6a">Lewis Carroll</text>
+  <text x="78" y="297" font-size="8" fill="#9a8a90">12 章 &#183; EPUB 2（ncx 目錄）</text>
+  <rect x="228" y="289" width="56" height="14" rx="7" fill="#F4C2D0" opacity="0.5"/>
+  <text x="256" y="299" font-size="7.5" fill="#7a3b55" text-anchor="middle">未分類</text>
+
+  <!-- 書卡 3 -->
+  <rect x="28" y="314" width="264" height="60" rx="6" fill="#FFFFFF" opacity="0.62" stroke="#F4C2D0"/>
+  <rect x="36" y="322" width="34" height="44" rx="2" fill="#D6C2E8"/>
+  <rect x="38" y="322" width="4" height="44" fill="#B79BD2"/>
+  <text x="53" y="344" font-size="6.5" fill="#4a3560" text-anchor="middle">Peter</text>
+  <text x="53" y="353" font-size="6.5" fill="#4a3560" text-anchor="middle">Pan</text>
+  <text x="78" y="332" font-size="10.5" fill="#3a3a3a" font-weight="bold">Peter Pan</text>
+  <text x="78" y="347" font-size="9" fill="#6a6a6a">J. M. Barrie</text>
+  <text x="78" y="363" font-size="8" fill="#9a8a90">17 章 &#183; EPUB 3</text>
+  <rect x="228" y="355" width="56" height="14" rx="7" fill="#F4C2D0" opacity="0.7"/>
+  <text x="256" y="365" font-size="7.5" fill="#7a3b55" text-anchor="middle">睡前故事</text>
+
+  <!-- 右鍵選單意象（書卡 1 上）＝右鍵刪除 -->
+  <rect x="196" y="196" width="86" height="46" rx="4" fill="#ffffff" stroke="#B0578D" opacity="0.96"/>
+  <text x="204" y="211" font-size="8.5" fill="#3a3a3a">標記主題&#8230;</text>
+  <line x1="200" y1="218" x2="278" y2="218" stroke="#F4C2D0"/>
+  <text x="204" y="232" font-size="8.5" fill="#b03a3a">刪除（Delete）</text>
+
+  <text x="28" y="392" font-size="8" fill="#9a8a90">依 dc:identifier 去重 &#183; 封面縮圖惰性載入（OpenBookAsync）</text>
+  <text x="28" y="406" font-size="8" fill="#9a8a90">每本書一資料夾持久化、跨啟動還原、納入整包備份</text>
+  <text x="28" y="438" font-size="8.5" fill="#B0578D" font-weight="bold">3 本藏書 &#183; 依「加入時間 新&#8594;舊」排序</text>
+
+  <!-- ============ RIGHT: 【獲得】匯入卡片 ============ -->
+  <rect x="312" y="108" width="312" height="342" rx="8" fill="#FFFFFF" opacity="0.55" stroke="#F4C2D0"/>
+  <text x="326" y="127" font-size="12" fill="#B0578D" font-weight="bold">匯入電子書</text>
+  <text x="326" y="143" font-size="8.5" fill="#9A6A82">選擇或拖入本機 .epub 檔（可多檔批次）；僅讀取解析、原檔複本落地藏書資料夾。</text>
+
+  <!-- 拖放區 + 選檔鈕 -->
+  <rect x="326" y="152" width="284" height="70" rx="6" fill="#FFFFFF" opacity="0.5" stroke="#B0578D" stroke-dasharray="5 4"/>
+  <text x="468" y="180" font-size="10" fill="#B692A6" text-anchor="middle">將 .epub 檔拖放到此，或</text>
+  <rect x="398" y="188" width="140" height="26" rx="5" fill="#FFFFFF" opacity="0.92" stroke="#B0578D"/>
+  <text x="468" y="205" font-size="10" fill="#B0578D" text-anchor="middle" font-weight="bold">選擇 EPUB 檔&#8230;</text>
+
+  <!-- 已選檔清單 -->
+  <text x="326" y="240" font-size="9.5" fill="#7a3b55" font-weight="bold">已選 3 檔</text>
+  <text x="610" y="240" font-size="9" fill="#B0578D" text-anchor="end">全部清除</text>
+  <rect x="326" y="248" width="284" height="120" rx="5" fill="#FFFFFF" opacity="0.42" stroke="#F4C2D0"/>
+  <g font-size="9">
+    <rect x="332" y="253" width="272" height="26" rx="4" fill="#FFFFFF" opacity="0.75"/>
+    <text x="340" y="264" fill="#3a3a3a">the-velveteen-rabbit.epub</text>
+    <text x="340" y="275" font-size="7.5" fill="#9a8a90">Margery Williams &#183; 12 章 &#183; EPUB 3</text>
+    <text x="598" y="270" fill="#4a7a4a" text-anchor="end">&#10003; 就緒</text>
+
+    <rect x="332" y="281" width="272" height="26" rx="4" fill="#FFFFFF" opacity="0.75"/>
+    <text x="340" y="292" fill="#3a3a3a">peter-pan.epub</text>
+    <text x="340" y="303" font-size="7.5" fill="#9a8a90">J. M. Barrie &#183; 17 章 &#183; EPUB 3</text>
+    <text x="598" y="298" fill="#4a7a4a" text-anchor="end">&#10003; 就緒</text>
+
+    <rect x="332" y="309" width="272" height="26" rx="4" fill="#FBE8CC" opacity="0.85"/>
+    <text x="340" y="320" fill="#3a3a3a">alice-in-wonderland.epub</text>
+    <text x="340" y="331" font-size="7.5" fill="#a07a3a">Lewis Carroll &#183; 相同 dc:identifier</text>
+    <text x="598" y="326" fill="#a06a20" text-anchor="end" font-weight="bold">&#9888; 已在書櫃</text>
+
+    <rect x="332" y="337" width="272" height="26" rx="4" fill="#F6DADA" opacity="0.85"/>
+    <text x="340" y="348" fill="#3a3a3a">handbook.pdf</text>
+    <text x="340" y="359" font-size="7.5" fill="#a05050">非 EPUB / 解析不出容器</text>
+    <text x="598" y="354" fill="#b03a3a" text-anchor="end" font-weight="bold">&#10005; 不支援</text>
+  </g>
+
+  <!-- 底列：批次確認鈕（文案隨檔數） -->
+  <text x="326" y="388" font-size="8.5" fill="#8A5A6E">批次匯入前彙總確認：逐本可選 匯入／略過；已在書櫃者預設略過。</text>
+  <rect x="470" y="398" width="140" height="30" rx="5" fill="#B0578D"/>
+  <text x="540" y="418" font-size="11" fill="#ffffff" text-anchor="middle" font-weight="bold">&#65291; 匯入 2 本</text>
+  <text x="326" y="416" font-size="8" fill="#9a8a90">主鈕文案隨可匯入檔數變化（單檔＝「匯入並開啟書櫃」／N 檔＝「匯入 N 本」）。</text>
+  <text x="326" y="438" font-size="8" fill="#9a8a90">解析用 VersOne.Epub（受管、無外部行程）；壞檔以 EpubReaderOptions 容錯、明確降級不中斷整批。</text>
+
+  <!-- status bar -->
+  <rect x="0" y="462" width="640" height="18" fill="#F4C2D0" opacity="0.5"/>
+  <text x="8" y="475" font-size="8.5" fill="#7a3b55">已選 3 檔（2 就緒 &#183; 1 已在書櫃 &#183; 1 不支援）&#183; 書櫃 3 本 &#183; 匯入即解析中繼/spine/目錄/封面並落地藏書資料夾</text>
+  <text x="632" y="475" font-size="8" fill="#8a5a6e" text-anchor="end">清單資料為示意值</text>
+</svg>
