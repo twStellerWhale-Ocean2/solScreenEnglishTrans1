@@ -166,14 +166,17 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
         ClearVideosBtn.Click += (_, _) => OnClearVideos(); // #165 清空影片清單
         OpenFolderBtn.Click += (_, _) => OpenVideoFolder(); // #189：開啟目前影片資料夾（其 subtitle.yaml 與 🌐 Script 逐字稿原文）
         VideoThemeFilter.SelectionChanged += (_, _) => { if (!_populatingVideoFilter) { RefreshVideoList(); } };
-        VideoSortCombo.SelectionChanged += (_, _) => { if (!_populatingSortCombo) { OnVideoSortChanged(); } };     // 影片欄排序（#207）
+        VideoSortAddedBtn.Click += (_, _) => ToggleVideoSort("Added");    // 影片欄排序 toggle（#219）
+        VideoSortTitleBtn.Click += (_, _) => ToggleVideoSort("Title");
+        VideoSortDurBtn.Click += (_, _) => ToggleVideoSort("Duration");
+        VideoSortThemeBtn.Click += (_, _) => ToggleVideoSort("Theme");
         VideoThemePicker.SelectionChanged += (_, _) => { if (!_populatingVideoPicker) { OnVideoThemePicked(); } }; // 內容區塊改指派所屬主題（#173）
         // 刪除改右鍵選單/Delete 鍵（#167，取代 Delete 按鈕）
         VideoList.ContextMenu = ListDeleteSupport.DeleteMenu(OnDeleteVideo);
         VideoList.PreviewMouseRightButtonDown += ListDeleteSupport.SelectItemUnderMouse;
         VideoList.KeyDown += (_, e) => { if (e.Key == Key.Delete) { OnDeleteVideo(); } };
         PopulateVideoThemeFilter();
-        InitVideoSortCombo();      // #207：排序下拉四鍵、初值自 videos.json 之 SortKey
+        // #219：排序 toggle 鈕視覺於 RefreshVideoList 內同步（單一同步點），此處毋須另行初始化
         RefreshVideoList();
         ApplySubtitleDisplay();   // 字幕帶字級/粗體偏好（比照筆記，設定可調）
         MigrateSubtitleStorage();  // #189：一次性把舊版扁平 subtitles\{id}.json 搬到 video\{日期 標題}\ 結構
@@ -458,37 +461,60 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
 
     // ---- 影片清單（epic #145 增量4） ----
 
-    /// <summary>#207：影片欄排序四鍵（Tag=SortKey；序＝下拉顯示序，`AddedNew` 居首＝預設）。</summary>
-    private static readonly (string Key, string Label)[] VideoSortOptions =
+    /// <summary>#219：點排序 toggle 鈕（沿筆記 #126 家規）——同模式再點＝翻該模式方向；點他模式＝切為該模式（沿用其記住之方向）。即時落地 videos.json、重排清單。</summary>
+    private void ToggleVideoSort(string mode)
     {
-        ("AddedNew", "加入時間 新→舊"),
-        ("Title", "名稱 A→Z"),
-        ("Duration", "長度 短→長"),
-        ("Theme", "主題"),
-    };
-    private bool _populatingSortCombo;
-
-    /// <summary>#207：填排序下拉並依 videos.json 之 SortKey 設初值（未知鍵退預設、不觸發回寫）。</summary>
-    private void InitVideoSortCombo()
-    {
-        _populatingSortCombo = true;
-        VideoSortCombo.Items.Clear();
-        foreach (var (key, label) in VideoSortOptions)
+        var d = _videoStore.Load();
+        var s = VideoStore.EffectiveSort(d);
+        if (s.Mode == mode)
         {
-            VideoSortCombo.Items.Add(new System.Windows.Controls.ComboBoxItem { Content = label, Tag = key });
+            switch (mode) // 同模式再點 → 翻該模式方向
+            {
+                case "Title": s.TitleAsc = !s.TitleAsc; break;
+                case "Duration": s.DurationAsc = !s.DurationAsc; break;
+                case "Theme": s.ThemeAsc = !s.ThemeAsc; break;
+                default: s.AddedAsc = !s.AddedAsc; break;
+            }
         }
-        var current = _videoStore.Load().SortKey ?? "AddedNew";
-        var idx = Array.FindIndex(VideoSortOptions, o => o.Key == current);
-        VideoSortCombo.SelectedIndex = idx >= 0 ? idx : 0;
-        _populatingSortCombo = false;
+        else
+        {
+            s.Mode = mode; // 切模式，方向沿用該模式記住值
+        }
+        _videoStore.UpdateSort(s);
+        RefreshVideoList();
     }
 
-    /// <summary>#207：排序選擇改變——落地 SortKey（跨啟動沿用）並重排清單。</summary>
-    private void OnVideoSortChanged()
+    /// <summary>#219：依排序態更新四 toggle 鈕視覺（MDL2 字圖＋作用中 ▲/▼＋粗體深色；非顏色線索＝方向字圖存否，色盲友善）。</summary>
+    private void UpdateVideoSortButtons(VideoSort s)
     {
-        var key = (VideoSortCombo.SelectedItem as System.Windows.Controls.ComboBoxItem)?.Tag as string ?? "AddedNew";
-        _videoStore.UpdateSortKey(key);
-        RefreshVideoList();
+        SetVideoSortBtn(VideoSortAddedBtn, "\uE823", s.Mode is not ("Title" or "Duration" or "Theme"), s.AddedAsc); // Recent
+        SetVideoSortBtn(VideoSortTitleBtn, "\uE8D2", s.Mode == "Title", s.TitleAsc);                               // Font
+        SetVideoSortBtn(VideoSortDurBtn, "\uE916", s.Mode == "Duration", s.DurationAsc);                           // Stopwatch
+        SetVideoSortBtn(VideoSortThemeBtn, "\uE8EC", s.Mode == "Theme", s.ThemeAsc);                               // Tag
+    }
+
+    private void SetVideoSortBtn(System.Windows.Controls.Button btn, string glyph, bool active, bool ascending)
+    {
+        var sp = new System.Windows.Controls.StackPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+        sp.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = glyph,
+            FontFamily = new System.Windows.Media.FontFamily("Segoe MDL2 Assets"),
+            FontSize = 13,
+            VerticalAlignment = System.Windows.VerticalAlignment.Center,
+        });
+        if (active)
+        {
+            sp.Children.Add(new System.Windows.Controls.TextBlock
+            {
+                Text = ascending ? " ▲" : " ▼",
+                FontSize = 10,
+                VerticalAlignment = System.Windows.VerticalAlignment.Center,
+            });
+        }
+        btn.Content = sp;
+        btn.FontWeight = active ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal;
+        btn.Foreground = (System.Windows.Media.Brush)FindResource(active ? "PinkText" : "PinkSub");
     }
 
     /// <summary>重載影片清單（標題／加入時間／主題名）；先依主題篩選、再依 SortKey 排序（#207 呈現層投影）；目前載入影片自動選中（不觸發載入）。空清單顯提示。</summary>
@@ -496,7 +522,9 @@ public partial class VideoCapturePage : System.Windows.Controls.UserControl
     {
         var d = _videoStore.Load();
         var themeId = ThemeFilter.SelectedThemeId(VideoThemeFilter); // null＝All（B）
-        var shown = VideoStore.SortVideos(d.Items.Where(it => ThemeFilter.Match(themeId, it.ThemeId)), d.SortKey); // #207：先篩後排
+        var sort = VideoStore.EffectiveSort(d); // #219：排序態（含 legacy SortKey 讀取遷移）
+        var shown = VideoStore.SortVideos(d.Items.Where(it => ThemeFilter.Match(themeId, it.ThemeId)), sort); // #207：先篩後排
+        UpdateVideoSortButtons(sort); // #219：四 toggle 鈕視覺與排序態單一同步點
         VideoList.SelectionChanged -= OnVideoSelect;
         VideoList.Items.Clear();
         foreach (var it in shown)

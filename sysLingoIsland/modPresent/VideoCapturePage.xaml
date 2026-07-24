@@ -138,9 +138,17 @@
           <!-- 依 theme 篩選（圖文下拉，多媒體主題管理·B） -->
           <ComboBox x:Name="VideoThemeFilter" Grid.Row="1" Height="26" Margin="0,6,0,4"
                     VerticalContentAlignment="Center" ToolTip="依主題篩選影片"/>
-          <!-- 排序下拉（#207）：加入時間／名稱／長度／主題，選擇存 videos.json 之 SortKey 跨啟動沿用 -->
-          <ComboBox x:Name="VideoSortCombo" Grid.Row="2" Height="26" Margin="0,0,0,4"
-                    VerticalContentAlignment="Center" ToolTip="影片排序"/>
+          <!-- 排序鈕（#207 立下拉、#219 改四顆圖示 toggle）：同鈕再點翻方向；作用中＝▲/▼＋粗體深色（非顏色線索＝字圖存否，沿筆記 #126 家規）；每模式各自記方向、存 videos.json 跨啟動沿用 -->
+          <WrapPanel Grid.Row="2" Orientation="Horizontal" Margin="0,0,0,4">
+            <Button x:Name="VideoSortAddedBtn" Style="{StaticResource GhostButton}" Margin="0,0,4,2" Padding="6,2"
+                    ToolTip="依加入時間排序（新→舊／舊→新）。再點一次切換方向。"/>
+            <Button x:Name="VideoSortTitleBtn" Style="{StaticResource GhostButton}" Margin="0,0,4,2" Padding="6,2"
+                    ToolTip="依名稱排序（A→Z／Z→A，自然排序）。再點一次切換方向。"/>
+            <Button x:Name="VideoSortDurBtn" Style="{StaticResource GhostButton}" Margin="0,0,4,2" Padding="6,2"
+                    ToolTip="依時間長度排序（短→長／長→短；還沒記到長度的排最後）。再點一次切換方向。"/>
+            <Button x:Name="VideoSortThemeBtn" Style="{StaticResource GhostButton}" Margin="0,0,0,2" Padding="6,2"
+                    ToolTip="依主題分組排序（主題名正向／反向；未歸屬排最後）。再點一次切換方向。"/>
+          </WrapPanel>
           <Border Grid.Row="3" Style="{StaticResource Card}">
             <Grid>
               <ListBox x:Name="VideoList" BorderThickness="0" Background="Transparent" Margin="4"
