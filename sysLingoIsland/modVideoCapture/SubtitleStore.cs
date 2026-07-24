@@ -38,6 +38,7 @@ public sealed class SubtitleStore
 
     private const string SubtitleFile = "subtitle.yaml";
     private const string OriginalFile = "subtitle-original.yaml"; // #178 增量6′-B：時間偏移前保留之原始時間檔（與校正後 subtitle.yaml 並存）
+    private const string SourceFile = "subtitle-source.txt";      // #218 三件式：解析前之字幕來源原文（verbatim，可能含網址等原始資訊）
     private const string InfoFile = "info.json";
 
     public SubtitleStore(string? root = null) { _root = root ?? DefaultRoot; }
@@ -148,6 +149,22 @@ public sealed class SubtitleStore
             if (File.Exists(src) && !File.Exists(dst)) { File.Copy(src, dst); }
         }
         catch { /* 備份失敗不致命 */ }
+    }
+
+    /// <summary>
+    /// 存一支影片之**字幕來源原文**（#218 三件式：info＋subtitle＋subtitle-source）：解析前之原始字幕檔內容
+    /// **一字不動**覆寫 <c>subtitle-source.txt</c>（可能含網址等原始資訊；來源網址／路徑另由 status store 之 TranscriptUrl 追蹤）。
+    /// 供重解析、追溯與除錯；同片重載即覆寫（與 subtitle.yaml 同節奏）。空白略過、寫入失敗不致命。
+    /// </summary>
+    public void SaveSource(string videoId, string? title, string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(videoId) || SanitizeKey(videoId).Length == 0 || string.IsNullOrWhiteSpace(raw)) { return; }
+        try
+        {
+            var folder = FolderOf(videoId) ?? CreateFolder(videoId, title, DateTimeOffset.Now);
+            File.WriteAllText(Path.Combine(folder, SourceFile), raw);
+        }
+        catch { /* 不致命 */ }
     }
 
     /// <summary>存/更新一支影片之**網路逐字稿原文**（#189，🌐 Script 取得後）：寫入該片資料夾 <c>{yyyyMMdd} {來源}.txt</c>（同日同源覆寫、可多份）；transcript 空白略過。</summary>

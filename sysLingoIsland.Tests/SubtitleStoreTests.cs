@@ -55,6 +55,41 @@ public class SubtitleStoreTests
     }
 
     [Fact]
+    public void SaveSource_WritesVerbatim_ThirdFileAlongsideInfoAndSubtitle()
+    {
+        var b = TempBase();
+        try
+        {
+            var store = Store(b);
+            store.Save("vid", "Ep1", false, new List<SubtitleCue> { new("x", 0.0) });
+            var raw = "# https://example.com/watch?v=vid\r\n1\r\n00:00:01,000 --> 00:00:02,000\r\nHello\r\n";
+            store.SaveSource("vid", "Ep1", raw); // #218 三件式
+            var dir = Directory.GetDirectories(Path.Combine(b, "video"))[0];
+            Assert.True(File.Exists(Path.Combine(dir, "info.json")));
+            Assert.True(File.Exists(Path.Combine(dir, "subtitle.yaml")));
+            Assert.Equal(raw, File.ReadAllText(Path.Combine(dir, "subtitle-source.txt"))); // 一字不動（含網址列與 CRLF）
+        }
+        finally { TryDelete(b); }
+    }
+
+    [Fact]
+    public void SaveSource_OverwritesOnReload_SkipsBlank()
+    {
+        var b = TempBase();
+        try
+        {
+            var store = Store(b);
+            store.SaveSource("vid", "Ep1", "old"); // 尚無資料夾→自建（同 SaveWebTranscript 慣例）
+            store.SaveSource("vid", "Ep1", "new"); // 重載覆寫
+            store.SaveSource("vid", "Ep1", "   ");  // 空白略過、不覆寫
+            var dir = Directory.GetDirectories(Path.Combine(b, "video"))[0];
+            Assert.Equal("new", File.ReadAllText(Path.Combine(dir, "subtitle-source.txt")));
+            store.SaveSource("", "Ep1", "zz");       // 無效 id 略過、不擲例外
+        }
+        finally { TryDelete(b); }
+    }
+
+    [Fact]
     public void Save_SanitizesInvalidTitleChars()
     {
         var b = TempBase();
