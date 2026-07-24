@@ -19,7 +19,31 @@ public sealed class VideoItem
 public sealed class VideosData
 {
     public List<VideoItem> Items { get; set; } = new();
-    public string? SortKey { get; set; }          // #207：影片欄排序鍵（AddedNew|Title|Duration|Theme）；null＝AddedNew（插入序新在前）
+    public string? SortKey { get; set; }          // #207 legacy：舊排序鍵（AddedNew|Title|Duration|Theme）——#219 起僅供讀取遷移（EffectiveSort）、不再寫入
+    public VideoSort? Sort { get; set; }          // #219：排序態（模式＋每模式各自記方向）；null＝預設（加入時間 新→舊）
+}
+
+/// <summary>
+/// 影片欄排序態（#219；比照筆記 <c>FolderSort</c> 家規）：<see cref="Mode"/> 四選一、**每模式各自記方向**；
+/// 預設 Added 新→舊（沿 #207 現況）。跨啟動沿用（隨 videos.json 留存）。
+/// </summary>
+public sealed class VideoSort
+{
+    public string Mode { get; set; } = "Added";   // Added|Title|Duration|Theme
+    public bool AddedAsc { get; set; }            // false＝新→舊（預設）；true＝舊→新
+    public bool TitleAsc { get; set; } = true;    // true＝A→Z
+    public bool DurationAsc { get; set; } = true; // true＝短→長（無值恆排末）
+    public bool ThemeAsc { get; set; } = true;    // true＝主題名 A→Z（未歸屬恆排末）
+
+    /// <summary>目前模式之方向（供 ▲/▼ 顯示與投影）。</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool CurrentAscending => Mode switch
+    {
+        "Title" => TitleAsc,
+        "Duration" => DurationAsc,
+        "Theme" => ThemeAsc,
+        _ => AddedAsc,
+    };
 }
 
 /// <summary>
@@ -103,11 +127,12 @@ public sealed class VideoStore
         Save(d);
     }
 
-    /// <summary>回寫影片欄排序鍵（#207）；跨啟動沿用。</summary>
-    public void UpdateSortKey(string? sortKey)
+    /// <summary>回寫影片欄排序態（#219）；跨啟動沿用。legacy `SortKey` 同時清空（已遷移、不再寫）。</summary>
+    public void UpdateSort(VideoSort sort)
     {
         var d = Load();
-        d.SortKey = sortKey;
+        d.Sort = sort;
+        d.SortKey = null;
         Save(d);
     }
 
@@ -157,20 +182,54 @@ public sealed class VideoStore
     }
 
     /// <summary>
-    /// 影片欄排序（#207，純函式、穩定排序、不改動傳入序）：呈現層投影、清單仍存插入序。
-    /// `AddedNew`（null／未知鍵＝預設）＝插入序（新在前，即現況）；`Title`＝標題自然排序（沿筆記 <see cref="NotesStore.NaturalCompare"/> 家規：大小寫不敏感、數字段依數值）；
-    /// `Duration`＝短→長、無值排末；`Theme`＝主題名自然排序群組（未歸屬排末）、組內維持插入序。
+    /// 取有效排序態（#219，純函式）：<c>d.Sort</c> 已有即用；否則自 legacy <c>SortKey</c>（#207：`AddedNew|Title|Duration|Theme`）
+    /// 遷移為對應模式（方向取各模式預設，與 #207 單向行為一致）；皆無＝預設（Added 新→舊）。
     /// </summary>
-    public static List<VideoItem> SortVideos(IEnumerable<VideoItem> items, string? sortKey)
+    public static VideoSort EffectiveSort(VideosData d)
     {
-        var list = items.ToList();
-        return sortKey switch
+        if (d.Sort is not null) { return d.Sort; }
+        return d.SortKey switch
         {
-            "Title" => list.OrderBy(i => i.Title ?? "", NaturalTitleComparer.Instance).ToList(),
-            "Duration" => list.OrderBy(i => i.DurationSec is > 0 ? 0 : 1).ThenBy(i => i.DurationSec ?? double.MaxValue).ToList(),
-            "Theme" => list.OrderBy(i => string.IsNullOrWhiteSpace(i.ThemeName) ? 1 : 0).ThenBy(i => i.ThemeName ?? "", NaturalTitleComparer.Instance).ToList(),
-            _ => list, // AddedNew／null／未知鍵＝插入序
+            "Title" => new VideoSort { Mode = "Title" },
+            "Duration" => new VideoSort { Mode = "Duration" },
+            "Theme" => new VideoSort { Mode = "Theme" },
+            _ => new VideoSort(), // AddedNew／null／未知鍵＝預設
         };
+    }
+
+    /// <summary>
+    /// 影片欄排序（#207 立、#219 增正反向；純函式、穩定排序、不改動傳入序）：呈現層投影、清單仍存插入序。
+    /// `Added`＝插入序（新在前；反向＝舊在前）；`Title`＝標題自然排序（沿筆記 <see cref="NotesStore.NaturalCompare"/> 家規：大小寫不敏感、數字段依數值）；
+    /// `Duration`＝依長度（**無值恆排末**、不論方向）；`Theme`＝主題名自然排序群組（**未歸屬恆排末**）、組內維持插入序（新在前）。
+    /// </summary>
+    public static List<VideoItem> SortVideos(IEnumerable<VideoItem> items, VideoSort? sort)
+    {
+        var s = sort ?? new VideoSort();
+        var list = items.ToList();
+        switch (s.Mode)
+        {
+            case "Title":
+                return s.TitleAsc
+                    ? list.OrderBy(i => i.Title ?? "", NaturalTitleComparer.Instance).ToList()
+                    : list.OrderByDescending(i => i.Title ?? "", NaturalTitleComparer.Instance).ToList();
+            case "Duration":
+            {
+                var known = list.Where(i => i.DurationSec is > 0);
+                var ordered = s.DurationAsc ? known.OrderBy(i => i.DurationSec!.Value)
+                                            : known.OrderByDescending(i => i.DurationSec!.Value);
+                return ordered.Concat(list.Where(i => i.DurationSec is not > 0)).ToList(); // 無值恆排末（穩定）
+            }
+            case "Theme":
+            {
+                var grouped = list.Where(i => !string.IsNullOrWhiteSpace(i.ThemeName));
+                var ordered = s.ThemeAsc ? grouped.OrderBy(i => i.ThemeName!, NaturalTitleComparer.Instance)
+                                         : grouped.OrderByDescending(i => i.ThemeName!, NaturalTitleComparer.Instance);
+                return ordered.Concat(list.Where(i => string.IsNullOrWhiteSpace(i.ThemeName))).ToList(); // 未歸屬恆排末；組內插入序（穩定）
+            }
+            default:
+                if (s.AddedAsc) { var r = new List<VideoItem>(list); r.Reverse(); return r; } // 舊→新
+                return list; // 新→舊（插入序）
+        }
     }
 
     /// <summary>#207：包 <see cref="NotesStore.NaturalCompare"/> 為 IComparer（供 OrderBy 穩定排序用）。</summary>
